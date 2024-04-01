@@ -1,5 +1,7 @@
 'use strict';
-import DID_API from './api.json' assert { type: 'json' };
+import DID_API from './api.js';
+
+const GROQ_API_KEY = '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';
 
 if (DID_API.key == '🤫') alert('Please put your api key inside ./api.json and restart..');
 
@@ -16,8 +18,9 @@ let sessionClientAnswer;
 let statsIntervalId;
 let videoIsPlaying;
 let lastBytesReceived;
-let agentId;
-let chatId;
+let chatHistory = [];
+
+const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, usually not more than 1 or 2 sentances unless the user asks for more information.`;
 
 const videoElement = document.getElementById('video-element');
 videoElement.setAttribute('playsinline', '');
@@ -26,22 +29,12 @@ const iceStatusLabel = document.getElementById('ice-status-label');
 const iceGatheringStatusLabel = document.getElementById('ice-gathering-status-label');
 const signalingStatusLabel = document.getElementById('signaling-status-label');
 const streamingStatusLabel = document.getElementById('streaming-status-label');
-const agentIdLabel = document.getElementById('agentId-label');
-const chatIdLabel = document.getElementById('chatId-label');
 const textArea = document.getElementById("textArea");
 
 // Play the idle video when the page is loaded
 window.onload = (event) => {
 
-  playIdleVideo()
-
-  if (agentId == "" || agentId == undefined) {
-    console.log("Empty 'agentID' and 'chatID' variables\n\n1. Click on the 'Create new Agent with Knowledge' button\n2. Open the Console and wait for the process to complete\n3. Press on the 'Connect' button\n4. Type and send a message to the chat\nNOTE: You can store the created 'agentID' and 'chatId' variables at the bottom of the JS file for future chats")
-  } else {
-    console.log("You are good to go!\nClick on the 'Connect Button', Then send a new message\nAgent ID: ", agentId, "\nChat ID: ", chatId)
-    agentIdLabel.innerHTML = agentId
-    chatIdLabel.innerHTML = chatId
-  }
+  playIdleVideo();
 }
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
@@ -64,35 +57,7 @@ async function createPeerConnection(offer, iceServers) {
   console.log('set local sdp OK');
 
 
-  // Data Channel creation (for dispalying the Agent's responses as text)
-  let dc = await peerConnection.createDataChannel("JanusDataChannel");
-  dc.onopen = () => {
-    console.log("datachannel open");
-  };
-
-  let decodedMsg;
-  // Agent Text Responses - Decoding the responses, pasting to the HTML element
-  dc.onmessage = (event) => {
-    let msg = event.data
-    let msgType = "chat/answer:"
-    if (msg.includes(msgType)) {
-      msg = decodeURIComponent(msg.replace(msgType, ""))
-      console.log(msg)
-      decodedMsg = msg
-      return decodedMsg
-    }
-    if (msg.includes("stream/started")) {
-      console.log(msg)
-      document.getElementById("msgHistory").innerHTML += `<span>${decodedMsg}</span><br><br>`
-    }
-    else {
-      console.log(msg)
-    }
-  };
-
-  dc.onclose = () => {
-    console.log("datachannel close");
-  };
+ 
 
   return sessionClientAnswer;
 }
@@ -180,6 +145,7 @@ function onTrack(event) {
     });
   }, 500);
 }
+
 function setVideoElement(stream) {
   if (!stream) return;
   // Add Animation Class
@@ -265,9 +231,7 @@ async function fetchWithRetries(url, options, retries = 1) {
 
 const connectButton = document.getElementById('connect-button');
 connectButton.onclick = async () => {
-  if (agentId == "" || agentId === undefined) {
-    return alert("1. Click on the 'Create new Agent with Knowledge' button\n2. Open the Console and wait for the process to complete\n3. Press on the 'Connect' button\n4. Type and send a message to the chat\nNOTE: You can store the created 'agentID' and 'chatId' variables at the bottom of the JS file for future chats")
-  }
+
 
   if (peerConnection && peerConnection.connectionState === 'connected') {
     return;
@@ -314,42 +278,112 @@ connectButton.onclick = async () => {
   });
 };
 
+
+async function startStreaming(assistantReply) {
+  const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      script: {
+        type: 'text',
+        input: assistantReply,
+      },
+      config: {
+        fluent: true,
+        pad_audio: 0,
+      },
+      session_id: sessionId,
+    }),
+  });
+}
+
+
+
 const startButton = document.getElementById('start-button');
 startButton.onclick = async () => {
-  // connectionState not supported in firefox
   if (peerConnection?.signalingState === 'stable' || peerConnection?.iceConnectionState === 'connected') {
-
     // Pasting the user's message to the Chat History element
-    document.getElementById("msgHistory").innerHTML += `<span style='opacity:0.5'><u>User:</u> ${textArea.value}</span><br>`
+    document.getElementById("msgHistory").innerHTML += `<span style='opacity:0.5'><u>User:</u> ${textArea.value}</span><br>`;
 
-    // Storing the Text Area value
-    let txtAreaValue = document.getElementById("textArea").value
+    // Add user message to chat history
+    chatHistory.push({
+      role: 'user',
+      content: textArea.value
+    });
 
     // Clearing the text-box element
-    document.getElementById("textArea").value = ""
+    document.getElementById("textArea").value = "";
 
+    try {
+      const response = await fetch('http://localhost:3001/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [
+            {
+              role: 'system',
+              content: context,
+            },
+            ...chatHistory,
+          ],
+          model: 'mixtral-8x7b-32768',
+        }),
+      });
 
-    // Agents Overview - Step 3: Send a Message to a Chat session - Send a message to a Chat
-    const playResponse = await fetchWithRetries(`${DID_API.url}/agents/${agentId}/chat/${chatId}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        "streamId": streamId,
-        "sessionId": sessionId,
-        "messages": [
-          {
-            "role": "user",
-            "content": txtAreaValue,
-            "created_at": new Date().toString()
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      let assistantReply = '';
+      let done = false;
+
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+
+        if (value) {
+          const chunk = new TextDecoder().decode(value);
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data:')) {
+              const data = line.substring(5).trim();
+              if (data === '[DONE]') {
+                done = true;
+                break;
+              }
+
+              const parsed = JSON.parse(data);
+              assistantReply += parsed.choices[0]?.delta?.content || '';
+            }
           }
-        ]
-      }),
-    });
+        }
+      }
+
+      // Add assistant reply to chat history
+      chatHistory.push({
+        role: 'assistant',
+        content: assistantReply,
+      });
+
+      // Append the complete assistant reply to the chat history element
+      document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${assistantReply}</span><br>`;
+
+      // Initiate streaming
+      await startStreaming(assistantReply);
+    } catch (error) {
+      console.error('Error:', error);
+      // Handle the error, display an error message, etc.
+    }
   }
 };
+
 
 const destroyButton = document.getElementById('destroy-button');
 destroyButton.onclick = async () => {
@@ -365,148 +399,3 @@ destroyButton.onclick = async () => {
   stopAllStreams();
   closePC();
 };
-
-// Agents API Workflow
-async function agentsAPIworkflow() {
-  agentIdLabel.innerHTML = `<span style='color:orange'>Processing...<style='color:orange'>`
-  chatIdLabel.innerHTML = `<span style='color:orange'>Processing...<style='color:orange'>`
-  axios.defaults.baseURL = 'https://api.d-id.com/';
-  axios.defaults.headers.common['Authorization'] = `Basic ${DID_API.key}`
-  axios.defaults.headers.common['content-type'] = 'application/json'
-
-  // Retry Mechanism (Polling) for this demo only - Please use Webhooks in real life applications! 
-  // as described in https://docs.d-id.com/reference/knowledge-overview#%EF%B8%8F-step-2-add-documents-to-the-knowledge-base
-  async function retry(url, retries = 1) {
-    const maxRetryCount = 5; // Maximum number of retries
-    const maxDelaySec = 10; // Maximum delay in seconds
-    try {
-      let response = await axios.get(`${url}`)
-      if (response.data.status == "done") {
-        return console.log(response.data.id + ": " + response.data.status)
-      }
-      else {
-        throw new Error("Status is not 'done'")
-      }
-    } catch (err) {
-      if (retries <= maxRetryCount) {
-        const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 1000;
-
-        await new Promise((resolve) => setTimeout(resolve, delay));
-
-        console.log(`Retrying ${retries}/${maxRetryCount}. ${err}`);
-        return retry(url, retries + 1);
-      } else {
-        agentIdLabel.innerHTML = `<span style='color:red'>Failed</span>`
-        chatIdLabel.innerHTML = `<span style='color:red'>Failed</span>`
-        throw new Error(`Max retries exceeded. error: ${err}`);
-      }
-    }
-  }
-
-  // Knowledge Overview - Step 1: Create a new Knowledge Base
-  // https://docs.d-id.com/reference/knowledge-overview#%EF%B8%8F-step-1-create-a-new-knowledge-base
-  const createKnowledge = await axios.post('/knowledge',
-    {
-      name: "knowledge",
-      description: "D-ID Agents API"
-    })
-  console.log("Create Knowledge:", createKnowledge.data)
-
-  let knowledgeId = createKnowledge.data.id
-  console.log("Knowledge ID: " + knowledgeId)
-
-  // Knowledge Overview - Step 2: Add Documents to the Knowledge Base
-  // https://docs.d-id.com/reference/knowledge-overview#%EF%B8%8F-step-2-add-documents-to-the-knowledge-base
-
-  const createDocument = await axios.post(`/knowledge/${knowledgeId}/documents`,
-    {
-      "documentType": "html",
-      "source_url": "https://en.wikipedia.org/wiki/Prompt_engineering",
-      "title": "Prompt Engineering Wikipedia Page",
-    })
-  console.log("Create Document: ", createDocument.data)
-
-  // Split the # to use in documentID
-  let documentId = createDocument.data.id
-  let splitArr = documentId.split("#")
-  documentId = splitArr[1]
-  console.log("Document ID: " + documentId)
-
-
-  // Knowledge Overview - Step 3: Retrieving the Document and Knowledge status
-  // https://docs.d-id.com/reference/knowledge-overview#%EF%B8%8F-step-3-retrieving-the-document-and-knowledge-status
-  await retry(`/knowledge/${knowledgeId}/documents/${documentId}`)
-  await retry(`/knowledge/${knowledgeId}`)
-
-  // Agents Overview - Step 1: Create an Agent
-  // https://docs.d-id.com/reference/agents-overview#%EF%B8%8F-step-1-create-an-agent
-  const createAgent = await axios.post('/agents',
-    {
-      "knowledge": {
-        "provider": "pinecone",
-        "embedder": {
-          "provider": "pinecone",
-          "model": "ada02"
-        },
-        "id": knowledgeId
-      },
-      "presenter": {
-        "type": "talk",
-        "voice": {
-          "type": "microsoft",
-          "voice_id": "en-US-JennyMultilingualV2Neural"
-        },
-        "thumbnail": "https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg",
-        "source_url": "https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg"
-      },
-      "llm": {
-        "type": "openai",
-        "provider": "openai",
-        "model": "gpt-3.5-turbo-1106",
-        "instructions": "Your name is Emma, an AI designed to assist with information about Prompt Engineering and RAG"
-      },
-      "preview_name": "Emma"
-    }
-
-  )
-  console.log("Create Agent: ", createAgent.data)
-  let agentId = createAgent.data.id
-  console.log("Agent ID: " + agentId)
-
-  // Agents Overview - Step 2: Create a new Chat session with the Agent
-  // https://docs.d-id.com/reference/agents-overview#%EF%B8%8F-step-2-create-a-new-chat-session-with-the-agent
-  const createChat = await axios.post(`/agents/${agentId}/chat`)
-  console.log("Create Chat: ", createChat.data)
-  let chatId = createChat.data.id
-  console.log("Chat ID: " + chatId)
-
-  // Agents Overview - Step 3: Send a Message to a Chat session
-  // https://docs.d-id.com/reference/agents-overview#%EF%B8%8F-step-3--send-a-message-to-a-chat-session
-  // The WebRTC steps are called in the functions: 'connectButton.onclick', onIceCandidate(event), 'startButton.onclick'
-
-  console.log("Create new Agent with Knowledge - DONE!\n Press on the 'Connect' button to proceed.\n Store the created 'agentID' and 'chatId' variables at the bottom of the JS file for future chats")
-  agentIdLabel.innerHTML = agentId
-  chatIdLabel.innerHTML = chatId
-  return { agentId: agentId, chatId: chatId }
-
-}
-
-const agentsButton = document.getElementById("agents-button")
-agentsButton.onclick = async () => {
-  try{
-    const agentsIds = {} = await agentsAPIworkflow()
-    console.log(agentsIds)
-    agentId = agentsIds.agentId
-    chatId = agentsIds.chatId
-    return
-  }
-  catch(err){
-    agentIdLabel.innerHTML = `<span style='color:red'>Failed</span>`
-    chatIdLabel.innerHTML = `<span style='color:red'>Failed</span>`
-    throw new Error(err)
-  }
-}
-
-// Paste Your Created Agent and Chat IDs Here:
-agentId = ""
-chatId = ""

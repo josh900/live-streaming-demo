@@ -1,5 +1,7 @@
 'use strict';
-import DID_API from './api.json' assert { type: 'json' };
+import DID_API from './api';
+
+const GROQ_API_KEY = DID_API.groqKey;
 
 if (DID_API.key == '🤫') alert('Please put your api key inside ./api.json and restart..');
 
