@@ -222,7 +222,7 @@ function setVideoElement(stream) {
   // Remove Animation Class after it's completed
   setTimeout(() => {
     videoElement.classList.remove("animated")
-  }, 1000);
+  }, 250);
 
   // safari hotfix
   if (videoElement.paused) {
@@ -243,7 +243,7 @@ function playIdleVideo() {
   // Remove Animation Class after it's completed
   setTimeout(() => {
     videoElement.classList.remove("animated")
-  }, 1000);
+  }, 250);
 }
 function stopAllStreams() {
   if (videoElement.srcObject) {

@@ -20,7 +20,7 @@ let videoIsPlaying;
 let lastBytesReceived;
 let chatHistory = [];
 
-const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, usually not more than 1 or 2 sentances unless the user asks for more information.`;
+const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, usually not more than 1 sentance unless absolutely needed.`;
 
 const videoElement = document.getElementById('video-element');
 videoElement.setAttribute('playsinline', '');
@@ -143,7 +143,7 @@ function onTrack(event) {
         lastBytesReceived = report.bytesReceived;
       }
     });
-  }, 500);
+  }, 300);
 }
 
 function setVideoElement(stream) {
@@ -160,7 +160,7 @@ function setVideoElement(stream) {
   // Remove Animation Class after it's completed
   setTimeout(() => {
     videoElement.classList.remove("animated")
-  }, 1000);
+  }, 300);
 
   // safari hotfix
   if (videoElement.paused) {
@@ -181,7 +181,7 @@ function playIdleVideo() {
   // Remove Animation Class after it's completed
   setTimeout(() => {
     videoElement.classList.remove("animated")
-  }, 1000);
+  }, 300);
 }
 function stopAllStreams() {
   if (videoElement.srcObject) {
@@ -210,14 +210,14 @@ function closePC(pc = peerConnection) {
     peerConnection = null;
   }
 }
-const maxRetryCount = 3;
-const maxDelaySec = 4;
+const maxRetryCount = 2;
+const maxDelaySec = 2;
 async function fetchWithRetries(url, options, retries = 1) {
   try {
     return await fetch(url, options);
   } catch (err) {
     if (retries <= maxRetryCount) {
-      const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 1000;
+      const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 500;
 
       await new Promise((resolve) => setTimeout(resolve, delay));
 

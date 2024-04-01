@@ -208,7 +208,7 @@ function onTrack(event) {
         lastBytesReceived = report.bytesReceived;
       }
     });
-  }, 500);
+  }, 250);
 }
 
 async function createPeerConnection(offer, iceServers) {
@@ -296,7 +296,7 @@ async function fetchWithRetries(url, options, retries = 1) {
     }
   } catch (err) {
     if (retries <= maxRetryCount) {
-      const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 1000;
+      const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 500;
 
       await new Promise((resolve) => setTimeout(resolve, delay));
 
