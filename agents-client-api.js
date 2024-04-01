@@ -63,7 +63,7 @@ window.onload = async (event) => {
     showErrorMessage('Failed to connect. Please try again.');
   }
 };
- 
+
 function showErrorMessage(message) {
   const errorMessage = document.createElement('div');
   errorMessage.innerHTML = message;
@@ -129,7 +129,7 @@ function onIceCandidate(event) {
 function onIceConnectionStateChange() {
   iceStatusLabel.innerText = peerConnection.iceConnectionState;
   iceStatusLabel.className = 'iceConnectionState-' + peerConnection.iceConnectionState;
-  
+
   if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'closed') {
     stopAllStreams();
     closePC();
@@ -327,25 +327,42 @@ connectButton.onclick = async () => {
 
 
 async function startStreaming(assistantReply) {
-  const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      script: {
-        type: 'text',
-        input: assistantReply,
+  try {
+    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
       },
-      config: {
-        fluent: true,
-        pad_audio: 0,
-      },
-      session_id: sessionId,
-    }),
-  });
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: assistantReply,
+        },
+        config: {
+          fluent: true,
+          pad_audio: 0,
+        },
+        session_id: sessionId,
+      }),
+    });
+  } catch (error) {
+    console.error('Error during streaming:', error);
+    if (isRecording) {
+      await reinitializeConnection();
+    }
+  }
 }
+
+async function reinitializeConnection() {
+  console.log('Reinitializing connection...');
+  stopAllStreams();
+  closePC();
+  await connectButton.onclick();
+  await startRecording();
+}
+
+
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   mediaRecorder = new MediaRecorder(stream);
@@ -378,7 +395,7 @@ async function startRecording() {
     const received = JSON.parse(message.data);
     const partialTranscript = received.channel.alternatives[0].transcript;
     const isFinal = received.speech_final;
-  
+
     if (partialTranscript) {
       if (isFinal) {
         transcript += partialTranscript;
@@ -473,7 +490,9 @@ async function sendChatToGroq() {
     await startStreaming(assistantReply);
   } catch (error) {
     console.error('Error:', error);
-    // Handle the error, display an error message, etc.
+    if (isRecording) {
+      await reinitializeConnection();
+    }
   }
 }
 
