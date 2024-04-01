@@ -76,6 +76,7 @@ function showErrorMessage(message) {
   connectButton.style.display = 'inline-block';
 }
 
+
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
     peerConnection = new RTCPeerConnection({ iceServers });
@@ -325,7 +326,6 @@ connectButton.onclick = async () => {
 
 
 
-
 async function startStreaming(assistantReply) {
   const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
     method: 'POST',
@@ -346,9 +346,6 @@ async function startStreaming(assistantReply) {
     }),
   });
 }
-
-
-
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -394,7 +391,7 @@ async function startRecording() {
 }
 
 async function stopRecording() {
-  if (mediaRecorder.state === 'recording') {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
     mediaRecorder.stop();
     deepgramSocket.close();
     mediaRecorder = null;
@@ -502,3 +499,5 @@ startButton.onclick = async () => {
   }
   isRecording = !isRecording;
 };
+
+
