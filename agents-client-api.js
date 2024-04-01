@@ -363,8 +363,8 @@ async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   mediaRecorder = new MediaRecorder(stream);
 
-  deepgramSocket = new WebSocket('wss://api.deepgram.com/v1/listen', [
-    'token',
+  deepgramSocket = new WebSocket('wss://api.deepgram.com/v1/listen?interim_results=true&endpointing=1500', [
+        'token',
     DEEPGRAM_API_KEY,
   ]);
 
@@ -403,12 +403,25 @@ async function startRecording() {
   deepgramSocket.onmessage = (message) => {
     const received = JSON.parse(message.data);
     const partialTranscript = received.channel.alternatives[0].transcript;
-
+    const isFinal = received.is_final;
+  
     if (partialTranscript) {
-      transcript += partialTranscript;
-      document.getElementById('msgHistory').innerHTML = document.getElementById('msgHistory').innerHTML.replace(/<span style='opacity:0.5'><u>User \(interim\):<\/u>.*<\/span><br>/, `<span style='opacity:0.5'><u>User (interim):</u> ${transcript}</span><br>`);
+      if (isFinal) {
+        transcript += partialTranscript;
+        document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User:</u> ${transcript}</span><br>`;
+        chatHistory.push({
+          role: 'user',
+          content: transcript,
+        });
+        sendChatToGroq();
+        transcript = '';
+      } else {
+        transcript += partialTranscript;
+        document.getElementById('msgHistory').innerHTML = document.getElementById('msgHistory').innerHTML.replace(/<span style='opacity:0.5'><u>User \(interim\):<\/u>.*<\/span><br>/, `<span style='opacity:0.5'><u>User (interim):</u> ${transcript}</span><br>`);
+      }
     }
   };
+  
 
   deepgramSocket.onclose = async () => {
     console.log('WebSocket connection closed');
