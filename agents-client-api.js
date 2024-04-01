@@ -1,5 +1,9 @@
 'use strict';
 import DID_API from './api.js';
+import axios from 'axios';
+
+if (DID_API.deepgramKey == 'YOUR_DEEPGRAM_API_KEY') alert('Please put your Deepgram API key inside ./apiJson.js and restart.');
+
 
 const GROQ_API_KEY = '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';
 
@@ -19,6 +23,8 @@ let statsIntervalId;
 let videoIsPlaying;
 let lastBytesReceived;
 let chatHistory = [];
+let mediaRecorder;
+let chunks = [];
 
 const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, usually not more than 1 sentance unless absolutely needed.`;
 
@@ -36,6 +42,72 @@ window.onload = (event) => {
 
   playIdleVideo();
 }
+
+
+const speakButton = document.getElementById('speak-button');
+speakButton.onclick = async () => {
+  if (speakButton.textContent === 'Speak') {
+    startRecording();
+    speakButton.textContent = 'Stop';
+  } else {
+    stopRecording();
+    speakButton.textContent = 'Speak';
+  }
+};
+
+async function startRecording() {
+  chunks = [];
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  mediaRecorder = new MediaRecorder(stream);
+  mediaRecorder.addEventListener('dataavailable', event => {
+    chunks.push(event.data);
+  });
+  mediaRecorder.start();
+}
+
+async function stopRecording() {
+  mediaRecorder.stop();
+  mediaRecorder.addEventListener('stop', async () => {
+    const blob = new Blob(chunks, { type: 'audio/webm' });
+    const formData = new FormData();
+    formData.append('file', blob, 'recording.webm');
+
+    try {
+      const response = await axios.post('https://api.deepgram.com/v1/listen', formData, {
+        headers: {
+          'Authorization': `Token ${DID_API.deepgramKey}`,
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      const transcript = response.data.results.channels[0].alternatives[0].transcript;
+      document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User:</u> ${transcript}</span><br>`;
+
+      // Agents Overview - Step 3: Send a Message to a Chat session - Send a message to a Chat
+      const playResponse = await fetchWithRetries(`${DID_API.url}/agents/${agentId}/chat/${chatId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          "streamId": streamId,
+          "sessionId": sessionId,
+          "messages": [
+            {
+              "role": "user",
+              "content": transcript,
+              "created_at": new Date().toString()
+            }
+          ]
+        }),
+      });
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  });
+}
+
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
     peerConnection = new RTCPeerConnection({ iceServers });
