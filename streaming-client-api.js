@@ -52,6 +52,7 @@ connectButton.onclick = async () => {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(presenterInputByService[DID_API.service]),
+    mode: 'no-cors', // Add this line to set the mode to 'no-cors'
   });
 
   const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
