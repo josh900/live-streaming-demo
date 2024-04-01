@@ -346,7 +346,6 @@ async function startStreaming(assistantReply) {
     }),
   });
 }
-
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   mediaRecorder = new MediaRecorder(stream);
@@ -364,6 +363,15 @@ async function startRecording() {
       }
     });
     mediaRecorder.start(1000);
+
+    // Send KeepAlive message every 3 seconds
+    setInterval(() => {
+      if (deepgramSocket.readyState === 1) {
+        const keepAliveMsg = JSON.stringify({ type: "KeepAlive" });
+        deepgramSocket.send(keepAliveMsg);
+        console.log("Sent KeepAlive message");
+      }
+    }, 3000);
   };
 
   deepgramSocket.onmessage = (message) => {
@@ -380,7 +388,7 @@ async function startRecording() {
           content: transcript,
         });
         transcript = '';
-        stopRecording();
+        sendChatToGroq();
       } else {
         transcript += partialTranscript;
         // Update the UI with the interim transcript
@@ -393,11 +401,13 @@ async function startRecording() {
 async function stopRecording() {
   if (mediaRecorder && mediaRecorder.state === 'recording') {
     mediaRecorder.stop();
+    const closeMsg = JSON.stringify({ type: "CloseStream" });
+    deepgramSocket.send(closeMsg);
     deepgramSocket.close();
     mediaRecorder = null;
-    sendChatToGroq();
   }
 }
+
 
 async function sendChatToGroq() {
   try {
