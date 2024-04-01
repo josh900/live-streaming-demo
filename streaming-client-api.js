@@ -1,6 +1,5 @@
 'use strict';
-import DID_API from './api.json' assert { type: 'json' };
-
+import { DID_API } from './apiJson.js';
 if (DID_API.key == '🤫') alert('Please put your api key inside ./api.json and restart..');
 
 const RTCPeerConnection = (
@@ -32,9 +31,9 @@ const presenterInputByService = {
   },
   clips: {
     presenter_id: 'rian-lZC6MmWfC1',
-    driver_id: 'mXra4jY38i'
-  }
-}
+    driver_id: 'mXra4jY38i',
+  },
+};
 
 const connectButton = document.getElementById('connect-button');
 connectButton.onclick = async () => {
@@ -98,8 +97,8 @@ startButton.onclick = async () => {
         },
         ...(DID_API.service === 'clips' && {
           background: {
-            color: '#FFFFFF'
-          }
+            color: '#FFFFFF',
+          },
         }),
         config: {
           stitch: true,
@@ -197,7 +196,7 @@ function onTrack(event) {
   statsIntervalId = setInterval(async () => {
     const stats = await peerConnection.getStats(event.track);
     stats.forEach((report) => {
-      if (report.type === 'inbound-rtp' && report.mediaType === 'video') {
+      if (report.type === 'inbound-rtp' && report.kind === 'video') {
         const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
 
         if (videoStatusChanged) {
