@@ -208,7 +208,7 @@ function onTrack(event) {
         lastBytesReceived = report.bytesReceived;
       }
     });
-  }, 300);
+  }, 250);
 }
 
 async function createPeerConnection(offer, iceServers) {
