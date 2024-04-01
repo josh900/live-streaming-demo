@@ -1,5 +1,7 @@
 'use strict';
 import DID_API from './api.js';
+import { createClient, LiveTranscriptionEvents } from "@deepgram/sdk";
+
 
 const GROQ_API_KEY = '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';
 
@@ -18,7 +20,10 @@ let sessionClientAnswer;
 let statsIntervalId;
 let videoIsPlaying;
 let lastBytesReceived;
-let chatHistory = [];
+let agentId;
+let chatId;
+let deepgram;
+let deepgramLive;
 
 const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, usually not more than 1 sentance unless absolutely needed.`;
 
@@ -29,13 +34,14 @@ const iceStatusLabel = document.getElementById('ice-status-label');
 const iceGatheringStatusLabel = document.getElementById('ice-gathering-status-label');
 const signalingStatusLabel = document.getElementById('signaling-status-label');
 const streamingStatusLabel = document.getElementById('streaming-status-label');
-const textArea = document.getElementById("textArea");
+const agentIdLabel = document.getElementById('agentId-label');
+const chatIdLabel = document.getElementById('chatId-label');
 
 // Play the idle video when the page is loaded
 window.onload = (event) => {
-
   playIdleVideo();
 }
+
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
     peerConnection = new RTCPeerConnection({ iceServers });
@@ -57,7 +63,7 @@ async function createPeerConnection(offer, iceServers) {
   console.log('set local sdp OK');
 
 
- 
+
 
   return sessionClientAnswer;
 }
@@ -277,6 +283,112 @@ connectButton.onclick = async () => {
     }),
   });
 };
+
+
+document.addEventListener("DOMContentLoaded", () => {
+  const speakButton = document.getElementById('speak-button');
+
+  speakButton.onclick = async () => {
+    if (speakButton.innerText === "Speak") {
+      // Start recording
+      await startRecording();
+      speakButton.innerText = "Stop";
+    } else {
+      // Stop recording
+      await stopRecording();
+      speakButton.innerText = "Speak";
+    }
+  };
+
+  async function startRecording() {
+    const deepgramApiKey = DID_API.deepgramKey;
+
+    deepgram = createClient({
+      apiKey: deepgramApiKey
+      });
+
+    deepgramLive = deepgram.transcription.live({
+      punctuate: true,
+      interim_results: false,
+      language: "en",
+      smart_format: true,
+      model: "nova-2",
+      channels: 1,
+      sample_rate: 16000,
+      endpointing: true
+
+    });
+
+deepgramLive.addListener(LiveTranscriptionEvents.Meta, (data) => {
+  console.log("Received Meta");
+});
+
+  
+deepgramLive.addListener(LiveTranscriptionEvents.ConnectionOpen, () => {
+  console.log("Connection opened");
+});
+
+deepgramLive.addListener(LiveTranscriptionEvents.ConnectionClose, () => {
+  console.log("Connection closed");
+});
+
+  
+deepgramLive.addListener(LiveTranscriptionEvents.ConnectionError, (error) => {
+  console.error("Connection error:", error);
+});
+  
+    // Add the Transcript event listener here
+deepgramLive.addListener(LiveTranscriptionEvents.Transcript, (data) => {
+  console.log("Transcript received:", data);
+  const transcript = data.channel.alternatives[0].transcript;
+  sendTranscriptToChat(transcript);
+});
+  
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+  
+      mediaRecorder.addEventListener("dataavailable", (event) => {
+        if (event.data.size > 0) {
+          deepgramLive.send(event.data);
+        }
+      });
+  
+      mediaRecorder.start(750);
+    } catch (error) {
+      console.error("Error accessing microphone:", error);
+    }
+  }
+
+  async function stopRecording() {
+    deepgramLive.finish();
+  }
+
+  async function sendTranscriptToChat(transcript) {
+    document.getElementById("msgHistory").innerHTML += `<span style='opacity:0.5'><u>User:</u> ${transcript}</span><br>`;
+
+    const playResponse = await fetchWithRetries(`${DID_API.url}/agents/${agentId}/chat/${chatId}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        "streamId": streamId,
+        "sessionId": sessionId,
+        "messages": [
+          {
+            "role": "user",
+            "content": transcript,
+            "created_at": new Date().toString()
+          }
+        ]
+      }),
+    });
+  }
+});
+
+
 
 
 async function startStreaming(assistantReply) {
