@@ -358,14 +358,6 @@ async function startStreaming(assistantReply) {
   }
 }
 
-async function reinitializeConnection() {
-  console.log('Reinitializing connection...');
-  stopAllStreams();
-  closePC();
-  await connectButton.onclick();
-  await startRecording();
-}
-
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
