@@ -404,7 +404,7 @@ async function stopRecording() {
 
 async function sendChatToGroq() {
   try {
-    const response = await fetch('avatar.skoop.digital/chat', {
+    const response = await fetch('http://localhost:3001/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
