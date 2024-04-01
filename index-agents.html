@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <title>D-ID Agents API Demo</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -38,15 +39,20 @@
     </div>
   </div>
 
-  <div>
-    <h3>Type your message here:</h3>
-    <textarea id="textArea" cols="50" rows="5" maxlength="280"></textarea>
-    <br>
-    <button id="start-button" type="button">Send</button>
+
+
   </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/groq-sdk@0.3.2/index.mjs?mime=application/javascript" type="module"></script>
-
+  <div>
+    <h3>Click the button below to start speaking:</h3>
+ <button id="start-button"
+      type="button">Speak</button>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/groq-sdk@0.3.2/index.mjs?mime=application/javascript"
+    type="module"></script>
   <script type="module" src="./agents-client-api.js"></script>
 </body>
+
 </html>
+
+
+

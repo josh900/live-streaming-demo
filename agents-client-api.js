@@ -1,7 +1,8 @@
 'use strict';
 import DID_API from './api.js';
 
-const GROQ_API_KEY = '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';
+const GROQ_API_KEY = DID_API.groqKey;
+const DEEPGRAM_API_KEY = DID_API.deepgramKey;
 
 if (DID_API.key == '🤫') alert('Please put your api key inside ./api.json and restart..');
 
@@ -19,8 +20,12 @@ let statsIntervalId;
 let videoIsPlaying;
 let lastBytesReceived;
 let chatHistory = [];
+let mediaRecorder;
+let deepgramSocket;
+let transcript = '';
 
-const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, usually not more than 1 sentance unless absolutely needed.`;
+
+const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentance unless absolutely needed.`;
 
 const videoElement = document.getElementById('video-element');
 videoElement.setAttribute('playsinline', '');
@@ -29,7 +34,6 @@ const iceStatusLabel = document.getElementById('ice-status-label');
 const iceGatheringStatusLabel = document.getElementById('ice-gathering-status-label');
 const signalingStatusLabel = document.getElementById('signaling-status-label');
 const streamingStatusLabel = document.getElementById('streaming-status-label');
-const textArea = document.getElementById("textArea");
 
 // Play the idle video when the page is loaded
 window.onload = (event) => {
@@ -57,7 +61,7 @@ async function createPeerConnection(offer, iceServers) {
   console.log('set local sdp OK');
 
 
- 
+
 
   return sessionClientAnswer;
 }
@@ -279,6 +283,9 @@ connectButton.onclick = async () => {
 };
 
 
+
+
+
 async function startStreaming(assistantReply) {
   const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
     method: 'POST',
@@ -302,87 +309,127 @@ async function startStreaming(assistantReply) {
 
 
 
-const startButton = document.getElementById('start-button');
-startButton.onclick = async () => {
-  if (peerConnection?.signalingState === 'stable' || peerConnection?.iceConnectionState === 'connected') {
-    // Pasting the user's message to the Chat History element
-    document.getElementById("msgHistory").innerHTML += `<span style='opacity:0.5'><u>User:</u> ${textArea.value}</span><br>`;
 
-    // Add user message to chat history
-    chatHistory.push({
-      role: 'user',
-      content: textArea.value
+async function startRecording() {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  mediaRecorder = new MediaRecorder(stream);
+
+  deepgramSocket = new WebSocket('wss://api.deepgram.com/v1/listen?endpointing=1000', [
+    'token',
+    DEEPGRAM_API_KEY,
+  ]);
+
+  deepgramSocket.onopen = () => {
+    console.log('Connection opened');
+    mediaRecorder.addEventListener('dataavailable', async (event) => {
+      if (event.data.size > 0 && deepgramSocket.readyState === 1) {
+        deepgramSocket.send(event.data);
+      }
+    });
+    mediaRecorder.start(1000);
+  };
+
+  deepgramSocket.onmessage = (message) => {
+    const received = JSON.parse(message.data);
+    const partialTranscript = received.channel.alternatives[0].transcript;
+    const isFinal = received.speech_final;
+  
+    if (partialTranscript) {
+      if (isFinal) {
+        transcript += partialTranscript;
+        document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User:</u> ${transcript}</span><br>`;
+        chatHistory.push({
+          role: 'user',
+          content: transcript,
+        });
+        transcript = '';
+        stopRecording();
+      } else {
+        transcript += partialTranscript;
+        // Update the UI with the interim transcript
+        document.getElementById('msgHistory').innerHTML = document.getElementById('msgHistory').innerHTML.replace(/<span style='opacity:0.5'><u>User \(interim\):<\/u>.*<\/span><br>/, `<span style='opacity:0.5'><u>User (interim):</u> ${transcript}</span><br>`);
+      }
+    }
+  };
+}
+
+async function stopRecording() {
+  if (mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    deepgramSocket.close();
+    mediaRecorder = null;
+    sendChatToGroq();
+  }
+}
+
+async function sendChatToGroq() {
+  try {
+    const response = await fetch('http://localhost:3001/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messages: [
+          {
+            role: 'system',
+            content: context,
+          },
+          ...chatHistory,
+        ],
+        model: 'mixtral-8x7b-32768',
+      }),
     });
 
-    // Clearing the text-box element
-    document.getElementById("textArea").value = "";
 
-    try {
-      const response = await fetch('http://localhost:3001/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messages: [
-            {
-              role: 'system',
-              content: context,
-            },
-            ...chatHistory,
-          ],
-          model: 'mixtral-8x7b-32768',
-        }),
-      });
+    if (!response.ok) {
+      throw new Error(`HTTP error ${response.status}`);
+    }
 
-      if (!response.ok) {
-        throw new Error(`HTTP error ${response.status}`);
-      }
+    const reader = response.body.getReader();
+    let assistantReply = '';
+    let done = false;
 
-      const reader = response.body.getReader();
-      let assistantReply = '';
-      let done = false;
+    while (!done) {
+      const { value, done: readerDone } = await reader.read();
+      done = readerDone;
 
-      while (!done) {
-        const { value, done: readerDone } = await reader.read();
-        done = readerDone;
+      if (value) {
+        const chunk = new TextDecoder().decode(value);
+        const lines = chunk.split('\n');
 
-        if (value) {
-          const chunk = new TextDecoder().decode(value);
-          const lines = chunk.split('\n');
-
-          for (const line of lines) {
-            if (line.startsWith('data:')) {
-              const data = line.substring(5).trim();
-              if (data === '[DONE]') {
-                done = true;
-                break;
-              }
-
-              const parsed = JSON.parse(data);
-              assistantReply += parsed.choices[0]?.delta?.content || '';
+        for (const line of lines) {
+          if (line.startsWith('data:')) {
+            const data = line.substring(5).trim();
+            if (data === '[DONE]') {
+              done = true;
+              break;
             }
+
+            const parsed = JSON.parse(data);
+            assistantReply += parsed.choices[0]?.delta?.content || '';
           }
         }
       }
-
-      // Add assistant reply to chat history
-      chatHistory.push({
-        role: 'assistant',
-        content: assistantReply,
-      });
-
-      // Append the complete assistant reply to the chat history element
-      document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${assistantReply}</span><br>`;
-
-      // Initiate streaming
-      await startStreaming(assistantReply);
-    } catch (error) {
-      console.error('Error:', error);
-      // Handle the error, display an error message, etc.
     }
+
+    // Add assistant reply to chat history
+    chatHistory.push({
+      role: 'assistant',
+      content: assistantReply,
+    });
+
+    // Append the complete assistant reply to the chat history element
+    document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${assistantReply}</span><br>`;
+
+    // Initiate streaming
+    await startStreaming(assistantReply);
+  } catch (error) {
+    console.error('Error:', error);
+    // Handle the error, display an error message, etc.
   }
-};
+}
+
 
 
 const destroyButton = document.getElementById('destroy-button');
@@ -398,4 +445,20 @@ destroyButton.onclick = async () => {
 
   stopAllStreams();
   closePC();
+};
+
+
+
+const startButton = document.getElementById('start-button');
+let isRecording = false;
+
+startButton.onclick = async () => {
+  if (!isRecording) {
+    startButton.textContent = 'Stop';
+    await startRecording();
+  } else {
+    startButton.textContent = 'Speak';
+    await stopRecording();
+  }
+  isRecording = !isRecording;
 };
