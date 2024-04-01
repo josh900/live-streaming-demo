@@ -23,6 +23,8 @@ let chatHistory = [];
 let mediaRecorder;
 let deepgramSocket;
 let transcript = '';
+let inactivityTimeout;
+
 
 
 const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentance unless absolutely needed.`;
@@ -413,6 +415,15 @@ async function startRecording() {
       }
     }
   };
+
+  // Start inactivity timeout
+  inactivityTimeout = setTimeout(() => {
+    if (isRecording) {
+      console.log('Inactivity timeout reached. Stopping recording.');
+      startButton.click();
+    }
+  }, 45000); // 45 seconds
+
 }
 
 async function stopRecording() {
@@ -423,8 +434,10 @@ async function stopRecording() {
     deepgramSocket.close();
     mediaRecorder = null;
   }
-}
 
+  // Clear inactivity timeout
+  clearTimeout(inactivityTimeout);
+}
 
 async function sendChatToGroq() {
   try {
@@ -486,6 +499,16 @@ async function sendChatToGroq() {
     // Append the complete assistant reply to the chat history element
     document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${assistantReply}</span><br>`;
 
+
+    // Reset inactivity timeout
+    clearTimeout(inactivityTimeout);
+    inactivityTimeout = setTimeout(() => {
+      if (isRecording) {
+        console.log('Inactivity timeout reached. Stopping recording.');
+        startButton.click();
+      }
+    }, 45000); // 45 seconds
+
     // Initiate streaming
     await startStreaming(assistantReply);
   } catch (error) {
@@ -495,7 +518,6 @@ async function sendChatToGroq() {
     }
   }
 }
-
 
 
 const destroyButton = document.getElementById('destroy-button');
