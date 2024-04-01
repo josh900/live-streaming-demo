@@ -35,11 +35,47 @@ const iceGatheringStatusLabel = document.getElementById('ice-gathering-status-la
 const signalingStatusLabel = document.getElementById('signaling-status-label');
 const streamingStatusLabel = document.getElementById('streaming-status-label');
 
-// Play the idle video when the page is loaded
-window.onload = (event) => {
-
+window.onload = async (event) => {
   playIdleVideo();
+
+  // Show loading symbol
+  const loadingSymbol = document.createElement('div');
+  loadingSymbol.innerHTML = 'Connecting...';
+  loadingSymbol.style.position = 'absolute';
+  loadingSymbol.style.top = '50%';
+  loadingSymbol.style.left = '50%';
+  loadingSymbol.style.transform = 'translate(-50%, -50%)';
+  loadingSymbol.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+  loadingSymbol.style.color = 'white';
+  loadingSymbol.style.padding = '10px';
+  loadingSymbol.style.borderRadius = '5px';
+  loadingSymbol.style.zIndex = '9999';
+  document.body.appendChild(loadingSymbol);
+
+  try {
+    await connectButton.onclick();
+    // Remove loading symbol
+    document.body.removeChild(loadingSymbol);
+  } catch (error) {
+    console.error('Error during auto-initialization:', error);
+    // Remove loading symbol and show error message
+    document.body.removeChild(loadingSymbol);
+    showErrorMessage('Failed to connect. Please try again.');
+  }
+};
+ 
+function showErrorMessage(message) {
+  const errorMessage = document.createElement('div');
+  errorMessage.innerHTML = message;
+  errorMessage.style.color = 'red';
+  errorMessage.style.marginBottom = '10px';
+  document.body.appendChild(errorMessage);
+
+  // Show destroy and connect buttons
+  destroyButton.style.display = 'inline-block';
+  connectButton.style.display = 'inline-block';
 }
+
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
     peerConnection = new RTCPeerConnection({ iceServers });
@@ -92,10 +128,13 @@ function onIceCandidate(event) {
 function onIceConnectionStateChange() {
   iceStatusLabel.innerText = peerConnection.iceConnectionState;
   iceStatusLabel.className = 'iceConnectionState-' + peerConnection.iceConnectionState;
+  
   if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'closed') {
     stopAllStreams();
     closePC();
+    showErrorMessage('Connection lost. Please try again.');
   }
+
 }
 function onConnectionStateChange() {
   // not supported in firefox
@@ -122,31 +161,32 @@ function onVideoStatusChange(videoIsPlaying, stream) {
 }
 function onTrack(event) {
   /**
-   * The following code is designed to provide information about wether currently there is data
+   * The following code is designed to provide information about whether there is currently data
    * that's being streamed - It does so by periodically looking for changes in total stream data size
    *
    * This information in our case is used in order to show idle video while no video is streaming.
-   * To create this idle video use the POST https://api.d-id.com/talks (or clips) endpoint with a silent audio file or a text script with only ssml breaks
+   * To create this idle video, use the POST https://api.d-id.com/talks (or clips) endpoint with a silent audio file or a text script with only ssml breaks
    * https://docs.aws.amazon.com/polly/latest/dg/supportedtags.html#break-tag
-   * for seamless results use `config.fluent: true` and provide the same configuration as the streaming video
+   * for seamless results, use `config.fluent: true` and provide the same configuration as the streaming video
    */
 
   if (!event.track) return;
 
   statsIntervalId = setInterval(async () => {
-    const stats = await peerConnection.getStats(event.track);
-    stats.forEach((report) => {
-      if (report.type === 'inbound-rtp' && report.mediaType === 'video') {
+    if (peerConnection && event.track) {
+      const stats = await peerConnection.getStats(event.track);
+      stats.forEach((report) => {
+        if (report.type === 'inbound-rtp' && report.mediaType === 'video') {
+          const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
 
-        const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
-
-        if (videoStatusChanged) {
-          videoIsPlaying = report.bytesReceived > lastBytesReceived;
-          onVideoStatusChange(videoIsPlaying, event.streams[0]);
+          if (videoStatusChanged) {
+            videoIsPlaying = report.bytesReceived > lastBytesReceived;
+            onVideoStatusChange(videoIsPlaying, event.streams[0]);
+          }
+          lastBytesReceived = report.bytesReceived;
         }
-        lastBytesReceived = report.bytesReceived;
-      }
-    });
+      });
+    }
   }, 300);
 }
 
