@@ -394,6 +394,11 @@ async function startRecording() {
 }
 
 async function stopRecording() {
+  if (recognition && recognition.state !== 'inactive') {
+    recognition.stop();
+    recognition.start(); // Restart speech recognition
+  }
+
   if (mediaRecorder.state === 'recording') {
     mediaRecorder.stop();
     deepgramSocket.close();
@@ -493,12 +498,22 @@ const startButton = document.getElementById('start-button');
 let isRecording = false;
 
 startButton.onclick = async () => {
-  if (!isRecording) {
-    startButton.textContent = 'Stop';
-    await startRecording();
-  } else {
-    startButton.textContent = 'Speak';
-    await stopRecording();
+  try {
+    await createAgent();
+    console.log('Agent created successfully');
+
+    await createChat();
+    console.log('Chat created successfully');
+
+    await sendTranscript();
+    console.log('Transcript sent successfully');
+
+    setAgentIdLabel();
+    setChatIdLabel();
+
+    startRecording();
+    console.log('Recording started');
+  } catch (error) {
+    console.error('Error in startButton.onclick:', error);
   }
-  isRecording = !isRecording;
 };
