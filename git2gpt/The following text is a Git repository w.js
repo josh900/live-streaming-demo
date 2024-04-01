@@ -1,2376 +1,4 @@
-The following text is a Git repository with code. The structure of the text are sections that begin with ----, followed by a single line containing the file path and file name, followed by a variable amount of lines containing the file contents. The text representing the Git repository ends when the symbols --END-- are encounted. Any further text beyond --END-- are meant to be interpreted as instructions using the aforementioned Git repository as context.
-----
-README.md
-# Streaming Live Demo by D-ID
 
-* (install express) Open a terminal in the folder and run - `npm install express`
-* (add your API key) Edit the `api.json` inside the uncompressed folder and replace the emoji with your key
-* (select service) in the same `api.json` file, edit the `service` field to choose your avatar type, use `talks` for an avatar made from an image or `clips` to use a premade HQ avatar from a video
-
-## Start Streaming Demo:
-* (bring up the app) in the folder (ctr left click on folder through finder) open the terminal run `node app.js`
-* you should see this message - server started on port localhost:3000
-* (open the app) In the browser add localhost:3000
-* (connect) press connect you should see the connection ready 
-* (stream) Press the start button to start streaming
-<img src="./app.png" alt="Streaming App" width="200"/>
-
-## ⭐ Start Agents Demo [NEW!] ⭐
-* (bring up the app) in the folder (ctr left click on folder through finder) open the terminal `run node app.js` 
-* you should see this message - server started on port localhost:3000
-* (open the app) In the browser add localhost:3000/agents
-* press 'Create new Agent with Knowledge' to create a new Agent. All API endpoints' responses are visible in the console. 
-* press 'Connect' to connect to the agent, once done, type a message and press 'Send' to start a chat
-* you can store the created `agentId` and `chatID` variables and at the bottom of the `agents-client-api.js` file for future chats with your newly created Agent.
-![app](./agents_app.png)
-
-----
-agents-client-api.js
-'use strict';
-import DID_API from './api.json' assert { type: 'json' };
-
-if (DID_API.key == '🤫') alert('Please put your api key inside ./api.json and restart..');
-
-const RTCPeerConnection = (
-  window.RTCPeerConnection ||
-  window.webkitRTCPeerConnection ||
-  window.mozRTCPeerConnection
-).bind(window);
-
-let peerConnection;
-let streamId;
-let sessionId;
-let sessionClientAnswer;
-let statsIntervalId;
-let videoIsPlaying;
-let lastBytesReceived;
-let agentId;
-let chatId;
-
-const videoElement = document.getElementById('video-element');
-videoElement.setAttribute('playsinline', '');
-const peerStatusLabel = document.getElementById('peer-status-label');
-const iceStatusLabel = document.getElementById('ice-status-label');
-const iceGatheringStatusLabel = document.getElementById('ice-gathering-status-label');
-const signalingStatusLabel = document.getElementById('signaling-status-label');
-const streamingStatusLabel = document.getElementById('streaming-status-label');
-const agentIdLabel = document.getElementById('agentId-label');
-const chatIdLabel = document.getElementById('chatId-label');
-const textArea = document.getElementById("textArea");
-
-// Play the idle video when the page is loaded
-window.onload = (event) => {
-
-  playIdleVideo()
-
-  if (agentId == "" || agentId == undefined) {
-    console.log("Empty 'agentID' and 'chatID' variables\n\n1. Click on the 'Create new Agent with Knowledge' button\n2. Open the Console and wait for the process to complete\n3. Press on the 'Connect' button\n4. Type and send a message to the chat\nNOTE: You can store the created 'agentID' and 'chatId' variables at the bottom of the JS file for future chats")
-  } else {
-    console.log("You are good to go!\nClick on the 'Connect Button', Then send a new message\nAgent ID: ", agentId, "\nChat ID: ", chatId)
-    agentIdLabel.innerHTML = agentId
-    chatIdLabel.innerHTML = chatId
-  }
-}
-async function createPeerConnection(offer, iceServers) {
-  if (!peerConnection) {
-    peerConnection = new RTCPeerConnection({ iceServers });
-    peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
-    peerConnection.addEventListener('icecandidate', onIceCandidate, true);
-    peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
-    peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
-    peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
-    peerConnection.addEventListener('track', onTrack, true);
-  }
-
-  await peerConnection.setRemoteDescription(offer);
-  console.log('set remote sdp OK');
-
-  const sessionClientAnswer = await peerConnection.createAnswer();
-  console.log('create local sdp OK');
-
-  await peerConnection.setLocalDescription(sessionClientAnswer);
-  console.log('set local sdp OK');
-
-
-  // Data Channel creation (for dispalying the Agent's responses as text)
-  let dc = await peerConnection.createDataChannel("JanusDataChannel");
-  dc.onopen = () => {
-    console.log("datachannel open");
-  };
-
-  let decodedMsg;
-  // Agent Text Responses - Decoding the responses, pasting to the HTML element
-  dc.onmessage = (event) => {
-    let msg = event.data
-    let msgType = "chat/answer:"
-    if (msg.includes(msgType)) {
-      msg = decodeURIComponent(msg.replace(msgType, ""))
-      console.log(msg)
-      decodedMsg = msg
-      return decodedMsg
-    }
-    if (msg.includes("stream/started")) {
-      console.log(msg)
-      document.getElementById("msgHistory").innerHTML += `<span>${decodedMsg}</span><br><br>`
-    }
-    else {
-      console.log(msg)
-    }
-  };
-
-  dc.onclose = () => {
-    console.log("datachannel close");
-  };
-
-  return sessionClientAnswer;
-}
-function onIceGatheringStateChange() {
-  iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
-  iceGatheringStatusLabel.className = 'iceGatheringState-' + peerConnection.iceGatheringState;
-}
-function onIceCandidate(event) {
-  if (event.candidate) {
-    const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
-
-    // WEBRTC API CALL 3 - Submit network information
-    fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        candidate,
-        sdpMid,
-        sdpMLineIndex,
-        session_id: sessionId,
-      }),
-    });
-  }
-}
-function onIceConnectionStateChange() {
-  iceStatusLabel.innerText = peerConnection.iceConnectionState;
-  iceStatusLabel.className = 'iceConnectionState-' + peerConnection.iceConnectionState;
-  if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'closed') {
-    stopAllStreams();
-    closePC();
-  }
-}
-function onConnectionStateChange() {
-  // not supported in firefox
-  peerStatusLabel.innerText = peerConnection.connectionState;
-  peerStatusLabel.className = 'peerConnectionState-' + peerConnection.connectionState;
-}
-function onSignalingStateChange() {
-  signalingStatusLabel.innerText = peerConnection.signalingState;
-  signalingStatusLabel.className = 'signalingState-' + peerConnection.signalingState;
-}
-function onVideoStatusChange(videoIsPlaying, stream) {
-  let status;
-  if (videoIsPlaying) {
-    status = 'streaming';
-
-    const remoteStream = stream;
-    setVideoElement(remoteStream);
-  } else {
-    status = 'empty';
-    playIdleVideo();
-  }
-  streamingStatusLabel.innerText = status;
-  streamingStatusLabel.className = 'streamingState-' + status;
-}
-function onTrack(event) {
-  /**
-   * The following code is designed to provide information about wether currently there is data
-   * that's being streamed - It does so by periodically looking for changes in total stream data size
-   *
-   * This information in our case is used in order to show idle video while no video is streaming.
-   * To create this idle video use the POST https://api.d-id.com/talks (or clips) endpoint with a silent audio file or a text script with only ssml breaks
-   * https://docs.aws.amazon.com/polly/latest/dg/supportedtags.html#break-tag
-   * for seamless results use `config.fluent: true` and provide the same configuration as the streaming video
-   */
-
-  if (!event.track) return;
-
-  statsIntervalId = setInterval(async () => {
-    const stats = await peerConnection.getStats(event.track);
-    stats.forEach((report) => {
-      if (report.type === 'inbound-rtp' && report.mediaType === 'video') {
-
-        const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
-
-        if (videoStatusChanged) {
-          videoIsPlaying = report.bytesReceived > lastBytesReceived;
-          onVideoStatusChange(videoIsPlaying, event.streams[0]);
-        }
-        lastBytesReceived = report.bytesReceived;
-      }
-    });
-  }, 500);
-}
-function setVideoElement(stream) {
-  if (!stream) return;
-  // Add Animation Class
-  videoElement.classList.add("animated")
-
-  // Removing browsers' autoplay's 'Mute' Requirement
-  videoElement.muted = false;
-
-  videoElement.srcObject = stream;
-  videoElement.loop = false;
-
-  // Remove Animation Class after it's completed
-  setTimeout(() => {
-    videoElement.classList.remove("animated")
-  }, 250);
-
-  // safari hotfix
-  if (videoElement.paused) {
-    videoElement
-      .play()
-      .then((_) => { })
-      .catch((e) => { });
-  }
-}
-function playIdleVideo() {
-  // Add Animation Class
-  videoElement.classList.toggle("animated")
-
-  videoElement.srcObject = undefined;
-  videoElement.src = 'emma_idle.mp4';
-  videoElement.loop = true;
-
-  // Remove Animation Class after it's completed
-  setTimeout(() => {
-    videoElement.classList.remove("animated")
-  }, 250);
-}
-function stopAllStreams() {
-  if (videoElement.srcObject) {
-    console.log('stopping video streams');
-    videoElement.srcObject.getTracks().forEach((track) => track.stop());
-    videoElement.srcObject = null;
-  }
-}
-function closePC(pc = peerConnection) {
-  if (!pc) return;
-  console.log('stopping peer connection');
-  pc.close();
-  pc.removeEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
-  pc.removeEventListener('icecandidate', onIceCandidate, true);
-  pc.removeEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
-  pc.removeEventListener('connectionstatechange', onConnectionStateChange, true);
-  pc.removeEventListener('signalingstatechange', onSignalingStateChange, true);
-  pc.removeEventListener('track', onTrack, true);
-  clearInterval(statsIntervalId);
-  iceGatheringStatusLabel.innerText = '';
-  signalingStatusLabel.innerText = '';
-  iceStatusLabel.innerText = '';
-  peerStatusLabel.innerText = '';
-  console.log('stopped peer connection');
-  if (pc === peerConnection) {
-    peerConnection = null;
-  }
-}
-const maxRetryCount = 3;
-const maxDelaySec = 4;
-async function fetchWithRetries(url, options, retries = 1) {
-  try {
-    return await fetch(url, options);
-  } catch (err) {
-    if (retries <= maxRetryCount) {
-      const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 1000;
-
-      await new Promise((resolve) => setTimeout(resolve, delay));
-
-      console.log(`Request failed, retrying ${retries}/${maxRetryCount}. Error ${err}`);
-      return fetchWithRetries(url, options, retries + 1);
-    } else {
-      throw new Error(`Max retries exceeded. error: ${err}`);
-    }
-  }
-}
-
-const connectButton = document.getElementById('connect-button');
-connectButton.onclick = async () => {
-  if (agentId == "" || agentId === undefined) {
-    return alert("1. Click on the 'Create new Agent with Knowledge' button\n2. Open the Console and wait for the process to complete\n3. Press on the 'Connect' button\n4. Type and send a message to the chat\nNOTE: You can store the created 'agentID' and 'chatId' variables at the bottom of the JS file for future chats")
-  }
-
-  if (peerConnection && peerConnection.connectionState === 'connected') {
-    return;
-  }
-  stopAllStreams();
-  closePC();
-
-  // WEBRTC API CALL 1 - Create a new stream
-  const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg'
-    }),
-  });
-
-
-  const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
-  streamId = newStreamId;
-  sessionId = newSessionId;
-  try {
-    sessionClientAnswer = await createPeerConnection(offer, iceServers);
-  } catch (e) {
-    console.log('error during streaming setup', e);
-    stopAllStreams();
-    closePC();
-    return;
-  }
-
-  // WEBRTC API CALL 2 - Start a stream
-  const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      answer: sessionClientAnswer,
-      session_id: sessionId,
-    }),
-  });
-};
-
-const startButton = document.getElementById('start-button');
-startButton.onclick = async () => {
-  // connectionState not supported in firefox
-  if (peerConnection?.signalingState === 'stable' || peerConnection?.iceConnectionState === 'connected') {
-
-    // Pasting the user's message to the Chat History element
-    document.getElementById("msgHistory").innerHTML += `<span style='opacity:0.5'><u>User:</u> ${textArea.value}</span><br>`
-
-    // Storing the Text Area value
-    let txtAreaValue = document.getElementById("textArea").value
-
-    // Clearing the text-box element
-    document.getElementById("textArea").value = ""
-
-
-    // Agents Overview - Step 3: Send a Message to a Chat session - Send a message to a Chat
-    const playResponse = await fetchWithRetries(`${DID_API.url}/agents/${agentId}/chat/${chatId}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        "streamId": streamId,
-        "sessionId": sessionId,
-        "messages": [
-          {
-            "role": "user",
-            "content": txtAreaValue,
-            "created_at": new Date().toString()
-          }
-        ]
-      }),
-    });
-  }
-};
-
-const destroyButton = document.getElementById('destroy-button');
-destroyButton.onclick = async () => {
-  await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
-    method: 'DELETE',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ session_id: sessionId }),
-  });
-
-  stopAllStreams();
-  closePC();
-};
-
-// Agents API Workflow
-async function agentsAPIworkflow() {
-  agentIdLabel.innerHTML = `<span style='color:orange'>Processing...<style='color:orange'>`
-  chatIdLabel.innerHTML = `<span style='color:orange'>Processing...<style='color:orange'>`
-  axios.defaults.baseURL = 'https://api.d-id.com/';
-  axios.defaults.headers.common['Authorization'] = `Basic ${DID_API.key}`
-  axios.defaults.headers.common['content-type'] = 'application/json'
-
-  // Retry Mechanism (Polling) for this demo only - Please use Webhooks in real life applications! 
-  // as described in https://docs.d-id.com/reference/knowledge-overview#%EF%B8%8F-step-2-add-documents-to-the-knowledge-base
-  async function retry(url, retries = 1) {
-    const maxRetryCount = 5; // Maximum number of retries
-    const maxDelaySec = 10; // Maximum delay in seconds
-    try {
-      let response = await axios.get(`${url}`)
-      if (response.data.status == "done") {
-        return console.log(response.data.id + ": " + response.data.status)
-      }
-      else {
-        throw new Error("Status is not 'done'")
-      }
-    } catch (err) {
-      if (retries <= maxRetryCount) {
-        const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 1000;
-
-        await new Promise((resolve) => setTimeout(resolve, delay));
-
-        console.log(`Retrying ${retries}/${maxRetryCount}. ${err}`);
-        return retry(url, retries + 1);
-      } else {
-        agentIdLabel.innerHTML = `<span style='color:red'>Failed</span>`
-        chatIdLabel.innerHTML = `<span style='color:red'>Failed</span>`
-        throw new Error(`Max retries exceeded. error: ${err}`);
-      }
-    }
-  }
-
-  // Knowledge Overview - Step 1: Create a new Knowledge Base
-  // https://docs.d-id.com/reference/knowledge-overview#%EF%B8%8F-step-1-create-a-new-knowledge-base
-  const createKnowledge = await axios.post('/knowledge',
-    {
-      name: "knowledge",
-      description: "D-ID Agents API"
-    })
-  console.log("Create Knowledge:", createKnowledge.data)
-
-  let knowledgeId = createKnowledge.data.id
-  console.log("Knowledge ID: " + knowledgeId)
-
-  // Knowledge Overview - Step 2: Add Documents to the Knowledge Base
-  // https://docs.d-id.com/reference/knowledge-overview#%EF%B8%8F-step-2-add-documents-to-the-knowledge-base
-
-  const createDocument = await axios.post(`/knowledge/${knowledgeId}/documents`,
-    {
-      "documentType": "html",
-      "source_url": "https://en.wikipedia.org/wiki/Prompt_engineering",
-      "title": "Prompt Engineering Wikipedia Page",
-    })
-  console.log("Create Document: ", createDocument.data)
-
-  // Split the # to use in documentID
-  let documentId = createDocument.data.id
-  let splitArr = documentId.split("#")
-  documentId = splitArr[1]
-  console.log("Document ID: " + documentId)
-
-
-  // Knowledge Overview - Step 3: Retrieving the Document and Knowledge status
-  // https://docs.d-id.com/reference/knowledge-overview#%EF%B8%8F-step-3-retrieving-the-document-and-knowledge-status
-  await retry(`/knowledge/${knowledgeId}/documents/${documentId}`)
-  await retry(`/knowledge/${knowledgeId}`)
-
-  // Agents Overview - Step 1: Create an Agent
-  // https://docs.d-id.com/reference/agents-overview#%EF%B8%8F-step-1-create-an-agent
-  const createAgent = await axios.post('/agents',
-    {
-      "knowledge": {
-        "provider": "pinecone",
-        "embedder": {
-          "provider": "pinecone",
-          "model": "ada02"
-        },
-        "id": knowledgeId
-      },
-      "presenter": {
-        "type": "talk",
-        "voice": {
-          "type": "microsoft",
-          "voice_id": "en-US-JennyMultilingualV2Neural"
-        },
-        "thumbnail": "https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg",
-        "source_url": "https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg"
-      },
-      "llm": {
-        "type": "openai",
-        "provider": "openai",
-        "model": "gpt-3.5-turbo-1106",
-        "instructions": "Your name is Emma, an AI designed to assist with information about Prompt Engineering and RAG"
-      },
-      "preview_name": "Emma"
-    }
-
-  )
-  console.log("Create Agent: ", createAgent.data)
-  let agentId = createAgent.data.id
-  console.log("Agent ID: " + agentId)
-
-  // Agents Overview - Step 2: Create a new Chat session with the Agent
-  // https://docs.d-id.com/reference/agents-overview#%EF%B8%8F-step-2-create-a-new-chat-session-with-the-agent
-  const createChat = await axios.post(`/agents/${agentId}/chat`)
-  console.log("Create Chat: ", createChat.data)
-  let chatId = createChat.data.id
-  console.log("Chat ID: " + chatId)
-
-  // Agents Overview - Step 3: Send a Message to a Chat session
-  // https://docs.d-id.com/reference/agents-overview#%EF%B8%8F-step-3--send-a-message-to-a-chat-session
-  // The WebRTC steps are called in the functions: 'connectButton.onclick', onIceCandidate(event), 'startButton.onclick'
-
-  console.log("Create new Agent with Knowledge - DONE!\n Press on the 'Connect' button to proceed.\n Store the created 'agentID' and 'chatId' variables at the bottom of the JS file for future chats")
-  agentIdLabel.innerHTML = agentId
-  chatIdLabel.innerHTML = chatId
-  return { agentId: agentId, chatId: chatId }
-
-}
-
-const agentsButton = document.getElementById("agents-button")
-agentsButton.onclick = async () => {
-  try{
-    const agentsIds = {} = await agentsAPIworkflow()
-    console.log(agentsIds)
-    agentId = agentsIds.agentId
-    chatId = agentsIds.chatId
-    return
-  }
-  catch(err){
-    agentIdLabel.innerHTML = `<span style='color:red'>Failed</span>`
-    chatIdLabel.innerHTML = `<span style='color:red'>Failed</span>`
-    throw new Error(err)
-  }
-}
-
-// Paste Your Created Agent and Chat IDs Here:
-agentId = ""
-chatId = ""
-----
-api.json
-{
-    "key": "YWRtaW4xQHNrb29wLmRpZ2l0YWw:quCILV7kl0vt4FJEvJLvf",
-    "url": "https://api.d-id.com",
-    "service": "talks"
-}
-----
-app.js
-const express = require('express');
-const http = require('http');
-const cors = require('cors');
-
-const port = 3000;
-
-const app = express();
-app.use(cors({ origin: 'http://localhost:3000' }));
-
-app.use('/', express.static(__dirname));
-
-app.get('/', function(req, res) {
-    res.sendFile(__dirname + '/index.html')
-});
-app.get('/agents', function(req, res) {
-    res.sendFile(__dirname + '/index-agents.html')
-});
-
-const server = http.createServer(app);
-
-server.listen(port, () => console.log(`Server started on port localhost:${port}`));
-
-----
-index-agents.html
-<!DOCTYPE html>
-<html>
-
-<head>
-  <title>D-ID Agents API Demo</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@300;400;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style-agents.css">
-  <link rel="icon" type="image/png" sizes="192x192" href="https://studio.d-id.com/favicon/favicon-192x192.png">
-</head>
-
-<body>
-  <div id="content">
-
-    <div id="status">
-      <h4>Agent Status</h4>
-      Agent ID: <label id="agentId-label"></label><br />
-      Chat ID: <label id="chatId-label"></label><br />
-      <br>
-      <h4>WebRTC Connection Status</h4>
-      ICE gathering status: <label id="ice-gathering-status-label"></label><br />
-      ICE status: <label id="ice-status-label"></label><br />
-      Peer connection status: <label id="peer-status-label"></label><br />
-      Signaling status: <label id="signaling-status-label"></label><br />
-      Streaming status: <label id="streaming-status-label"></label><br />
-      <br>
-      <div id="buttons">
-        <button id="agents-button" type="button">Create new Agent with Knowledge</button>
-        <br><br>
-        <button id="connect-button" type="button">Connect</button>
-        <button id="destroy-button" type="button">Destroy</button>
-      </div>
-    </div>
-
-    <div id="video-wrapper">
-      <div>
-        <video id="video-element" width="400" height="400" src="" autoplay loop muted class="animated"></video>
-      </div>
-    </div>
-
-    <div class="chat">
-      <h4>Chat History</h4>
-      <div id="msgHistory">
-      </div>
-    </div>
-
-  </div>
-
-  <div>
-    <h3>Type your message here:</h3>
-    <textarea id="textArea" cols="50" rows="5" maxlength="280"></textarea>
-    <br>
-    <button id="start-button" type="button">Send</button>
-  </div>
-
-  <script type="module" src="./agents-client-api.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-</body>
-
-</html>
-----
-index-agents.js
-import './agents-client-api.js';
-
-----
-index.html
-<!DOCTYPE html>
-<html>
-  <head>
-    <title>D-ID Streaming POC</title>
-    <!-- added google fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Mulish:wght@300;400;700&display=swap"
-      rel="stylesheet"
-    />
-
-    <style>
-      .peerConnectionState-new {
-        color: cornflowerblue;
-      }
-      .peerConnectionState-connecting {
-        color: orange;
-      }
-      .peerConnectionState-connected {
-        color: green;
-      }
-      .peerConnectionState-disconnected,
-      .peerConnectionState-closed,
-      .peerConnectionState-failed {
-        color: red;
-      }
-
-      .iceConnectionState-new {
-        color: cornflowerblue;
-      }
-      .iceConnectionState-checking {
-        color: orange;
-      }
-      .iceConnectionState-connected,
-      .iceConnectionState-completed {
-        color: green;
-      }
-      .peerConnectionState-disconnected,
-      .peerConnectionState-closed,
-      .peerConnectionState-failed {
-        color: red;
-      }
-
-      .iceGatheringState-new {
-        color: cornflowerblue;
-      }
-      .iceGatheringState-gathering {
-        color: orange;
-      }
-      .iceGatheringState-complete {
-        color: black;
-      }
-
-      .signalingState-stable {
-        color: green;
-      }
-      .signalingState-have-local-offer,
-      .signalingState-have-remote-offer,
-      .signalingState-have-local-pranswer,
-      .signalingState-have-remote-pranswer {
-        color: cornflowerblue;
-      }
-      .signalingState-closed {
-        color: red;
-      }
-
-      .streamingState-streaming {
-        color: green;
-      }
-
-      .streamingState-empty {
-        color: grey;
-      }
-
-      /* added css from here */
-
-      body * {
-        font-family: 'Mulish', sans-serif;
-        text-align: center;
-      }
-
-      #content {
-        width: 820px;
-        position: relative;
-        margin: 0 auto;
-      }
-
-      #buttons {
-        clear: both;
-        padding: 0 0 0 0;
-        text-align: center;
-      }
-
-      button {
-        padding: 10px 20px;
-        border-radius: 5px;
-        border: none;
-        font-size: 16px;
-        margin: 0 5px;
-        background-color: #7459fe;
-        color: #fff;
-      }
-
-      button:hover {
-        background-color: #9480ff;
-        cursor: pointer;
-        transition: all 0.2s ease-out;
-      }
-
-      #status {
-        clear: both;
-        padding: 20px 0 0 0;
-        text-align: left;
-        display: inline-block;
-        zoom: 1;
-        line-height: 140%;
-        font-size: 15px;
-      }
-
-      #status div {
-        padding-bottom: 10px;
-      }
-
-      #video-wrapper {
-        background: url(bg.png);
-        height: 500px;
-        background-position: top;
-      }
-
-      #video-wrapper div {
-        width: 400px;
-        margin: 0 auto;
-        padding: 50px 0 0 0;
-      }
-      video {
-        display: block;
-        /*border:1px solid;*/
-        border-radius: 50%;
-        background-color: #fff;
-      }
-    </style>
-  </head>
-
-  <body>
-    <!-- adde "id=content" -->
-    <div id="content">
-      <!-- added "id=video-wrapper" -->
-      <div id="video-wrapper">
-        <div>
-          <video id="video-element" width="400" height="400" autoplay></video>
-        </div>
-      </div>
-      <br />
-
-      <!-- added div#buttons -->
-      <div id="buttons">
-        <button id="connect-button" type="button">Connect</button>
-        <button id="start-button" type="button">Start</button>
-        <button id="destroy-button" type="button">Destroy</button>
-      </div>
-
-      <!-- added div#status -->
-      <div id="status">
-        <!-- removed the wrapping <div> tags -->
-        ICE gathering status: <label id="ice-gathering-status-label"></label
-        ><br />
-        ICE status: <label id="ice-status-label"></label><br />
-        Peer connection status: <label id="peer-status-label"></label><br />
-        Signaling status: <label id="signaling-status-label"></label><br />
-        Streaming status: <label id="streaming-status-label"></label><br />
-      </div>
-    </div>
-
-    <script type="module" src="./index.js"></script>
-  </body>
-</html>
-
-----
-index.js
-import './streaming-client-api.js';
-
-----
-package-lock.json
-{
-  "name": "live-streaming-demo",
-  "lockfileVersion": 2,
-  "requires": true,
-  "packages": {
-    "": {
-      "dependencies": {
-        "cors": "^2.8.5",
-        "express": "^4.18.2"
-      }
-    },
-    "node_modules/accepts": {
-      "version": "1.3.8",
-      "resolved": "https://registry.npmjs.org/accepts/-/accepts-1.3.8.tgz",
-      "integrity": "sha512-PYAthTa2m2VKxuvSD3DPC/Gy+U+sOA1LAuT8mkmRuvw+NACSaeXEQ+NHcVF7rONl6qcaxV3Uuemwawk+7+SJLw==",
-      "dependencies": {
-        "mime-types": "~2.1.34",
-        "negotiator": "0.6.3"
-      },
-      "engines": {
-        "node": ">= 0.6"
-      }
-    },
-    "node_modules/array-flatten": {
-      "version": "1.1.1",
-      "resolved": "https://registry.npmjs.org/array-flatten/-/array-flatten-1.1.1.tgz",
-      "integrity": "sha512-PCVAQswWemu6UdxsDFFX/+gVeYqKAod3D3UVm91jHwynguOwAvYPhx8nNlM++NqRcK6CxxpUafjmhIdKiHibqg=="
-    },
-    "node_modules/body-parser": {
-      "version": "1.20.1",
-      "resolved": "https://registry.npmjs.org/body-parser/-/body-parser-1.20.1.tgz",
-      "integrity": "sha512-jWi7abTbYwajOytWCQc37VulmWiRae5RyTpaCyDcS5/lMdtwSz5lOpDE67srw/HYe35f1z3fDQw+3txg7gNtWw==",
-      "dependencies": {
-        "bytes": "3.1.2",
-        "content-type": "~1.0.4",
-        "debug": "2.6.9",
-        "depd": "2.0.0",
-        "destroy": "1.2.0",
-        "http-errors": "2.0.0",
-        "iconv-lite": "0.4.24",
-        "on-finished": "2.4.1",
-        "qs": "6.11.0",
-        "raw-body": "2.5.1",
-        "type-is": "~1.6.18",
-        "unpipe": "1.0.0"
-      },
-      "engines": {
-        "node": ">= 0.8",
-        "npm": "1.2.8000 || >= 1.4.16"
-      }
-    },
-    "node_modules/bytes": {
-      "version": "3.1.2",
-      "resolved": "https://registry.npmjs.org/bytes/-/bytes-3.1.2.tgz",
-      "integrity": "sha512-/Nf7TyzTx6S3yRJObOAV7956r8cr2+Oj8AC5dt8wSP3BQAoeX58NoHyCU8P8zGkNXStjTSi6fzO6F0pBdcYbEg==",
-      "engines": {
-        "node": ">= 0.8"
-      }
-    },
-    "node_modules/call-bind": {
-      "version": "1.0.2",
-      "resolved": "https://registry.npmjs.org/call-bind/-/call-bind-1.0.2.tgz",
-      "integrity": "sha512-7O+FbCihrB5WGbFYesctwmTKae6rOiIzmz1icreWJ+0aA7LJfuqhEso2T9ncpcFtzMQtzXf2QGGueWJGTYsqrA==",
-      "dependencies": {
-        "function-bind": "^1.1.1",
-        "get-intrinsic": "^1.0.2"
-      },
-      "funding": {
-        "url": "https://github.com/sponsors/ljharb"
-      }
-    },
-    "node_modules/content-disposition": {
-      "version": "0.5.4",
-      "resolved": "https://registry.npmjs.org/content-disposition/-/content-disposition-0.5.4.tgz",
-      "integrity": "sha512-FveZTNuGw04cxlAiWbzi6zTAL/lhehaWbTtgluJh4/E95DqMwTmha3KZN1aAWA8cFIhHzMZUvLevkw5Rqk+tSQ==",
-      "dependencies": {
-        "safe-buffer": "5.2.1"
-      },
-      "engines": {
-        "node": ">= 0.6"
-      }
-    },
-    "node_modules/content-type": {
-      "version": "1.0.5",
-      "resolved": "https://registry.npmjs.org/content-type/-/content-type-1.0.5.tgz",
-      "integrity": "sha512-nTjqfcBFEipKdXCv4YDQWCfmcLZKm81ldF0pAopTvyrFGVbcR6P/VAAd5G7N+0tTr8QqiU0tFadD6FK4NtJwOA==",
-      "engines": {
-        "node": ">= 0.6"
-      }
-    },
-    "node_modules/cookie": {
-      "version": "0.5.0",
-      "resolved": "https://registry.npmjs.org/cookie/-/cookie-0.5.0.tgz",
-      "integrity": "sha512-YZ3GUyn/o8gfKJlnlX7g7xq4gyO6OSuhGPKaaGssGB2qgDUS0gPgtTvoyZLTt9Ab6dC4hfc9dV5arkvc/OCmrw==",
-      "engines": {
-        "node": ">= 0.6"
-      }
-    },
-    "node_modules/cookie-signature": {
-      "version": "1.0.6",
-      "resolved": "https://registry.npmjs.org/cookie-signature/-/cookie-signature-1.0.6.tgz",
-      "integrity": "sha512-QADzlaHc8icV8I7vbaJXJwod9HWYp8uCqf1xa4OfNu1T7JVxQIrUgOWtHdNDtPiywmFbiS12VjotIXLrKM3orQ=="
-    },
-    "node_modules/cors": {
-      "version": "2.8.5",
-      "resolved": "https://registry.npmjs.org/cors/-/cors-2.8.5.tgz",
-      "integrity": "sha512-KIHbLJqu73RGr/hnbrO9uBeixNGuvSQjul/jdFvS/KFSIH1hWVd1ng7zOHx+YrEfInLG7q4n6GHQ9cDtxv/P6g==",
-      "dependencies": {
-        "object-assign": "^4",
-        "vary": "^1"
-      },
-      "engines": {
-        "node": ">= 0.10"
-      }
-    },
-    "node_modules/debug": {
-      "version": "2.6.9",
-      "resolved": "https://registry.npmjs.org/debug/-/debug-2.6.9.tgz",
-      "integrity": "sha512-bC7ElrdJaJnPbAP+1EotYvqZsb3ecl5wi6Bfi6BJTUcNowp6cvspg0jXznRTKDjm/E7AdgFBVeAPVMNcKGsHMA==",
-      "dependencies": {
-        "ms": "2.0.0"
-      }
-    },
-    "node_modules/depd": {
-      "version": "2.0.0",
-      "resolved": "https://registry.npmjs.org/depd/-/depd-2.0.0.tgz",
-      "integrity": "sha512-g7nH6P6dyDioJogAAGprGpCtVImJhpPk/roCzdb3fIh61/s/nPsfR6onyMwkCAR/OlC3yBC0lESvUoQEAssIrw==",
-      "engines": {
-        "node": ">= 0.8"
-      }
-    },
-    "node_modules/destroy": {
-      "version": "1.2.0",
-      "resolved": "https://registry.npmjs.org/destroy/-/destroy-1.2.0.tgz",
-      "integrity": "sha512-2sJGJTaXIIaR1w4iJSNoN0hnMY7Gpc/n8D4qSCJw8QqFWXf7cuAgnEHxBpweaVcPevC2l3KpjYCx3NypQQgaJg==",
-      "engines": {
-        "node": ">= 0.8",
-        "npm": "1.2.8000 || >= 1.4.16"
-      }
-    },
-    "node_modules/ee-first": {
-      "version": "1.1.1",
-      "resolved": "https://registry.npmjs.org/ee-first/-/ee-first-1.1.1.tgz",
-      "integrity": "sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow=="
-    },
-    "node_modules/encodeurl": {
-      "version": "1.0.2",
-      "resolved": "https://registry.npmjs.org/encodeurl/-/encodeurl-1.0.2.tgz",
-      "integrity": "sha512-TPJXq8JqFaVYm2CWmPvnP2Iyo4ZSM7/QKcSmuMLDObfpH5fi7RUGmd/rTDf+rut/saiDiQEeVTNgAmJEdAOx0w==",
-      "engines": {
-        "node": ">= 0.8"
-      }
-    },
-    "node_modules/escape-html": {
-      "version": "1.0.3",
-      "resolved": "https://registry.npmjs.org/escape-html/-/escape-html-1.0.3.tgz",
-      "integrity": "sha512-NiSupZ4OeuGwr68lGIeym/ksIZMJodUGOSCZ/FSnTxcrekbvqrgdUxlJOMpijaKZVjAJrWrGs/6Jy8OMuyj9ow=="
-    },
-    "node_modules/etag": {
-      "version": "1.8.1",
-      "resolved": "https://registry.npmjs.org/etag/-/etag-1.8.1.tgz",
-      "integrity": "sha512-aIL5Fx7mawVa300al2BnEE4iNvo1qETxLrPI/o05L7z6go7fCw1J6EQmbK4FmJ2AS7kgVF/KEZWufBfdClMcPg==",
-      "engines": {
-        "node": ">= 0.6"
-      }
-    },
-    "node_modules/express": {
-      "version": "4.18.2",
-      "resolved": "https://registry.npmjs.org/express/-/express-4.18.2.tgz",
-      "integrity": "sha512-5/PsL6iGPdfQ/lKM1UuielYgv3BUoJfz1aUwU9vHZ+J7gyvwdQXFEBIEIaxeGf0GIcreATNyBExtalisDbuMqQ==",
-      "dependencies": {
-        "accepts": "~1.3.8",
-        "array-flatten": "1.1.1",
-        "body-parser": "1.20.1",
-        "content-disposition": "0.5.4",
-        "content-type": "~1.0.4",
-        "cookie": "0.5.0",
-        "cookie-signature": "1.0.6",
-        "debug": "2.6.9",
-        "depd": "2.0.0",
-        "encodeurl": "~1.0.2",
-        "escape-html": "~1.0.3",
-        "etag": "~1.8.1",
-        "finalhandler": "1.2.0",
-        "fresh": "0.5.2",
-        "http-errors": "2.0.0",
-        "merge-descriptors": "1.0.1",
-        "methods": "~1.1.2",
-        "on-finished": "2.4.1",
-        "parseurl": "~1.3.3",
-        "path-to-regexp": "0.1.7",
-        "proxy-addr": "~2.0.7",
-        "qs": "6.11.0",
-        "range-parser": "~1.2.1",
-        "safe-buffer": "5.2.1",
-        "send": "0.18.0",
-        "serve-static": "1.15.0",
-        "setprototypeof": "1.2.0",
-        "statuses": "2.0.1",
-        "type-is": "~1.6.18",
-        "utils-merge": "1.0.1",
-        "vary": "~1.1.2"
-      },
-      "engines": {
-        "node": ">= 0.10.0"
-      }
-    },
-    "node_modules/finalhandler": {
-      "version": "1.2.0",
-      "resolved": "https://registry.npmjs.org/finalhandler/-/finalhandler-1.2.0.tgz",
-      "integrity": "sha512-5uXcUVftlQMFnWC9qu/svkWv3GTd2PfUhK/3PLkYNAe7FbqJMt3515HaxE6eRL74GdsriiwujiawdaB1BpEISg==",
-      "dependencies": {
-        "debug": "2.6.9",
-        "encodeurl": "~1.0.2",
-        "escape-html": "~1.0.3",
-        "on-finished": "2.4.1",
-        "parseurl": "~1.3.3",
-        "statuses": "2.0.1",
-        "unpipe": "~1.0.0"
-      },
-      "engines": {
-        "node": ">= 0.8"
-      }
-    },
-    "node_modules/forwarded": {
-      "version": "0.2.0",
-      "resolved": "https://registry.npmjs.org/forwarded/-/forwarded-0.2.0.tgz",
-      "integrity": "sha512-buRG0fpBtRHSTCOASe6hD258tEubFoRLb4ZNA6NxMVHNw2gOcwHo9wyablzMzOA5z9xA9L1KNjk/Nt6MT9aYow==",
-      "engines": {
-        "node": ">= 0.6"
-      }
-    },
-    "node_modules/fresh": {
-      "version": "0.5.2",
-      "resolved": "https://registry.npmjs.org/fresh/-/fresh-0.5.2.tgz",
-      "integrity": "sha512-zJ2mQYM18rEFOudeV4GShTGIQ7RbzA7ozbU9I/XBpm7kqgMywgmylMwXHxZJmkVoYkna9d2pVXVXPdYTP9ej8Q==",
-      "engines": {
-        "node": ">= 0.6"
-      }
-    },
-    "node_modules/function-bind": {
-      "version": "1.1.1",
-      "resolved": "https://registry.npmjs.org/function-bind/-/function-bind-1.1.1.tgz",
-      "integrity": "sha512-yIovAzMX49sF8Yl58fSCWJ5svSLuaibPxXQJFLmBObTuCr0Mf1KiPopGM9NiFjiYBCbfaa2Fh6breQ6ANVTI0A=="
-    },
-    "node_modules/get-intrinsic": {
-      "version": "1.2.0",
-      "resolved": "https://registry.npmjs.org/get-intrinsic/-/get-intrinsic-1.2.0.tgz",
-      "integrity": "sha512-L049y6nFOuom5wGyRc3/gdTLO94dySVKRACj1RmJZBQXlbTMhtNIgkWkUHq+jYmZvKf14EW1EoJnnjbmoHij0Q==",
-      "dependencies": {
-        "function-bind": "^1.1.1",
-        "has": "^1.0.3",
-        "has-symbols": "^1.0.3"
-      },
-      "funding": {
-        "url": "https://github.com/sponsors/ljharb"
-      }
-    },
-    "node_modules/has": {
-      "version": "1.0.3",
-      "resolved": "https://registry.npmjs.org/has/-/has-1.0.3.tgz",
-      "integrity": "sha512-f2dvO0VU6Oej7RkWJGrehjbzMAjFp5/VKPp5tTpWIV4JHHZK1/BxbFRtf/siA2SWTe09caDmVtYYzWEIbBS4zw==",
-      "dependencies": {
-        "function-bind": "^1.1.1"
-      },
-      "engines": {
-        "node": ">= 0.4.0"
-      }
-    },
-    "node_modules/has-symbols": {
-      "version": "1.0.3",
-      "resolved": "https://registry.npmjs.org/has-symbols/-/has-symbols-1.0.3.tgz",
-      "integrity": "sha512-l3LCuF6MgDNwTDKkdYGEihYjt5pRPbEg46rtlmnSPlUbgmB8LOIrKJbYYFBSbnPaJexMKtiPO8hmeRjRz2Td+A==",
-      "engines": {
-        "node": ">= 0.4"
-      },
-      "funding": {
-        "url": "https://github.com/sponsors/ljharb"
-      }
-    },
-    "node_modules/http-errors": {
-      "version": "2.0.0",
-      "resolved": "https://registry.npmjs.org/http-errors/-/http-errors-2.0.0.tgz",
-      "integrity": "sha512-FtwrG/euBzaEjYeRqOgly7G0qviiXoJWnvEH2Z1plBdXgbyjv34pHTSb9zoeHMyDy33+DWy5Wt9Wo+TURtOYSQ==",
-      "dependencies": {
-        "depd": "2.0.0",
-        "inherits": "2.0.4",
-        "setprototypeof": "1.2.0",
-        "statuses": "2.0.1",
-        "toidentifier": "1.0.1"
-      },
-      "engines": {
-        "node": ">= 0.8"
-      }
-    },
-    "node_modules/iconv-lite": {
-      "version": "0.4.24",
-      "resolved": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.4.24.tgz",
-      "integrity": "sha512-v3MXnZAcvnywkTUEZomIActle7RXXeedOR31wwl7VlyoXO4Qi9arvSenNQWne1TcRwhCL1HwLI21bEqdpj8/rA==",
-      "dependencies": {
-        "safer-buffer": ">= 2.1.2 < 3"
-      },
-      "engines": {
-        "node": ">=0.10.0"
-      }
-    },
-    "node_modules/inherits": {
-      "version": "2.0.4",
-      "resolved": "https://registry.npmjs.org/inherits/-/inherits-2.0.4.tgz",
-      "integrity": "sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ=="
-    },
-    "node_modules/ipaddr.js": {
-      "version": "1.9.1",
-      "resolved": "https://registry.npmjs.org/ipaddr.js/-/ipaddr.js-1.9.1.tgz",
-      "integrity": "sha512-0KI/607xoxSToH7GjN1FfSbLoU0+btTicjsQSWQlh/hZykN8KpmMf7uYwPW3R+akZ6R/w18ZlXSHBYXiYUPO3g==",
-      "engines": {
-        "node": ">= 0.10"
-      }
-    },
-    "node_modules/media-typer": {
-      "version": "0.3.0",
-      "resolved": "https://registry.npmjs.org/media-typer/-/media-typer-0.3.0.tgz",
-      "integrity": "sha512-dq+qelQ9akHpcOl/gUVRTxVIOkAJ1wR3QAvb4RsVjS8oVoFjDGTc679wJYmUmknUF5HwMLOgb5O+a3KxfWapPQ==",
-      "engines": {
-        "node": ">= 0.6"
-      }
-    },
-    "node_modules/merge-descriptors": {
-      "version": "1.0.1",
-      "resolved": "https://registry.npmjs.org/merge-descriptors/-/merge-descriptors-1.0.1.tgz",
-      "integrity": "sha512-cCi6g3/Zr1iqQi6ySbseM1Xvooa98N0w31jzUYrXPX2xqObmFGHJ0tQ5u74H3mVh7wLouTseZyYIq39g8cNp1w=="
-    },
-    "node_modules/methods": {
-      "version": "1.1.2",
-      "resolved": "https://registry.npmjs.org/methods/-/methods-1.1.2.tgz",
-      "integrity": "sha512-iclAHeNqNm68zFtnZ0e+1L2yUIdvzNoauKU4WBA3VvH/vPFieF7qfRlwUZU+DA9P9bPXIS90ulxoUoCH23sV2w==",
-      "engines": {
-        "node": ">= 0.6"
-      }
-    },
-    "node_modules/mime": {
-      "version": "1.6.0",
-      "resolved": "https://registry.npmjs.org/mime/-/mime-1.6.0.tgz",
-      "integrity": "sha512-x0Vn8spI+wuJ1O6S7gnbaQg8Pxh4NNHb7KSINmEWKiPE4RKOplvijn+NkmYmmRgP68mc70j2EbeTFRsrswaQeg==",
-      "bin": {
-        "mime": "cli.js"
-      },
-      "engines": {
-        "node": ">=4"
-      }
-    },
-    "node_modules/mime-db": {
-      "version": "1.52.0",
-      "resolved": "https://registry.npmjs.org/mime-db/-/mime-db-1.52.0.tgz",
-      "integrity": "sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg==",
-      "engines": {
-        "node": ">= 0.6"
-      }
-    },
-    "node_modules/mime-types": {
-      "version": "2.1.35",
-      "resolved": "https://registry.npmjs.org/mime-types/-/mime-types-2.1.35.tgz",
-      "integrity": "sha512-ZDY+bPm5zTTF+YpCrAU9nK0UgICYPT0QtT1NZWFv4s++TNkcgVaT0g6+4R2uI4MjQjzysHB1zxuWL50hzaeXiw==",
-      "dependencies": {
-        "mime-db": "1.52.0"
-      },
-      "engines": {
-        "node": ">= 0.6"
-      }
-    },
-    "node_modules/ms": {
-      "version": "2.0.0",
-      "resolved": "https://registry.npmjs.org/ms/-/ms-2.0.0.tgz",
-      "integrity": "sha512-Tpp60P6IUJDTuOq/5Z8cdskzJujfwqfOTkrwIwj7IRISpnkJnT6SyJ4PCPnGMoFjC9ddhal5KVIYtAt97ix05A=="
-    },
-    "node_modules/negotiator": {
-      "version": "0.6.3",
-      "resolved": "https://registry.npmjs.org/negotiator/-/negotiator-0.6.3.tgz",
-      "integrity": "sha512-+EUsqGPLsM+j/zdChZjsnX51g4XrHFOIXwfnCVPGlQk/k5giakcKsuxCObBRu6DSm9opw/O6slWbJdghQM4bBg==",
-      "engines": {
-        "node": ">= 0.6"
-      }
-    },
-    "node_modules/object-assign": {
-      "version": "4.1.1",
-      "resolved": "https://registry.npmjs.org/object-assign/-/object-assign-4.1.1.tgz",
-      "integrity": "sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg==",
-      "engines": {
-        "node": ">=0.10.0"
-      }
-    },
-    "node_modules/object-inspect": {
-      "version": "1.12.3",
-      "resolved": "https://registry.npmjs.org/object-inspect/-/object-inspect-1.12.3.tgz",
-      "integrity": "sha512-geUvdk7c+eizMNUDkRpW1wJwgfOiOeHbxBR/hLXK1aT6zmVSO0jsQcs7fj6MGw89jC/cjGfLcNOrtMYtGqm81g==",
-      "funding": {
-        "url": "https://github.com/sponsors/ljharb"
-      }
-    },
-    "node_modules/on-finished": {
-      "version": "2.4.1",
-      "resolved": "https://registry.npmjs.org/on-finished/-/on-finished-2.4.1.tgz",
-      "integrity": "sha512-oVlzkg3ENAhCk2zdv7IJwd/QUD4z2RxRwpkcGY8psCVcCYZNq4wYnVWALHM+brtuJjePWiYF/ClmuDr8Ch5+kg==",
-      "dependencies": {
-        "ee-first": "1.1.1"
-      },
-      "engines": {
-        "node": ">= 0.8"
-      }
-    },
-    "node_modules/parseurl": {
-      "version": "1.3.3",
-      "resolved": "https://registry.npmjs.org/parseurl/-/parseurl-1.3.3.tgz",
-      "integrity": "sha512-CiyeOxFT/JZyN5m0z9PfXw4SCBJ6Sygz1Dpl0wqjlhDEGGBP1GnsUVEL0p63hoG1fcj3fHynXi9NYO4nWOL+qQ==",
-      "engines": {
-        "node": ">= 0.8"
-      }
-    },
-    "node_modules/path-to-regexp": {
-      "version": "0.1.7",
-      "resolved": "https://registry.npmjs.org/path-to-regexp/-/path-to-regexp-0.1.7.tgz",
-      "integrity": "sha512-5DFkuoqlv1uYQKxy8omFBeJPQcdoE07Kv2sferDCrAq1ohOU+MSDswDIbnx3YAM60qIOnYa53wBhXW0EbMonrQ=="
-    },
-    "node_modules/proxy-addr": {
-      "version": "2.0.7",
-      "resolved": "https://registry.npmjs.org/proxy-addr/-/proxy-addr-2.0.7.tgz",
-      "integrity": "sha512-llQsMLSUDUPT44jdrU/O37qlnifitDP+ZwrmmZcoSKyLKvtZxpyV0n2/bD/N4tBAAZ/gJEdZU7KMraoK1+XYAg==",
-      "dependencies": {
-        "forwarded": "0.2.0",
-        "ipaddr.js": "1.9.1"
-      },
-      "engines": {
-        "node": ">= 0.10"
-      }
-    },
-    "node_modules/qs": {
-      "version": "6.11.0",
-      "resolved": "https://registry.npmjs.org/qs/-/qs-6.11.0.tgz",
-      "integrity": "sha512-MvjoMCJwEarSbUYk5O+nmoSzSutSsTwF85zcHPQ9OrlFoZOYIjaqBAJIqIXjptyD5vThxGq52Xu/MaJzRkIk4Q==",
-      "dependencies": {
-        "side-channel": "^1.0.4"
-      },
-      "engines": {
-        "node": ">=0.6"
-      },
-      "funding": {
-        "url": "https://github.com/sponsors/ljharb"
-      }
-    },
-    "node_modules/range-parser": {
-      "version": "1.2.1",
-      "resolved": "https://registry.npmjs.org/range-parser/-/range-parser-1.2.1.tgz",
-      "integrity": "sha512-Hrgsx+orqoygnmhFbKaHE6c296J+HTAQXoxEF6gNupROmmGJRoyzfG3ccAveqCBrwr/2yxQ5BVd/GTl5agOwSg==",
-      "engines": {
-        "node": ">= 0.6"
-      }
-    },
-    "node_modules/raw-body": {
-      "version": "2.5.1",
-      "resolved": "https://registry.npmjs.org/raw-body/-/raw-body-2.5.1.tgz",
-      "integrity": "sha512-qqJBtEyVgS0ZmPGdCFPWJ3FreoqvG4MVQln/kCgF7Olq95IbOp0/BWyMwbdtn4VTvkM8Y7khCQ2Xgk/tcrCXig==",
-      "dependencies": {
-        "bytes": "3.1.2",
-        "http-errors": "2.0.0",
-        "iconv-lite": "0.4.24",
-        "unpipe": "1.0.0"
-      },
-      "engines": {
-        "node": ">= 0.8"
-      }
-    },
-    "node_modules/safe-buffer": {
-      "version": "5.2.1",
-      "resolved": "https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.2.1.tgz",
-      "integrity": "sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ==",
-      "funding": [
-        {
-          "type": "github",
-          "url": "https://github.com/sponsors/feross"
-        },
-        {
-          "type": "patreon",
-          "url": "https://www.patreon.com/feross"
-        },
-        {
-          "type": "consulting",
-          "url": "https://feross.org/support"
-        }
-      ]
-    },
-    "node_modules/safer-buffer": {
-      "version": "2.1.2",
-      "resolved": "https://registry.npmjs.org/safer-buffer/-/safer-buffer-2.1.2.tgz",
-      "integrity": "sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg=="
-    },
-    "node_modules/send": {
-      "version": "0.18.0",
-      "resolved": "https://registry.npmjs.org/send/-/send-0.18.0.tgz",
-      "integrity": "sha512-qqWzuOjSFOuqPjFe4NOsMLafToQQwBSOEpS+FwEt3A2V3vKubTquT3vmLTQpFgMXp8AlFWFuP1qKaJZOtPpVXg==",
-      "dependencies": {
-        "debug": "2.6.9",
-        "depd": "2.0.0",
-        "destroy": "1.2.0",
-        "encodeurl": "~1.0.2",
-        "escape-html": "~1.0.3",
-        "etag": "~1.8.1",
-        "fresh": "0.5.2",
-        "http-errors": "2.0.0",
-        "mime": "1.6.0",
-        "ms": "2.1.3",
-        "on-finished": "2.4.1",
-        "range-parser": "~1.2.1",
-        "statuses": "2.0.1"
-      },
-      "engines": {
-        "node": ">= 0.8.0"
-      }
-    },
-    "node_modules/send/node_modules/ms": {
-      "version": "2.1.3",
-      "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
-      "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA=="
-    },
-    "node_modules/serve-static": {
-      "version": "1.15.0",
-      "resolved": "https://registry.npmjs.org/serve-static/-/serve-static-1.15.0.tgz",
-      "integrity": "sha512-XGuRDNjXUijsUL0vl6nSD7cwURuzEgglbOaFuZM9g3kwDXOWVTck0jLzjPzGD+TazWbboZYu52/9/XPdUgne9g==",
-      "dependencies": {
-        "encodeurl": "~1.0.2",
-        "escape-html": "~1.0.3",
-        "parseurl": "~1.3.3",
-        "send": "0.18.0"
-      },
-      "engines": {
-        "node": ">= 0.8.0"
-      }
-    },
-    "node_modules/setprototypeof": {
-      "version": "1.2.0",
-      "resolved": "https://registry.npmjs.org/setprototypeof/-/setprototypeof-1.2.0.tgz",
-      "integrity": "sha512-E5LDX7Wrp85Kil5bhZv46j8jOeboKq5JMmYM3gVGdGH8xFpPWXUMsNrlODCrkoxMEeNi/XZIwuRvY4XNwYMJpw=="
-    },
-    "node_modules/side-channel": {
-      "version": "1.0.4",
-      "resolved": "https://registry.npmjs.org/side-channel/-/side-channel-1.0.4.tgz",
-      "integrity": "sha512-q5XPytqFEIKHkGdiMIrY10mvLRvnQh42/+GoBlFW3b2LXLE2xxJpZFdm94we0BaoV3RwJyGqg5wS7epxTv0Zvw==",
-      "dependencies": {
-        "call-bind": "^1.0.0",
-        "get-intrinsic": "^1.0.2",
-        "object-inspect": "^1.9.0"
-      },
-      "funding": {
-        "url": "https://github.com/sponsors/ljharb"
-      }
-    },
-    "node_modules/statuses": {
-      "version": "2.0.1",
-      "resolved": "https://registry.npmjs.org/statuses/-/statuses-2.0.1.tgz",
-      "integrity": "sha512-RwNA9Z/7PrK06rYLIzFMlaF+l73iwpzsqRIFgbMLbTcLD6cOao82TaWefPXQvB2fOC4AjuYSEndS7N/mTCbkdQ==",
-      "engines": {
-        "node": ">= 0.8"
-      }
-    },
-    "node_modules/toidentifier": {
-      "version": "1.0.1",
-      "resolved": "https://registry.npmjs.org/toidentifier/-/toidentifier-1.0.1.tgz",
-      "integrity": "sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA==",
-      "engines": {
-        "node": ">=0.6"
-      }
-    },
-    "node_modules/type-is": {
-      "version": "1.6.18",
-      "resolved": "https://registry.npmjs.org/type-is/-/type-is-1.6.18.tgz",
-      "integrity": "sha512-TkRKr9sUTxEH8MdfuCSP7VizJyzRNMjj2J2do2Jr3Kym598JVdEksuzPQCnlFPW4ky9Q+iA+ma9BGm06XQBy8g==",
-      "dependencies": {
-        "media-typer": "0.3.0",
-        "mime-types": "~2.1.24"
-      },
-      "engines": {
-        "node": ">= 0.6"
-      }
-    },
-    "node_modules/unpipe": {
-      "version": "1.0.0",
-      "resolved": "https://registry.npmjs.org/unpipe/-/unpipe-1.0.0.tgz",
-      "integrity": "sha512-pjy2bYhSsufwWlKwPc+l3cN7+wuJlK6uz0YdJEOlQDbl6jo/YlPi4mb8agUkVC8BF7V8NuzeyPNqRksA3hztKQ==",
-      "engines": {
-        "node": ">= 0.8"
-      }
-    },
-    "node_modules/utils-merge": {
-      "version": "1.0.1",
-      "resolved": "https://registry.npmjs.org/utils-merge/-/utils-merge-1.0.1.tgz",
-      "integrity": "sha512-pMZTvIkT1d+TFGvDOqodOclx0QWkkgi6Tdoa8gC8ffGAAqz9pzPTZWAybbsHHoED/ztMtkv/VoYTYyShUn81hA==",
-      "engines": {
-        "node": ">= 0.4.0"
-      }
-    },
-    "node_modules/vary": {
-      "version": "1.1.2",
-      "resolved": "https://registry.npmjs.org/vary/-/vary-1.1.2.tgz",
-      "integrity": "sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==",
-      "engines": {
-        "node": ">= 0.8"
-      }
-    }
-  },
-  "dependencies": {
-    "accepts": {
-      "version": "1.3.8",
-      "resolved": "https://registry.npmjs.org/accepts/-/accepts-1.3.8.tgz",
-      "integrity": "sha512-PYAthTa2m2VKxuvSD3DPC/Gy+U+sOA1LAuT8mkmRuvw+NACSaeXEQ+NHcVF7rONl6qcaxV3Uuemwawk+7+SJLw==",
-      "requires": {
-        "mime-types": "~2.1.34",
-        "negotiator": "0.6.3"
-      }
-    },
-    "array-flatten": {
-      "version": "1.1.1",
-      "resolved": "https://registry.npmjs.org/array-flatten/-/array-flatten-1.1.1.tgz",
-      "integrity": "sha512-PCVAQswWemu6UdxsDFFX/+gVeYqKAod3D3UVm91jHwynguOwAvYPhx8nNlM++NqRcK6CxxpUafjmhIdKiHibqg=="
-    },
-    "body-parser": {
-      "version": "1.20.1",
-      "resolved": "https://registry.npmjs.org/body-parser/-/body-parser-1.20.1.tgz",
-      "integrity": "sha512-jWi7abTbYwajOytWCQc37VulmWiRae5RyTpaCyDcS5/lMdtwSz5lOpDE67srw/HYe35f1z3fDQw+3txg7gNtWw==",
-      "requires": {
-        "bytes": "3.1.2",
-        "content-type": "~1.0.4",
-        "debug": "2.6.9",
-        "depd": "2.0.0",
-        "destroy": "1.2.0",
-        "http-errors": "2.0.0",
-        "iconv-lite": "0.4.24",
-        "on-finished": "2.4.1",
-        "qs": "6.11.0",
-        "raw-body": "2.5.1",
-        "type-is": "~1.6.18",
-        "unpipe": "1.0.0"
-      }
-    },
-    "bytes": {
-      "version": "3.1.2",
-      "resolved": "https://registry.npmjs.org/bytes/-/bytes-3.1.2.tgz",
-      "integrity": "sha512-/Nf7TyzTx6S3yRJObOAV7956r8cr2+Oj8AC5dt8wSP3BQAoeX58NoHyCU8P8zGkNXStjTSi6fzO6F0pBdcYbEg=="
-    },
-    "call-bind": {
-      "version": "1.0.2",
-      "resolved": "https://registry.npmjs.org/call-bind/-/call-bind-1.0.2.tgz",
-      "integrity": "sha512-7O+FbCihrB5WGbFYesctwmTKae6rOiIzmz1icreWJ+0aA7LJfuqhEso2T9ncpcFtzMQtzXf2QGGueWJGTYsqrA==",
-      "requires": {
-        "function-bind": "^1.1.1",
-        "get-intrinsic": "^1.0.2"
-      }
-    },
-    "content-disposition": {
-      "version": "0.5.4",
-      "resolved": "https://registry.npmjs.org/content-disposition/-/content-disposition-0.5.4.tgz",
-      "integrity": "sha512-FveZTNuGw04cxlAiWbzi6zTAL/lhehaWbTtgluJh4/E95DqMwTmha3KZN1aAWA8cFIhHzMZUvLevkw5Rqk+tSQ==",
-      "requires": {
-        "safe-buffer": "5.2.1"
-      }
-    },
-    "content-type": {
-      "version": "1.0.5",
-      "resolved": "https://registry.npmjs.org/content-type/-/content-type-1.0.5.tgz",
-      "integrity": "sha512-nTjqfcBFEipKdXCv4YDQWCfmcLZKm81ldF0pAopTvyrFGVbcR6P/VAAd5G7N+0tTr8QqiU0tFadD6FK4NtJwOA=="
-    },
-    "cookie": {
-      "version": "0.5.0",
-      "resolved": "https://registry.npmjs.org/cookie/-/cookie-0.5.0.tgz",
-      "integrity": "sha512-YZ3GUyn/o8gfKJlnlX7g7xq4gyO6OSuhGPKaaGssGB2qgDUS0gPgtTvoyZLTt9Ab6dC4hfc9dV5arkvc/OCmrw=="
-    },
-    "cookie-signature": {
-      "version": "1.0.6",
-      "resolved": "https://registry.npmjs.org/cookie-signature/-/cookie-signature-1.0.6.tgz",
-      "integrity": "sha512-QADzlaHc8icV8I7vbaJXJwod9HWYp8uCqf1xa4OfNu1T7JVxQIrUgOWtHdNDtPiywmFbiS12VjotIXLrKM3orQ=="
-    },
-    "cors": {
-      "version": "2.8.5",
-      "resolved": "https://registry.npmjs.org/cors/-/cors-2.8.5.tgz",
-      "integrity": "sha512-KIHbLJqu73RGr/hnbrO9uBeixNGuvSQjul/jdFvS/KFSIH1hWVd1ng7zOHx+YrEfInLG7q4n6GHQ9cDtxv/P6g==",
-      "requires": {
-        "object-assign": "^4",
-        "vary": "^1"
-      }
-    },
-    "debug": {
-      "version": "2.6.9",
-      "resolved": "https://registry.npmjs.org/debug/-/debug-2.6.9.tgz",
-      "integrity": "sha512-bC7ElrdJaJnPbAP+1EotYvqZsb3ecl5wi6Bfi6BJTUcNowp6cvspg0jXznRTKDjm/E7AdgFBVeAPVMNcKGsHMA==",
-      "requires": {
-        "ms": "2.0.0"
-      }
-    },
-    "depd": {
-      "version": "2.0.0",
-      "resolved": "https://registry.npmjs.org/depd/-/depd-2.0.0.tgz",
-      "integrity": "sha512-g7nH6P6dyDioJogAAGprGpCtVImJhpPk/roCzdb3fIh61/s/nPsfR6onyMwkCAR/OlC3yBC0lESvUoQEAssIrw=="
-    },
-    "destroy": {
-      "version": "1.2.0",
-      "resolved": "https://registry.npmjs.org/destroy/-/destroy-1.2.0.tgz",
-      "integrity": "sha512-2sJGJTaXIIaR1w4iJSNoN0hnMY7Gpc/n8D4qSCJw8QqFWXf7cuAgnEHxBpweaVcPevC2l3KpjYCx3NypQQgaJg=="
-    },
-    "ee-first": {
-      "version": "1.1.1",
-      "resolved": "https://registry.npmjs.org/ee-first/-/ee-first-1.1.1.tgz",
-      "integrity": "sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow=="
-    },
-    "encodeurl": {
-      "version": "1.0.2",
-      "resolved": "https://registry.npmjs.org/encodeurl/-/encodeurl-1.0.2.tgz",
-      "integrity": "sha512-TPJXq8JqFaVYm2CWmPvnP2Iyo4ZSM7/QKcSmuMLDObfpH5fi7RUGmd/rTDf+rut/saiDiQEeVTNgAmJEdAOx0w=="
-    },
-    "escape-html": {
-      "version": "1.0.3",
-      "resolved": "https://registry.npmjs.org/escape-html/-/escape-html-1.0.3.tgz",
-      "integrity": "sha512-NiSupZ4OeuGwr68lGIeym/ksIZMJodUGOSCZ/FSnTxcrekbvqrgdUxlJOMpijaKZVjAJrWrGs/6Jy8OMuyj9ow=="
-    },
-    "etag": {
-      "version": "1.8.1",
-      "resolved": "https://registry.npmjs.org/etag/-/etag-1.8.1.tgz",
-      "integrity": "sha512-aIL5Fx7mawVa300al2BnEE4iNvo1qETxLrPI/o05L7z6go7fCw1J6EQmbK4FmJ2AS7kgVF/KEZWufBfdClMcPg=="
-    },
-    "express": {
-      "version": "4.18.2",
-      "resolved": "https://registry.npmjs.org/express/-/express-4.18.2.tgz",
-      "integrity": "sha512-5/PsL6iGPdfQ/lKM1UuielYgv3BUoJfz1aUwU9vHZ+J7gyvwdQXFEBIEIaxeGf0GIcreATNyBExtalisDbuMqQ==",
-      "requires": {
-        "accepts": "~1.3.8",
-        "array-flatten": "1.1.1",
-        "body-parser": "1.20.1",
-        "content-disposition": "0.5.4",
-        "content-type": "~1.0.4",
-        "cookie": "0.5.0",
-        "cookie-signature": "1.0.6",
-        "debug": "2.6.9",
-        "depd": "2.0.0",
-        "encodeurl": "~1.0.2",
-        "escape-html": "~1.0.3",
-        "etag": "~1.8.1",
-        "finalhandler": "1.2.0",
-        "fresh": "0.5.2",
-        "http-errors": "2.0.0",
-        "merge-descriptors": "1.0.1",
-        "methods": "~1.1.2",
-        "on-finished": "2.4.1",
-        "parseurl": "~1.3.3",
-        "path-to-regexp": "0.1.7",
-        "proxy-addr": "~2.0.7",
-        "qs": "6.11.0",
-        "range-parser": "~1.2.1",
-        "safe-buffer": "5.2.1",
-        "send": "0.18.0",
-        "serve-static": "1.15.0",
-        "setprototypeof": "1.2.0",
-        "statuses": "2.0.1",
-        "type-is": "~1.6.18",
-        "utils-merge": "1.0.1",
-        "vary": "~1.1.2"
-      }
-    },
-    "finalhandler": {
-      "version": "1.2.0",
-      "resolved": "https://registry.npmjs.org/finalhandler/-/finalhandler-1.2.0.tgz",
-      "integrity": "sha512-5uXcUVftlQMFnWC9qu/svkWv3GTd2PfUhK/3PLkYNAe7FbqJMt3515HaxE6eRL74GdsriiwujiawdaB1BpEISg==",
-      "requires": {
-        "debug": "2.6.9",
-        "encodeurl": "~1.0.2",
-        "escape-html": "~1.0.3",
-        "on-finished": "2.4.1",
-        "parseurl": "~1.3.3",
-        "statuses": "2.0.1",
-        "unpipe": "~1.0.0"
-      }
-    },
-    "forwarded": {
-      "version": "0.2.0",
-      "resolved": "https://registry.npmjs.org/forwarded/-/forwarded-0.2.0.tgz",
-      "integrity": "sha512-buRG0fpBtRHSTCOASe6hD258tEubFoRLb4ZNA6NxMVHNw2gOcwHo9wyablzMzOA5z9xA9L1KNjk/Nt6MT9aYow=="
-    },
-    "fresh": {
-      "version": "0.5.2",
-      "resolved": "https://registry.npmjs.org/fresh/-/fresh-0.5.2.tgz",
-      "integrity": "sha512-zJ2mQYM18rEFOudeV4GShTGIQ7RbzA7ozbU9I/XBpm7kqgMywgmylMwXHxZJmkVoYkna9d2pVXVXPdYTP9ej8Q=="
-    },
-    "function-bind": {
-      "version": "1.1.1",
-      "resolved": "https://registry.npmjs.org/function-bind/-/function-bind-1.1.1.tgz",
-      "integrity": "sha512-yIovAzMX49sF8Yl58fSCWJ5svSLuaibPxXQJFLmBObTuCr0Mf1KiPopGM9NiFjiYBCbfaa2Fh6breQ6ANVTI0A=="
-    },
-    "get-intrinsic": {
-      "version": "1.2.0",
-      "resolved": "https://registry.npmjs.org/get-intrinsic/-/get-intrinsic-1.2.0.tgz",
-      "integrity": "sha512-L049y6nFOuom5wGyRc3/gdTLO94dySVKRACj1RmJZBQXlbTMhtNIgkWkUHq+jYmZvKf14EW1EoJnnjbmoHij0Q==",
-      "requires": {
-        "function-bind": "^1.1.1",
-        "has": "^1.0.3",
-        "has-symbols": "^1.0.3"
-      }
-    },
-    "has": {
-      "version": "1.0.3",
-      "resolved": "https://registry.npmjs.org/has/-/has-1.0.3.tgz",
-      "integrity": "sha512-f2dvO0VU6Oej7RkWJGrehjbzMAjFp5/VKPp5tTpWIV4JHHZK1/BxbFRtf/siA2SWTe09caDmVtYYzWEIbBS4zw==",
-      "requires": {
-        "function-bind": "^1.1.1"
-      }
-    },
-    "has-symbols": {
-      "version": "1.0.3",
-      "resolved": "https://registry.npmjs.org/has-symbols/-/has-symbols-1.0.3.tgz",
-      "integrity": "sha512-l3LCuF6MgDNwTDKkdYGEihYjt5pRPbEg46rtlmnSPlUbgmB8LOIrKJbYYFBSbnPaJexMKtiPO8hmeRjRz2Td+A=="
-    },
-    "http-errors": {
-      "version": "2.0.0",
-      "resolved": "https://registry.npmjs.org/http-errors/-/http-errors-2.0.0.tgz",
-      "integrity": "sha512-FtwrG/euBzaEjYeRqOgly7G0qviiXoJWnvEH2Z1plBdXgbyjv34pHTSb9zoeHMyDy33+DWy5Wt9Wo+TURtOYSQ==",
-      "requires": {
-        "depd": "2.0.0",
-        "inherits": "2.0.4",
-        "setprototypeof": "1.2.0",
-        "statuses": "2.0.1",
-        "toidentifier": "1.0.1"
-      }
-    },
-    "iconv-lite": {
-      "version": "0.4.24",
-      "resolved": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.4.24.tgz",
-      "integrity": "sha512-v3MXnZAcvnywkTUEZomIActle7RXXeedOR31wwl7VlyoXO4Qi9arvSenNQWne1TcRwhCL1HwLI21bEqdpj8/rA==",
-      "requires": {
-        "safer-buffer": ">= 2.1.2 < 3"
-      }
-    },
-    "inherits": {
-      "version": "2.0.4",
-      "resolved": "https://registry.npmjs.org/inherits/-/inherits-2.0.4.tgz",
-      "integrity": "sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ=="
-    },
-    "ipaddr.js": {
-      "version": "1.9.1",
-      "resolved": "https://registry.npmjs.org/ipaddr.js/-/ipaddr.js-1.9.1.tgz",
-      "integrity": "sha512-0KI/607xoxSToH7GjN1FfSbLoU0+btTicjsQSWQlh/hZykN8KpmMf7uYwPW3R+akZ6R/w18ZlXSHBYXiYUPO3g=="
-    },
-    "media-typer": {
-      "version": "0.3.0",
-      "resolved": "https://registry.npmjs.org/media-typer/-/media-typer-0.3.0.tgz",
-      "integrity": "sha512-dq+qelQ9akHpcOl/gUVRTxVIOkAJ1wR3QAvb4RsVjS8oVoFjDGTc679wJYmUmknUF5HwMLOgb5O+a3KxfWapPQ=="
-    },
-    "merge-descriptors": {
-      "version": "1.0.1",
-      "resolved": "https://registry.npmjs.org/merge-descriptors/-/merge-descriptors-1.0.1.tgz",
-      "integrity": "sha512-cCi6g3/Zr1iqQi6ySbseM1Xvooa98N0w31jzUYrXPX2xqObmFGHJ0tQ5u74H3mVh7wLouTseZyYIq39g8cNp1w=="
-    },
-    "methods": {
-      "version": "1.1.2",
-      "resolved": "https://registry.npmjs.org/methods/-/methods-1.1.2.tgz",
-      "integrity": "sha512-iclAHeNqNm68zFtnZ0e+1L2yUIdvzNoauKU4WBA3VvH/vPFieF7qfRlwUZU+DA9P9bPXIS90ulxoUoCH23sV2w=="
-    },
-    "mime": {
-      "version": "1.6.0",
-      "resolved": "https://registry.npmjs.org/mime/-/mime-1.6.0.tgz",
-      "integrity": "sha512-x0Vn8spI+wuJ1O6S7gnbaQg8Pxh4NNHb7KSINmEWKiPE4RKOplvijn+NkmYmmRgP68mc70j2EbeTFRsrswaQeg=="
-    },
-    "mime-db": {
-      "version": "1.52.0",
-      "resolved": "https://registry.npmjs.org/mime-db/-/mime-db-1.52.0.tgz",
-      "integrity": "sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg=="
-    },
-    "mime-types": {
-      "version": "2.1.35",
-      "resolved": "https://registry.npmjs.org/mime-types/-/mime-types-2.1.35.tgz",
-      "integrity": "sha512-ZDY+bPm5zTTF+YpCrAU9nK0UgICYPT0QtT1NZWFv4s++TNkcgVaT0g6+4R2uI4MjQjzysHB1zxuWL50hzaeXiw==",
-      "requires": {
-        "mime-db": "1.52.0"
-      }
-    },
-    "ms": {
-      "version": "2.0.0",
-      "resolved": "https://registry.npmjs.org/ms/-/ms-2.0.0.tgz",
-      "integrity": "sha512-Tpp60P6IUJDTuOq/5Z8cdskzJujfwqfOTkrwIwj7IRISpnkJnT6SyJ4PCPnGMoFjC9ddhal5KVIYtAt97ix05A=="
-    },
-    "negotiator": {
-      "version": "0.6.3",
-      "resolved": "https://registry.npmjs.org/negotiator/-/negotiator-0.6.3.tgz",
-      "integrity": "sha512-+EUsqGPLsM+j/zdChZjsnX51g4XrHFOIXwfnCVPGlQk/k5giakcKsuxCObBRu6DSm9opw/O6slWbJdghQM4bBg=="
-    },
-    "object-assign": {
-      "version": "4.1.1",
-      "resolved": "https://registry.npmjs.org/object-assign/-/object-assign-4.1.1.tgz",
-      "integrity": "sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg=="
-    },
-    "object-inspect": {
-      "version": "1.12.3",
-      "resolved": "https://registry.npmjs.org/object-inspect/-/object-inspect-1.12.3.tgz",
-      "integrity": "sha512-geUvdk7c+eizMNUDkRpW1wJwgfOiOeHbxBR/hLXK1aT6zmVSO0jsQcs7fj6MGw89jC/cjGfLcNOrtMYtGqm81g=="
-    },
-    "on-finished": {
-      "version": "2.4.1",
-      "resolved": "https://registry.npmjs.org/on-finished/-/on-finished-2.4.1.tgz",
-      "integrity": "sha512-oVlzkg3ENAhCk2zdv7IJwd/QUD4z2RxRwpkcGY8psCVcCYZNq4wYnVWALHM+brtuJjePWiYF/ClmuDr8Ch5+kg==",
-      "requires": {
-        "ee-first": "1.1.1"
-      }
-    },
-    "parseurl": {
-      "version": "1.3.3",
-      "resolved": "https://registry.npmjs.org/parseurl/-/parseurl-1.3.3.tgz",
-      "integrity": "sha512-CiyeOxFT/JZyN5m0z9PfXw4SCBJ6Sygz1Dpl0wqjlhDEGGBP1GnsUVEL0p63hoG1fcj3fHynXi9NYO4nWOL+qQ=="
-    },
-    "path-to-regexp": {
-      "version": "0.1.7",
-      "resolved": "https://registry.npmjs.org/path-to-regexp/-/path-to-regexp-0.1.7.tgz",
-      "integrity": "sha512-5DFkuoqlv1uYQKxy8omFBeJPQcdoE07Kv2sferDCrAq1ohOU+MSDswDIbnx3YAM60qIOnYa53wBhXW0EbMonrQ=="
-    },
-    "proxy-addr": {
-      "version": "2.0.7",
-      "resolved": "https://registry.npmjs.org/proxy-addr/-/proxy-addr-2.0.7.tgz",
-      "integrity": "sha512-llQsMLSUDUPT44jdrU/O37qlnifitDP+ZwrmmZcoSKyLKvtZxpyV0n2/bD/N4tBAAZ/gJEdZU7KMraoK1+XYAg==",
-      "requires": {
-        "forwarded": "0.2.0",
-        "ipaddr.js": "1.9.1"
-      }
-    },
-    "qs": {
-      "version": "6.11.0",
-      "resolved": "https://registry.npmjs.org/qs/-/qs-6.11.0.tgz",
-      "integrity": "sha512-MvjoMCJwEarSbUYk5O+nmoSzSutSsTwF85zcHPQ9OrlFoZOYIjaqBAJIqIXjptyD5vThxGq52Xu/MaJzRkIk4Q==",
-      "requires": {
-        "side-channel": "^1.0.4"
-      }
-    },
-    "range-parser": {
-      "version": "1.2.1",
-      "resolved": "https://registry.npmjs.org/range-parser/-/range-parser-1.2.1.tgz",
-      "integrity": "sha512-Hrgsx+orqoygnmhFbKaHE6c296J+HTAQXoxEF6gNupROmmGJRoyzfG3ccAveqCBrwr/2yxQ5BVd/GTl5agOwSg=="
-    },
-    "raw-body": {
-      "version": "2.5.1",
-      "resolved": "https://registry.npmjs.org/raw-body/-/raw-body-2.5.1.tgz",
-      "integrity": "sha512-qqJBtEyVgS0ZmPGdCFPWJ3FreoqvG4MVQln/kCgF7Olq95IbOp0/BWyMwbdtn4VTvkM8Y7khCQ2Xgk/tcrCXig==",
-      "requires": {
-        "bytes": "3.1.2",
-        "http-errors": "2.0.0",
-        "iconv-lite": "0.4.24",
-        "unpipe": "1.0.0"
-      }
-    },
-    "safe-buffer": {
-      "version": "5.2.1",
-      "resolved": "https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.2.1.tgz",
-      "integrity": "sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ=="
-    },
-    "safer-buffer": {
-      "version": "2.1.2",
-      "resolved": "https://registry.npmjs.org/safer-buffer/-/safer-buffer-2.1.2.tgz",
-      "integrity": "sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg=="
-    },
-    "send": {
-      "version": "0.18.0",
-      "resolved": "https://registry.npmjs.org/send/-/send-0.18.0.tgz",
-      "integrity": "sha512-qqWzuOjSFOuqPjFe4NOsMLafToQQwBSOEpS+FwEt3A2V3vKubTquT3vmLTQpFgMXp8AlFWFuP1qKaJZOtPpVXg==",
-      "requires": {
-        "debug": "2.6.9",
-        "depd": "2.0.0",
-        "destroy": "1.2.0",
-        "encodeurl": "~1.0.2",
-        "escape-html": "~1.0.3",
-        "etag": "~1.8.1",
-        "fresh": "0.5.2",
-        "http-errors": "2.0.0",
-        "mime": "1.6.0",
-        "ms": "2.1.3",
-        "on-finished": "2.4.1",
-        "range-parser": "~1.2.1",
-        "statuses": "2.0.1"
-      },
-      "dependencies": {
-        "ms": {
-          "version": "2.1.3",
-          "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
-          "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA=="
-        }
-      }
-    },
-    "serve-static": {
-      "version": "1.15.0",
-      "resolved": "https://registry.npmjs.org/serve-static/-/serve-static-1.15.0.tgz",
-      "integrity": "sha512-XGuRDNjXUijsUL0vl6nSD7cwURuzEgglbOaFuZM9g3kwDXOWVTck0jLzjPzGD+TazWbboZYu52/9/XPdUgne9g==",
-      "requires": {
-        "encodeurl": "~1.0.2",
-        "escape-html": "~1.0.3",
-        "parseurl": "~1.3.3",
-        "send": "0.18.0"
-      }
-    },
-    "setprototypeof": {
-      "version": "1.2.0",
-      "resolved": "https://registry.npmjs.org/setprototypeof/-/setprototypeof-1.2.0.tgz",
-      "integrity": "sha512-E5LDX7Wrp85Kil5bhZv46j8jOeboKq5JMmYM3gVGdGH8xFpPWXUMsNrlODCrkoxMEeNi/XZIwuRvY4XNwYMJpw=="
-    },
-    "side-channel": {
-      "version": "1.0.4",
-      "resolved": "https://registry.npmjs.org/side-channel/-/side-channel-1.0.4.tgz",
-      "integrity": "sha512-q5XPytqFEIKHkGdiMIrY10mvLRvnQh42/+GoBlFW3b2LXLE2xxJpZFdm94we0BaoV3RwJyGqg5wS7epxTv0Zvw==",
-      "requires": {
-        "call-bind": "^1.0.0",
-        "get-intrinsic": "^1.0.2",
-        "object-inspect": "^1.9.0"
-      }
-    },
-    "statuses": {
-      "version": "2.0.1",
-      "resolved": "https://registry.npmjs.org/statuses/-/statuses-2.0.1.tgz",
-      "integrity": "sha512-RwNA9Z/7PrK06rYLIzFMlaF+l73iwpzsqRIFgbMLbTcLD6cOao82TaWefPXQvB2fOC4AjuYSEndS7N/mTCbkdQ=="
-    },
-    "toidentifier": {
-      "version": "1.0.1",
-      "resolved": "https://registry.npmjs.org/toidentifier/-/toidentifier-1.0.1.tgz",
-      "integrity": "sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA=="
-    },
-    "type-is": {
-      "version": "1.6.18",
-      "resolved": "https://registry.npmjs.org/type-is/-/type-is-1.6.18.tgz",
-      "integrity": "sha512-TkRKr9sUTxEH8MdfuCSP7VizJyzRNMjj2J2do2Jr3Kym598JVdEksuzPQCnlFPW4ky9Q+iA+ma9BGm06XQBy8g==",
-      "requires": {
-        "media-typer": "0.3.0",
-        "mime-types": "~2.1.24"
-      }
-    },
-    "unpipe": {
-      "version": "1.0.0",
-      "resolved": "https://registry.npmjs.org/unpipe/-/unpipe-1.0.0.tgz",
-      "integrity": "sha512-pjy2bYhSsufwWlKwPc+l3cN7+wuJlK6uz0YdJEOlQDbl6jo/YlPi4mb8agUkVC8BF7V8NuzeyPNqRksA3hztKQ=="
-    },
-    "utils-merge": {
-      "version": "1.0.1",
-      "resolved": "https://registry.npmjs.org/utils-merge/-/utils-merge-1.0.1.tgz",
-      "integrity": "sha512-pMZTvIkT1d+TFGvDOqodOclx0QWkkgi6Tdoa8gC8ffGAAqz9pzPTZWAybbsHHoED/ztMtkv/VoYTYyShUn81hA=="
-    },
-    "vary": {
-      "version": "1.1.2",
-      "resolved": "https://registry.npmjs.org/vary/-/vary-1.1.2.tgz",
-      "integrity": "sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg=="
-    }
-  }
-}
-
-----
-package.json
-{
-  "dependencies": {
-    "cors": "^2.8.5",
-    "express": "^4.18.2"
-  },
-  "scripts": {
-    "dev": "node app.js"
-  }
-}
-
-----
-streaming-client-api.js
-'use strict';
-import DID_API from './api.json' assert { type: 'json' };
-
-if (DID_API.key == '🤫') alert('Please put your api key inside ./api.json and restart..');
-
-const RTCPeerConnection = (
-  window.RTCPeerConnection ||
-  window.webkitRTCPeerConnection ||
-  window.mozRTCPeerConnection
-).bind(window);
-
-let peerConnection;
-let streamId;
-let sessionId;
-let sessionClientAnswer;
-
-let statsIntervalId;
-let videoIsPlaying;
-let lastBytesReceived;
-
-const videoElement = document.getElementById('video-element');
-videoElement.setAttribute('playsinline', '');
-const peerStatusLabel = document.getElementById('peer-status-label');
-const iceStatusLabel = document.getElementById('ice-status-label');
-const iceGatheringStatusLabel = document.getElementById('ice-gathering-status-label');
-const signalingStatusLabel = document.getElementById('signaling-status-label');
-const streamingStatusLabel = document.getElementById('streaming-status-label');
-
-const presenterInputByService = {
-  talks: {
-    source_url: 'https://d-id-public-bucket.s3.amazonaws.com/or-roman.jpg',
-  },
-  clips: {
-    presenter_id: 'rian-lZC6MmWfC1',
-    driver_id: 'mXra4jY38i'
-  }
-}
-
-const connectButton = document.getElementById('connect-button');
-connectButton.onclick = async () => {
-  if (peerConnection && peerConnection.connectionState === 'connected') {
-    return;
-  }
-
-  stopAllStreams();
-  closePC();
-
-  const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(presenterInputByService[DID_API.service]),
-  });
-
-  const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
-  streamId = newStreamId;
-  sessionId = newSessionId;
-
-  try {
-    sessionClientAnswer = await createPeerConnection(offer, iceServers);
-  } catch (e) {
-    console.log('error during streaming setup', e);
-    stopAllStreams();
-    closePC();
-    return;
-  }
-
-  const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      answer: sessionClientAnswer,
-      session_id: sessionId,
-    }),
-  });
-};
-
-const startButton = document.getElementById('start-button');
-startButton.onclick = async () => {
-  // connectionState not supported in firefox
-  if (peerConnection?.signalingState === 'stable' || peerConnection?.iceConnectionState === 'connected') {
-    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'audio',
-          audio_url: 'https://d-id-public-bucket.s3.us-west-2.amazonaws.com/webrtc.mp3',
-        },
-        ...(DID_API.service === 'clips' && {
-          background: {
-            color: '#FFFFFF'
-          }
-        }),
-        config: {
-          stitch: true,
-        },
-        session_id: sessionId,
-      }),
-    });
-  }
-};
-
-const destroyButton = document.getElementById('destroy-button');
-destroyButton.onclick = async () => {
-  await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
-    method: 'DELETE',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ session_id: sessionId }),
-  });
-
-  stopAllStreams();
-  closePC();
-};
-
-function onIceGatheringStateChange() {
-  iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
-  iceGatheringStatusLabel.className = 'iceGatheringState-' + peerConnection.iceGatheringState;
-}
-function onIceCandidate(event) {
-  console.log('onIceCandidate', event);
-  if (event.candidate) {
-    const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
-
-    fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        candidate,
-        sdpMid,
-        sdpMLineIndex,
-        session_id: sessionId,
-      }),
-    });
-  }
-}
-function onIceConnectionStateChange() {
-  iceStatusLabel.innerText = peerConnection.iceConnectionState;
-  iceStatusLabel.className = 'iceConnectionState-' + peerConnection.iceConnectionState;
-  if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'closed') {
-    stopAllStreams();
-    closePC();
-  }
-}
-function onConnectionStateChange() {
-  // not supported in firefox
-  peerStatusLabel.innerText = peerConnection.connectionState;
-  peerStatusLabel.className = 'peerConnectionState-' + peerConnection.connectionState;
-}
-function onSignalingStateChange() {
-  signalingStatusLabel.innerText = peerConnection.signalingState;
-  signalingStatusLabel.className = 'signalingState-' + peerConnection.signalingState;
-}
-
-function onVideoStatusChange(videoIsPlaying, stream) {
-  let status;
-  if (videoIsPlaying) {
-    status = 'streaming';
-    const remoteStream = stream;
-    setVideoElement(remoteStream);
-  } else {
-    status = 'empty';
-    playIdleVideo();
-  }
-  streamingStatusLabel.innerText = status;
-  streamingStatusLabel.className = 'streamingState-' + status;
-}
-
-function onTrack(event) {
-  /**
-   * The following code is designed to provide information about wether currently there is data
-   * that's being streamed - It does so by periodically looking for changes in total stream data size
-   *
-   * This information in our case is used in order to show idle video while no video is streaming.
-   * To create this idle video use the POST https://api.d-id.com/talks (or clips) endpoint with a silent audio file or a text script with only ssml breaks
-   * https://docs.aws.amazon.com/polly/latest/dg/supportedtags.html#break-tag
-   * for seamless results use `config.fluent: true` and provide the same configuration as the streaming video
-   */
-
-  if (!event.track) return;
-
-  statsIntervalId = setInterval(async () => {
-    const stats = await peerConnection.getStats(event.track);
-    stats.forEach((report) => {
-      if (report.type === 'inbound-rtp' && report.mediaType === 'video') {
-        const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
-
-        if (videoStatusChanged) {
-          videoIsPlaying = report.bytesReceived > lastBytesReceived;
-          onVideoStatusChange(videoIsPlaying, event.streams[0]);
-        }
-        lastBytesReceived = report.bytesReceived;
-      }
-    });
-  }, 500);
-}
-
-async function createPeerConnection(offer, iceServers) {
-  if (!peerConnection) {
-    peerConnection = new RTCPeerConnection({ iceServers });
-    peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
-    peerConnection.addEventListener('icecandidate', onIceCandidate, true);
-    peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
-    peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
-    peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
-    peerConnection.addEventListener('track', onTrack, true);
-  }
-
-  await peerConnection.setRemoteDescription(offer);
-  console.log('set remote sdp OK');
-
-  const sessionClientAnswer = await peerConnection.createAnswer();
-  console.log('create local sdp OK');
-
-  await peerConnection.setLocalDescription(sessionClientAnswer);
-  console.log('set local sdp OK');
-
-  return sessionClientAnswer;
-}
-
-function setVideoElement(stream) {
-  if (!stream) return;
-  videoElement.srcObject = stream;
-  videoElement.loop = false;
-
-  // safari hotfix
-  if (videoElement.paused) {
-    videoElement
-      .play()
-      .then((_) => {})
-      .catch((e) => {});
-  }
-}
-
-function playIdleVideo() {
-  videoElement.srcObject = undefined;
-  videoElement.src = DID_API.service == 'clips' ? 'rian_idle.mp4' : 'or_idle.mp4';
-  videoElement.loop = true;
-}
-
-function stopAllStreams() {
-  if (videoElement.srcObject) {
-    console.log('stopping video streams');
-    videoElement.srcObject.getTracks().forEach((track) => track.stop());
-    videoElement.srcObject = null;
-  }
-}
-
-function closePC(pc = peerConnection) {
-  if (!pc) return;
-  console.log('stopping peer connection');
-  pc.close();
-  pc.removeEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
-  pc.removeEventListener('icecandidate', onIceCandidate, true);
-  pc.removeEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
-  pc.removeEventListener('connectionstatechange', onConnectionStateChange, true);
-  pc.removeEventListener('signalingstatechange', onSignalingStateChange, true);
-  pc.removeEventListener('track', onTrack, true);
-  clearInterval(statsIntervalId);
-  iceGatheringStatusLabel.innerText = '';
-  signalingStatusLabel.innerText = '';
-  iceStatusLabel.innerText = '';
-  peerStatusLabel.innerText = '';
-  console.log('stopped peer connection');
-  if (pc === peerConnection) {
-    peerConnection = null;
-  }
-}
-
-const maxRetryCount = 3;
-const maxDelaySec = 4;
-
-async function fetchWithRetries(url, options, retries = 1) {
-  try {
-    const res = await fetch(url, options);
-    if(res.status >= 200 && res.status <= 299) {
-      return res;
-    } else {
-      throw new Error(`Response status ${res.status}`);
-    }
-  } catch (err) {
-    if (retries <= maxRetryCount) {
-      const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 1000;
-
-      await new Promise((resolve) => setTimeout(resolve, delay));
-
-      console.log(`Request failed, retrying ${retries}/${maxRetryCount}. Error ${err}`);
-      return fetchWithRetries(url, options, retries + 1);
-    } else {
-      throw new Error(`Max retries exceeded. error: ${err}`);
-    }
-  }
-}
-
-----
-style-agents.css
-.peerConnectionState-new {
-  color: cornflowerblue;
-}
-.peerConnectionState-connecting {
-  color: orange;
-}
-.peerConnectionState-connected {
-  color: green;
-}
-.peerConnectionState-disconnected,
-.peerConnectionState-closed,
-.peerConnectionState-failed {
-  color: red;
-}
-
-.iceConnectionState-new {
-  color: cornflowerblue;
-}
-.iceConnectionState-checking {
-  color: orange;
-}
-.iceConnectionState-connected,
-.iceConnectionState-completed {
-  color: green;
-}
-.peerConnectionState-disconnected,
-.peerConnectionState-closed,
-.peerConnectionState-failed {
-  color: red;
-}
-
-.iceGatheringState-new {
-  color: cornflowerblue;
-}
-.iceGatheringState-gathering {
-  color: orange;
-}
-.iceGatheringState-complete {
-  color: black;
-}
-
-.signalingState-stable {
-  color: green;
-}
-.signalingState-have-local-offer,
-.signalingState-have-remote-offer,
-.signalingState-have-local-pranswer,
-.signalingState-have-remote-pranswer {
-  color: cornflowerblue;
-}
-.signalingState-closed {
-  color: red;
-}
-
-.streamingState-streaming {
-  color: green;
-}
-
-.streamingState-empty {
-  color: grey;
-}
-
-#agentId-label, #chatId-label{
-  color: green;
-}
-
-/* added css from here */
-
-body * {
-  font-family: 'Mulish', sans-serif;
-  text-align: center;
-}
-
-#content {
-  display: flex;
-  flex-direction: row;
-  justify-content: space-evenly;
-  margin-top: 50px;
-}
-
-#buttons {
-  clear: both;
-  padding: 0 0 0 0;
-  text-align: center;
-}
-
-button {
-  padding: 10px 20px;
-  border-radius: 5px;
-  border: none;
-  font-size: 16px;
-  margin: 0 5px;
-  background-color: #7459fe;
-  color: #fff;
-}
-
-button#connect-button {
-background-color: green;
-}
-button#destroy-button{
-  background-color: red;
-}
-
-button#start-button{
-  margin: 1em;
-}
-
-button:hover, #destroy-button:hover,#connect-button:hover {
-  filter: brightness(85%);
-  cursor: pointer;
-  transition: all 0.2s ease-out;
-}
-
-h4{
-  margin: 0;
-  margin-bottom: 10px;
-}
-
-textarea {
-  font-size: 16px;
-  text-align: center;
-  width: 500px;
-  border-radius: 5px;
-  padding: 10px 20px;
-  border: 2px solid #7459fe;
-  font-size: 16px;
-  margin: 0 5px;
-}
-
-#msgHistory {
-  overflow-y: auto;
-  line-break: loose;
-}
-
-#status {
-  display: inline-block;
-  zoom: 1;
-  line-height: 140%;
-  font-size: 15px;
-  width: 400px;
-}
-
-#status div {
-  padding-bottom: 10px;
-}
-
-#video-wrapper {
-  /* height: 500px; */
-  width: 400px;
-  height: 400px;
-  background-position: top;
-}
-
-.chat{
-  width: 400px;
-}
-
-
-video {
-  /* display: block; */
-  border-radius: 50%;
-  background-image: url("emma_idle.png");
-  background-position: top;
-  /* position: absolute; */
-  background-size: contain;
-}
-
-.animated {
-  animation: opacityAnimation 0.2s ease-in-out;
-}
-
-@keyframes opacityAnimation {
-from { opacity: 0.8; }
-to { opacity: 1; }
-}
 
 
 Groq docs:
@@ -2953,27 +581,2620 @@ GroqCloud currently supports the following models:
 
 These are chat type models and are directly accessible through the GroqCloud Models API endpoint using the model IDs mentioned above.
 
+
+
+
+
+deepgram docs:
+```
+Transcribe - Remote file
+
+POST
+
+https://api.deepgram.com/v1/listen
+
+Use Deepgram's speech-to-text API to transcribe and analyze pre-recorded audio.
+
+High-speed transcription of either pre-recorded or live audio. For details on our live audio websocket server, please see our streaming reference.
+
+📘
+
+Deepgram does not store transcriptions. Make sure to save output or return transcriptions to a callback URL for custom processing.
+
+QUERY PARAMS
+
+callback
+
+string
+
+Callback URL to provide if you would like your submitted audio to be processed asynchronously. Learn More
+
+callback_method
+
+boolean
+
+Enable a callback method. Default: false
+
+custom_intent
+
+string
+
+Optional. A custom intent you want the model to detect within your input audio if present. Submit up to 100.
+
+custom_topic
+
+string
+
+A custom topic you want the model to detect within your input audio if present. Submit up to one hundred topics.
+
+custom_intent_mode
+
+string
+
+When strict, the model will only return intents submitted using the custom_intent param. When extended, the model will return its own detected intents in addition to those submitted using the custom_intent param. Default: extended
+
+custom_topic_mode
+
+string
+
+When strict, the model will only return topics submitted using the custom_topic param. When extended, the model will return its own detected topics in addition to those submitted using the custom_topic param. Default: extended
+
+detect_language
+
+boolean
+
+Detect the language of the provided audio. Default: false. Learn More
+
+detect_entities
+
+boolean
+
+Entity Detection identifies and extracts key entities from content in submitted audio. Default: false
+
+detect_topics
+
+boolean
+
+Identify and extract key topics. Default: false. Learn More
+
+diarize
+
+boolean
+
+Recognize speaker changes. Each word in the transcript will be assigned a speaker number starting at 0. Default: false. Learn More
+
+dictation
+
+boolean
+
+Spoken dictation commands will be converted to their corresponding punctuation marks. e.g., comma to , Default: false
+
+diarize_version
+
+string
+
+Version of the diarization feature to use. Only used when the diarization feature is enabled (diarize=true is passed to the API). Learn More
+
+extra
+
+string
+
+To add an extra parameter in the query string and pass a key-value pair you would like to include in the response. Learn More
+
+filler_words
+
+boolean
+
+Whether to include words like "uh" and "um" in transcription output. Default: false. Learn More
+
+intents
+
+boolean
+
+Recognizes speaker intent throughout an entire transcript. Returns a list of text segments and the intents found within each segment. Learn More
+
+keywords
+
+string
+
+Uncommon proper nouns or other words to transcribe that are not a part of the model's vocabulary. Can send multiple instances in query string (for example, keywords=snuffalupagus:10&keywords=systrom:5.5). Learn More
+
+language
+
+string
+
+The BCP-47 language tag that hints at the primary spoken language. Default: en. Learn More
+
+measurements
+
+boolean
+
+Spoken measurements will be converted to their corresponding abbreviations. e.g., milligram to mg. Default: false
+
+model
+
+string
+
+AI model used to process submitted audio. Default: nova-2-general. Learn More
+
+multichannel
+
+boolean
+
+Transcribe each audio channel independently. Default: false. Learn More
+
+numerals
+
+boolean
+
+Convert numbers from written format (e.g., one) to numerical format (e.g., 1). Default: false. Learn More
+
+paragraphs
+
+boolean
+
+Split audio into paragraphs. Default: false. Learn More
+
+profanity_filter
+
+boolean
+
+Remove profanity from the transcript. Default: false. Learn More
+
+punctuate
+
+boolean
+
+Add punctuation and capitalization to the transcript. Default: false. Learn More
+
+redact
+
+string
+
+Redact sensitive information, replacing redacted content with asterisks (*). Can send multiple instances in query string (for example, redact=pci&redact=numbers). Default: false. Learn More
+
+replace
+
+string
+
+Terms or phrases to search for in the submitted audio and replace. Can send multiple instances in query string (for example, replace=this:that&replace=thisalso:thatalso). Learn More
+
+search
+
+string
+
+Terms or phrases to search for in the submitted audio. Can send multiple instances in query string (for example, search=speech&search=Friday). Learn More
+
+sentiment
+
+boolean
+
+Recognizes the sentiment of the entire transcript and detects a shift in sentiment throughout the transcript. Returns a list of text segments and the sentiment found within each segment. Learn More
+
+smart_format
+
+boolean
+
+Apply formatting to transcript output. When set to true, additional formatting will be applied to transcripts to improve readability. Default: false. Learn More
+
+summarize
+
+string
+
+Summarize content. Default: v2. Learn More
+
+tag
+
+string
+
+Tag to associate with the request. Learn More
+
+topics
+
+boolean
+
+Detects topics throughout an entire transcript. Returns a list of text segments and the topics found within each segment. Learn More
+
+utterances
+
+boolean
+
+Segment speech into meaningful units based on gaps in speech. Default: false. Learn More
+
+utt_split
+
+float
+
+Length of time in seconds used to split utterances. Default: 0.8. Learn More
+
+version
+
+string
+
+Version of the model to use. Default: latest. Learn More
+
+BODY PARAMS
+
+url
+
+string
+
+Public URL of a file to transcribe. For pre-signed URLs, please see our guide.
+
+https://dpgr.am/spacewalk.wav
+
+HEADERS
+
+Content-Type
+
+string
+
+application/json
+
+Accept
+
+string
+
+application/json
+
+RESPONSES
+
+200
+
+200
+
+400
+
+400
+
+401
+
+401
+
+402
+
+402
+
+403
+
+403
+
+Updated 13 days ago
+
+LANGUAGE
+
+ShellPythonJavaScriptGoC#
+
+AUTHORIZATION
+
+HEADER
+
+Header
+
+REQUEST
+
+1
+
+curl --request POST
+
+2
+
+ --url https://api.deepgram.com/v1/listen
+
+3
+
+ --header 'Accept: application/json'
+
+4
+
+ --header 'Authorization: Token YOUR_API_KEY'
+
+5
+
+ --header 'Content-Type: application/json'
+
+6
+
+ --data '{"url": "https://dpgr.am/spacewalk.wav"}'
+
+RESPONSE
+
+EXAMPLES
+
+Choose an example:
+
+application/json
+
+200 - Result400 - Result401 - Result402 - Result403 - Forbidden
+
+LANGUAGE
+
+ShellPythonJavaScriptGoC#
+
+AUTHORIZATION
+
+HEADER
+
+Header
+
+REQUEST
+
+1
+
+curl --request POST
+
+2
+
+ --url https://api.deepgram.com/v1/listen
+
+3
+
+ --header 'Accept: application/json'
+
+4
+
+ --header 'Authorization: Token YOUR_API_KEY'
+
+5
+
+ --header 'Content-Type: application/json'
+
+6
+
+ --data '{"url": "https://dpgr.am/spacewalk.wav"}'
+
+RESPONSE
+
+EXAMPLES
+
+Choose an example:
+
+application/json
+
+200 - Result400 - Result401 - Result402 - Result403 - Forbidden
+
+Getting started
+===============
+
+An introduction to getting transcription data from live streaming audio in real time using Deepgram's SDKs.
+
+In this guide, you'll learn how to automatically transcribe live streaming audio in real time using Deepgram's SDKs, which are supported for use with the [Deepgram API](https://developers.deepgram.com/reference/).
+
+> 📘
+> --
+>
+> Before you run the code, you'll need to follow the steps in [this guide](https://developers.deepgram.com/docs/make-your-first-api-request) to create a Deepgram account, get a Deepgram API key, configure your environment, and install the SDK of your choice.
+
+Transcribe Audio
+
+[](https://developers.deepgram.com/reference/getting-started-with-live-streaming-audio#transcribe-audio)
+----------------------------------------------------------------------------------------------------------------------------
+
+Follow the steps to transcribe audio from a remote audio stream. If you would like to learn how to stream audio from a microphone, check out our [Live Audio Starter Apps](https://developers.deepgram.com/docs/stt-streaming-feature-overview) or specific examples in the readme of each of the [Deepgram SDKs](https://developers.deepgram.com/docs/deepgram-sdks).
+
+> 🌈
+> --
+>
+> For those who prefer to work from a Jupyter notebook, check out our [Python Starter Notebooks](https://developers.deepgram.com/docs/python-notebooks).
+
+###
+
+Install the SDK
+
+[](https://developers.deepgram.com/reference/getting-started-with-live-streaming-audio#install-the-sdk)
+
+Open your terminal, navigate to the location on your drive where you want to create your project, and install the Deepgram SDK:
+
+PythonJavaScriptC#Go
+
+`
+
+# Install the Deepgram Python SDK
+# https://github.com/deepgram/deepgram-python-sdk
+
+pip install deepgram-sdk==3.*
+
+`
+
+###
+
+Add Dependencies
+
+[](https://developers.deepgram.com/reference/getting-started-with-live-streaming-audio#add-dependencies)
+
+Add necessary external dependencies to your project.
+
+PythonJavaScriptC#Go
+
+`
+
+# Install python-dotenv to protect your API key
+
+pip install python-dotenv
+
+`
+
+###
+
+Write the Code
+
+[](https://developers.deepgram.com/reference/getting-started-with-live-streaming-audio#write-the-code)
+
+In your terminal, create a new file in your project's location, and populate it with code.
+
+PythonJavaScriptC#Go
+
+`
+
+# Example filename: main.py
+import os
+import httpx
+from dotenv import load_dotenv
+import threading
+
+from deepgram import (
+    DeepgramClient,
+    LiveTranscriptionEvents,
+    LiveOptions,
+)
+
+load_dotenv()
+
+# URL for the realtime streaming audio you would like to transcribe
+URL = "http://stream.live.vc.bbcmedia.co.uk/bbc_world_service"
+
+API_KEY = os.getenv("DG_API_KEY")
+
+def main():
+    try:
+        # STEP 1: Create a Deepgram client using the API key
+        deepgram = DeepgramClient(API_KEY)
+
+        # STEP 2: Create a websocket connection to Deepgram
+        dg_connection = deepgram.listen.live.v("1")
+
+        # STEP 3: Define the event handlers for the connection
+        def on_message(self, result, **kwargs):
+            sentence = result.channel.alternatives[0].transcript
+            if len(sentence) == 0:
+                return
+            print(f"speaker: {sentence}")
+
+        def on_metadata(self, metadata, **kwargs):
+            print(f"\n\n{metadata}\n\n")
+
+        def on_error(self, error, **kwargs):
+            print(f"\n\n{error}\n\n")
+
+        # STEP 4: Register the event handlers
+        dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
+        dg_connection.on(LiveTranscriptionEvents.Metadata, on_metadata)
+        dg_connection.on(LiveTranscriptionEvents.Error, on_error)
+
+        # STEP 5: Configure Deepgram options for live transcription
+        options = LiveOptions(
+            model="nova-2",
+            language="en-US",
+            smart_format=True,
+            )
+
+        # STEP 6: Start the connection
+        dg_connection.start(options)
+
+        # STEP 7: Create a lock and a flag for thread synchronization
+        lock_exit = threading.Lock()
+        exit = False
+
+        # STEP 8: Define a thread that streams the audio and sends it to Deepgram
+        def myThread():
+            with httpx.stream("GET", URL) as r:
+                for data in r.iter_bytes():
+                    lock_exit.acquire()
+                    if exit:
+                        break
+                    lock_exit.release()
+
+                    dg_connection.send(data)
+
+        # STEP 9: Start the thread
+        myHttp = threading.Thread(target=myThread)
+        myHttp.start()
+
+        # STEP 10: Wait for user input to stop recording
+        input("Press Enter to stop recording...\n\n")
+
+        # STEP 11: Set the exit flag to True to stop the thread
+        lock_exit.acquire()
+        exit = True
+        lock_exit.release()
+
+        # STEP 12: Wait for the thread to finish
+        myHttp.join()
+
+        # STEP 13: Close the connection to Deepgram
+        dg_connection.finish()
+
+        print("Finished")
+
+    except Exception as e:
+        print(f"Could not open socket: {e}")
+        return
+
+if __name__ == "__main__":
+    main()
+
+`
+
+> ℹ️
+> --
+>
+> The above example includes the parameter `model=nova-2`, which tells the API to use Deepgram's most powerful and affordable model. Removing this parameter will result in the API using the default model, which is currently `model=base`.
+>
+> It also includes Deepgram's [Smart Formatting](https://developers.deepgram.com/docs/smart-format) feature, `smart_format=true`. This will format currency amounts, phone numbers, email addresses, and more for enhanced transcript readability.
+
+###
+
+Start the Application
+
+[](https://developers.deepgram.com/reference/getting-started-with-live-streaming-audio#start-the-application)
+
+Run the application from the terminal.
+
+PythonJavaScriptC#Go
+
+`
+
+# Run your application using the file you created in the previous step
+# Example: python main.py
+
+python YOUR_PROJECT_NAME.py
+
+`
+
+###
+
+See Results
+
+[](https://developers.deepgram.com/reference/getting-started-with-live-streaming-audio#see-results)
+
+Your transcripts will appear in your browser's developer console. Keep in mind that Deepgram does not store transcriptions. Make sure to save the output or [return transcriptions to a callback URL for custom processing](https://developers.deepgram.com/docs/callback/).
+
+By default, Deepgram live streaming looks for any deviation in the natural flow of speech and returns a finalized response at these places. To learn more about this feature, see [Endpointing](https://developers.deepgram.com/docs/endpointing/).
+
+Deepgram live streaming can also return a series of interim transcripts followed by a final transcript. To learn more, see [Interim Results](https://developers.deepgram.com/docs/interim-results/).
+
+> ℹ️
+> --
+>
+> Endpointing can be used with Deepgram's [Interim Results](https://developers.deepgram.com/docs/interim-results/) feature. To compare and contrast these features, and to explore best practices for using them together, see [Using Endpointing and Interim Results with Live Streaming Audio](https://developers.deepgram.com/docs/understand-endpointing-interim-results/).
+
+What's Next?
+
+[](https://developers.deepgram.com/reference/getting-started-with-live-streaming-audio#whats-next)
+------------------------------------------------------------------------------------------------------------------
+
+Now that you've gotten transcripts for streaming audio, enhance your knowledge by exploring the following areas. You can also check out our [Live Streaming API Reference](https://developers.deepgram.com/reference/streaming) for a list of all possible parameters.
+
+###
+
+Try the Starter Apps
+
+[](https://developers.deepgram.com/reference/getting-started-with-live-streaming-audio#try-the-starter-apps)
+
+Clone and run one of our [Live Audio Starter App](https://developers.deepgram.com/docs/starter-apps) repositories to see a full application with a frontend UI and a backend server streaming audio to Deepgram.
+
+###
+
+Read the Feature Guides
+
+[](https://developers.deepgram.com/reference/getting-started-with-live-streaming-audio#read-the-feature-guides)
+
+Deepgram's features help you to customize your transcripts. Do you want to transcribe audio in other languages? Check out the [Language](https://developers.deepgram.com/docs/language) feature guide. Do you want to remove profanity from the transcript or redact personal information such as credit card numbers? Check out [Profanity Filtering](https://developers.deepgram.com/docs/profanity-filter) or [Redaction](https://developers.deepgram.com/docs/redaction).
+
+Take a glance at our [Feature Overview](https://developers.deepgram.com/docs/stt-streaming-feature-overview) for streaming speech-to-text to see the list of all the features available. Then read more about each feature in its individual guide.
+
+###
+
+Add Your Audio
+
+[](https://developers.deepgram.com/reference/getting-started-with-live-streaming-audio#add-your-audio)
+
+Ready to connect Deepgram to your own audio source? Start by reviewing [how to determine your audio format](https://developers.deepgram.com/docs/determining-your-audio-format-for-live-streaming-audio/) and format your API request accordingly.
+
+Then, you'll want to check out our [Live Streaming Starter Kit](https://developers.deepgram.com/docs/getting-started-with-the-streaming-test-suite). It's the perfect "102" introduction to integrating your own audio.
+
+###
+
+Explore Use Cases
+
+[](https://developers.deepgram.com/reference/getting-started-with-live-streaming-audio#explore-use-cases)
+
+Learn about the different ways you can use Deepgram products to help you meet your business objectives. [Explore Deepgram's use cases](https://developers.deepgram.com/use-cases/).
+
+###
+
+Transcribe Pre-recorded Audio
+
+[](https://developers.deepgram.com/reference/getting-started-with-live-streaming-audio#transcribe-pre-recorded-audio)
+
+Now that you know how to transcribe streaming audio, check out how you can use Deepgram to transcribe pre-recorded audio. To learn more, see [Getting Started with Pre-recorded Audio](https://developers.deepgram.com/docs/getting-started-with-pre-recorded-audio/).
+```
+example deepgram code:
+```
+The following text is a Git repository with code. The structure of the text are sections that begin with ----, followed by a single line containing the file path and file name, followed by a variable amount of lines containing the file contents. The text representing the Git repository ends when the symbols --END-- are encounted. Any further text beyond --END-- are meant to be interpreted as instructions using the aforementioned Git repository as context.
+----
+README.md
+# Live Node Starter
+
+[![Discord](https://dcbadge.vercel.app/api/server/xWRaCDBtW4?style=flat)](https://discord.gg/xWRaCDBtW4)
+
+This sample demonstrates interacting with the Deepgram live streaming API from a Node.js server.
+
+## What is Deepgram?
+
+[Deepgram](https://deepgram.com/) is a foundational AI company providing speech-to-text and language understanding capabilities to make data readable and actionable by human or machines.
+
+## Sign-up to Deepgram
+
+Before you start, it's essential to generate a Deepgram API key to use in this project. [Sign-up now for Deepgram and create an API key](https://console.deepgram.com/signup?jump=keys).
+
+## Quickstart
+
+### Manual
+
+Follow these steps to get started with this starter application.
+
+#### Clone the repository
+
+Go to GitHub and [clone the repository](https://github.com/deepgram-starters/live-node-starter).
+
+#### Install dependencies
+
+Install the project dependencies.
+
+```bash
+npm install
+```
+
+#### Edit the config file
+
+Copy the code from `sample.env` and create a new file called `.env`. Paste in the code and enter your API key you generated in the [Deepgram console](https://console.deepgram.com/).
+
+```js
+DEEPGRAM_API_KEY=%api_key%
+```
+
+#### Select branch
+
+The `main` branch demonstrates a native websockets implementation. Switch to the `socket-io` branch to see a version using socket.io.
+
+```bash
+git checkout socket-io
+```
+
+#### Run the application
+
+The `start` script will run a web and API server concurrently. Once running, you can [access the application in your browser](http://localhost:3000/).
+
+```bash
+npm run start
+```
+
+## Issue Reporting
+
+If you have found a bug or if you have a feature request, please report them at this repository issues section. Please do not report security vulnerabilities on the public GitHub issue tracker. The [Security Policy](./SECURITY.md) details the procedure for contacting Deepgram.
+
+## Getting Help
+
+We love to hear from you so if you have questions, comments or find a bug in the project, let us know! You can either:
+
+- [Open an issue in this repository](https://github.com/deepgram-starters/live-node-starter/issues/new)
+- [Join the Deepgram Github Discussions Community](https://github.com/orgs/deepgram/discussions)
+- [Join the Deepgram Discord Community](https://discord.gg/xWRaCDBtW4)
+
+## Author
+
+[Deepgram](https://deepgram.com)
+
+## License
+
+This project is licensed under the MIT license. See the [LICENSE](./LICENSE) file for more info.
+
+----
+deepgram.toml
+[meta]
+  title = "<usecase> <language/framework> Starter" # update with usecase and framework
+  description = "Basic demo for using Deepgram to <do a thing> in <language/framework>" # update with usecase and framework
+  author = "Deepgram DX Team <devrel@deepgram.com> (https://developers.deepgram.com)" # update for author details
+  useCase = "Prerecorded" # usecase
+  language = "Python" # base language
+  framework = "Flask" # framework if not native
+
+[build] # delete if no build/install steps applicable 
+  command = "pip install -r requirements.txt" # automatically install dependencies, delete if not applicable
+
+[config]
+  sample = "sample.env" # the example config file
+  output = ".env" # the file that we will generate using their API
+
+[post-build]
+  message = "Run `flask run -p 8080` to get up and running." # message to give users once setup is complete
+----
+package.json
+{
+  "name": "live-node-starter",
+  "version": "1.0.0",
+  "description": "A project to get up and running with Deepgram's livestream speech-to-text API",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deepgram-starters/live-node-starter.git"
+  },
+  "keywords": [
+    "speech-to-text",
+    "deepgram",
+    "streaming"
+  ],
+  "author": "Deepgram",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/deepgram-starters/live-node-starter/issues"
+  },
+  "homepage": "https://github.com/deepgram-starters/live-node-starter#readme",
+  "dependencies": {
+    "@deepgram/sdk": "^3.0.1",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "ws": "^8.16.0"
+  }
+}
+
+----
+public\client.js
+const captions = window.document.getElementById("captions");
+
+async function getMicrophone() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    return new MediaRecorder(stream, { mimeType: "audio/webm" });
+  } catch (error) {
+    console.error("error accessing microphone:", error);
+    throw error;
+  }
+}
+
+async function openMicrophone(microphone, socket) {
+  return new Promise((resolve) => {
+    microphone.onstart = () => {
+      console.log("client: microphone opened");
+      document.body.classList.add("recording");
+      resolve();
+    };
+
+    microphone.onstop = () => {
+      console.log("client: microphone closed");
+      document.body.classList.remove("recording");
+    };
+
+    microphone.ondataavailable = (event) => {
+      console.log("client: microphone data received");
+      if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
+        socket.send(event.data);
+      }
+    };
+
+    microphone.start(1000);
+  });
+}
+
+async function closeMicrophone(microphone) {
+  microphone.stop();
+}
+
+async function start(socket) {
+  const listenButton = document.querySelector("#record");
+  let microphone;
+
+  console.log("client: waiting to open microphone");
+
+  listenButton.addEventListener("click", async () => {
+    if (!microphone) {
+      try {
+        microphone = await getMicrophone();
+        await openMicrophone(microphone, socket);
+      } catch (error) {
+        console.error("error opening microphone:", error);
+      }
+    } else {
+      await closeMicrophone(microphone);
+      microphone = undefined;
+    }
+  });
+}
+
+window.addEventListener("load", () => {
+  const socket = new WebSocket("ws://localhost:3000");
+
+  socket.addEventListener("open", async () => {
+    console.log("client: connected to server");
+    await start(socket);
+  });
+
+  socket.addEventListener("message", (event) => {
+    const data = JSON.parse(event.data);
+    if (data.channel.alternatives[0].transcript !== "") {
+      captions.innerHTML = data
+        ? `<span>${data.channel.alternatives[0].transcript}</span>`
+        : "";
+    }
+  });
+
+  socket.addEventListener("close", () => {
+    console.log("client: disconnected from server");
+  });
+});
+
+----
+public\index.html
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Deepgram Test</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="">
+    <div class="content">
+      <img class="click" src="click.png" />
+      <div class="button-container">
+        <input type="checkbox" id="record" class="mic-checkbox" />
+        <label for="record" class="mic-button">
+          <div class="mic">
+            <div class="mic-button-loader"></div>
+            <div class="mic-base"></div>
+          </div>
+          <div class="button-message">
+            <span>&nbsp;</span>
+            <span> START </span>
+          </div>
+        </label>
+      </div>
+    </div>
+    <h1>Captions by Deepgram</h1>
+    <div class="captions" id="captions">
+      <span>Realtime speech transcription API</span>
+    </div>
+    <div class="button-container">
+      <a
+        href="https://console.deepgram.com/signup"
+        class="info-button sign-up"
+        target="_blank"
+        >Sign Up</a
+      >
+      <a
+        href="https://developers.deepgram.com/docs/introduction"
+        class="info-button docs"
+        target="_blank"
+        >Read the Docs</a
+      >
+    </div>
+    <script src="client.js"></script>
+  </body>
+</html>
+
+----
+public\style.css
+/* @import url(https://fonts.googleapis.com/css?family=Montserrat); */
+@import url("https://fonts.googleapis.com/css2?family=Arimo:wght@400;600;700");
+@import url("https://fonts.googleapis.com/css2?family=Inter");
+
+body {
+  color: white;
+  display: flex;
+  align-items: center;
+  font-family: "Inter", sans-serif;
+  justify-content: center;
+  flex-direction: column;
+  height: 90vh;
+  background-color: #000;
+  padding-top: 100px;
+}
+
+.content {
+  display: flex;
+  height: 30vh;
+  position: relative;
+  align-items: center;
+}
+
+.mic-checkbox {
+  display: none;
+}
+
+.mic-checkbox:checked + .mic-button {
+  transform: rotateY(180deg);
+}
+
+.button-container {
+  perspective: 500px;
+  -moz-perspective: 500px;
+  -webkit-perspective: 500px;
+}
+
+.mic-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  width: 200px;
+  border-radius: 100%;
+  transition: transform 0.4s;
+  border: 2px solid #47aca9;
+  transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
+  -moz-transform-style: preserve-3d;
+  position: relative;
+}
+
+.button-message,
+.mic {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  -moz-backface-visibility: hidden;
+}
+
+.button-message {
+  position: absolute;
+  width: 50px;
+  color: #fff;
+  font-family: "Arimo", sans-serif;
+  font-weight: 700;
+  font-size: 25px;
+  text-align: center;
+  line-height: 20px;
+  z-index: 2;
+  transform: rotateY(0deg);
+  pointer-events: none;
+  left: 58px;
+  top: 71px;
+}
+
+.mic-button-loader {
+  position: absolute;
+  height: 202px;
+  width: 200px;
+  background-color: transparent;
+  transform: rotateY(180deg);
+  top: -61px;
+  left: -101px;
+}
+
+.mic-checkbox:checked + .mic-button > .mic > .mic-button-loader {
+  border-top: 2.5px solid #13ef95;
+  border-radius: 100%;
+  animation: borderLoader 1.3s 0.2s ease-in-out infinite;
+}
+
+.mic {
+  position: relative;
+  top: -17px;
+  border: 20px solid #47aca9;
+  height: 48px;
+  width: 0;
+  border-radius: 45px;
+  transform: rotateY(180deg);
+}
+
+.mic:after,
+.mic:before,
+.mic-base {
+  position: absolute;
+}
+
+.mic:after {
+  content: "";
+  top: 16px;
+  left: -30px;
+  height: 57px;
+  width: 50px;
+  background-color: transparent;
+  border: 5px solid #47aca9;
+  border-bottom-left-radius: 102px;
+  border-bottom-right-radius: 110px;
+  border-top: 0;
+}
+
+.mic:before {
+  content: "";
+  top: 77px;
+  left: -2px;
+  border-bottom: 18px solid #47aca9;
+  border-left: 3px solid #47aca9;
+  border-right: 3px solid #47aca9;
+}
+
+.mic-base {
+  top: 95px;
+  left: -14px;
+  border-bottom: 7px solid #47aca9;
+  border-left: 15px solid #47aca9;
+  border-right: 15px solid #47aca9;
+}
+
+@keyframes borderLoader {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(359deg);
+  }
+}
+
+#captions {
+  color: rgb(237, 237, 242);
+  font-size: 24px;
+  font-family: "Inter", sans-serif;
+  margin: 10px 0;
+  text-align: center;
+}
+
+h1 {
+  font-family: "Arimo", sans-serif;
+  font-size: 40px;
+  margin-top: 60px;
+  letter-spacing: -0.02em;
+  opacity: 1;
+  text-align: center;
+}
+
+.button-container {
+  display: flex;
+  gap: 16px;
+}
+
+.info-button {
+  display: flex;
+  align-items: center;
+  color: black;
+  height: 40px;
+  border-radius: 4px;
+  padding: 0 16px;
+  margin-top: 32px;
+  font-family: "Arimo", sans-serif;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.sign-up {
+  color: white;
+  position: relative;
+  background-origin: border-box;
+  background-image: linear-gradient(90deg, #201cff -91.5%, #13ef95 80.05%);
+  box-shadow: 2px 1000px 1px var(--md-code-background) inset;
+  z-index: 1;
+}
+
+.sign-up::before {
+  content: "";
+  border-radius: 4px;
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  left: 1px;
+  background-color: black;
+  z-index: -1;
+}
+
+.docs {
+  background-color: white;
+}
+
+.docs::after {
+  font-family: FontAwesome;
+  font-weight: 900;
+  content: "\f061";
+  margin-right: -4px;
+  margin-left: 8px;
+}
+
+.click {
+  position: absolute;
+  height: 150px;
+  left: 20px;
+  top: -144px;
+}
+
+----
+sample.env
+DEEPGRAM_API_KEY=%api_key%
+----
+server.js
+const express = require("express");
+const http = require("http");
+const WebSocket = require("ws");
+const { createClient, LiveTranscriptionEvents } = require("@deepgram/sdk");
+const dotenv = require("dotenv");
+dotenv.config();
+
+const app = express();
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
+
+const deepgramClient = createClient(process.env.DEEPGRAM_API_KEY);
+let keepAlive;
+
+const setupDeepgram = (ws) => {
+  const deepgram = deepgramClient.listen.live({
+    language: "en",
+    punctuate: true,
+    smart_format: true,
+    model: "nova",
+  });
+
+  if (keepAlive) clearInterval(keepAlive);
+  keepAlive = setInterval(() => {
+    console.log("deepgram: keepalive");
+    deepgram.keepAlive();
+  }, 10 * 1000);
+
+  deepgram.addListener(LiveTranscriptionEvents.Open, async () => {
+    console.log("deepgram: connected");
+
+    deepgram.addListener(LiveTranscriptionEvents.Transcript, (data) => {
+      console.log("deepgram: transcript received");
+      console.log("ws: transcript sent to client");
+      ws.send(JSON.stringify(data));
+    });
+
+    deepgram.addListener(LiveTranscriptionEvents.Close, async () => {
+      console.log("deepgram: disconnected");
+      clearInterval(keepAlive);
+      deepgram.finish();
+    });
+
+    deepgram.addListener(LiveTranscriptionEvents.Error, async (error) => {
+      console.log("deepgram: error received");
+      console.error(error);
+    });
+
+    deepgram.addListener(LiveTranscriptionEvents.Warning, async (warning) => {
+      console.log("deepgram: warning received");
+      console.warn(warning);
+    });
+
+    deepgram.addListener(LiveTranscriptionEvents.Metadata, (data) => {
+      console.log("deepgram: metadata received");
+      console.log("ws: metadata sent to client");
+      ws.send(JSON.stringify({ metadata: data }));
+    });
+  });
+
+  return deepgram;
+};
+
+wss.on("connection", (ws) => {
+  console.log("ws: client connected");
+  let deepgram = setupDeepgram(ws);
+
+  ws.on("message", (message) => {
+    console.log("ws: client data received");
+
+    if (deepgram.getReadyState() === 1 /* OPEN */) {
+      console.log("ws: data sent to deepgram");
+      deepgram.send(message);
+    } else if (deepgram.getReadyState() >= 2 /* 2 = CLOSING, 3 = CLOSED */) {
+      console.log("ws: data couldn't be sent to deepgram");
+      console.log("ws: retrying connection to deepgram");
+      /* Attempt to reopen the Deepgram connection */
+      deepgram.finish();
+      deepgram.removeAllListeners();
+      deepgram = setupDeepgram(ws);
+    } else {
+      console.log("ws: data couldn't be sent to deepgram");
+    }
+  });
+
+  ws.on("close", () => {
+    console.log("ws: client disconnected");
+    deepgram.finish();
+    deepgram.removeAllListeners();
+    deepgram = null;
+  });
+});
+
+app.use(express.static("public/"));
+app.get("/", (req, res) => {
+  res.sendFile(__dirname + "/public/index.html");
+});
+
+server.listen(3000, () => {
+  console.log("Server is listening on port 3000");
+});
+
+--END--
+
+```
+
+
+repo:
+```
+The following text is a Git repository with code. The structure of the text are sections that begin with ----, followed by a single line containing the file path and file name, followed by a variable amount of lines containing the file contents. The text representing the Git repository ends when the symbols --END-- are encounted. Any further text beyond --END-- are meant to be interpreted as instructions using the aforementioned Git repository as context.
+----
+agents-client-api.js
+'use strict';
+import DID_API from './api.js';
+
+const GROQ_API_KEY = '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';
+
+if (DID_API.key == '🤫') alert('Please put your api key inside ./api.json and restart..');
+
+const RTCPeerConnection = (
+  window.RTCPeerConnection ||
+  window.webkitRTCPeerConnection ||
+  window.mozRTCPeerConnection
+).bind(window);
+
+let peerConnection;
+let streamId;
+let sessionId;
+let sessionClientAnswer;
+let statsIntervalId;
+let videoIsPlaying;
+let lastBytesReceived;
+let agentId;
+let chatId;
+
+const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, usually not more than 1 sentance unless absolutely needed.`;
+
+const videoElement = document.getElementById('video-element');
+videoElement.setAttribute('playsinline', '');
+const peerStatusLabel = document.getElementById('peer-status-label');
+const iceStatusLabel = document.getElementById('ice-status-label');
+const iceGatheringStatusLabel = document.getElementById('ice-gathering-status-label');
+const signalingStatusLabel = document.getElementById('signaling-status-label');
+const streamingStatusLabel = document.getElementById('streaming-status-label');
+const agentIdLabel = document.getElementById('agentId-label');
+const chatIdLabel = document.getElementById('chatId-label');
+
+
+
+// Play the idle video when the page is loaded
+window.onload = (event) => {
+
+  playIdleVideo();
+}
+async function createPeerConnection(offer, iceServers) {
+  if (!peerConnection) {
+    peerConnection = new RTCPeerConnection({ iceServers });
+    peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
+    peerConnection.addEventListener('icecandidate', onIceCandidate, true);
+    peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
+    peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
+    peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
+    peerConnection.addEventListener('track', onTrack, true);
+  }
+
+  await peerConnection.setRemoteDescription(offer);
+  console.log('set remote sdp OK');
+
+  const sessionClientAnswer = await peerConnection.createAnswer();
+  console.log('create local sdp OK');
+
+  await peerConnection.setLocalDescription(sessionClientAnswer);
+  console.log('set local sdp OK');
+
+
+
+
+  return sessionClientAnswer;
+}
+function onIceGatheringStateChange() {
+  iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
+  iceGatheringStatusLabel.className = 'iceGatheringState-' + peerConnection.iceGatheringState;
+}
+function onIceCandidate(event) {
+  if (event.candidate) {
+    const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
+
+    // WEBRTC API CALL 3 - Submit network information
+    fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        candidate,
+        sdpMid,
+        sdpMLineIndex,
+        session_id: sessionId,
+      }),
+    });
+  }
+}
+function onIceConnectionStateChange() {
+  iceStatusLabel.innerText = peerConnection.iceConnectionState;
+  iceStatusLabel.className = 'iceConnectionState-' + peerConnection.iceConnectionState;
+  if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'closed') {
+    stopAllStreams();
+    closePC();
+  }
+}
+function onConnectionStateChange() {
+  // not supported in firefox
+  peerStatusLabel.innerText = peerConnection.connectionState;
+  peerStatusLabel.className = 'peerConnectionState-' + peerConnection.connectionState;
+}
+function onSignalingStateChange() {
+  signalingStatusLabel.innerText = peerConnection.signalingState;
+  signalingStatusLabel.className = 'signalingState-' + peerConnection.signalingState;
+}
+function onVideoStatusChange(videoIsPlaying, stream) {
+  let status;
+  if (videoIsPlaying) {
+    status = 'streaming';
+
+    const remoteStream = stream;
+    setVideoElement(remoteStream);
+  } else {
+    status = 'empty';
+    playIdleVideo();
+  }
+  streamingStatusLabel.innerText = status;
+  streamingStatusLabel.className = 'streamingState-' + status;
+}
+function onTrack(event) {
+  /**
+   * The following code is designed to provide information about wether currently there is data
+   * that's being streamed - It does so by periodically looking for changes in total stream data size
+   *
+   * This information in our case is used in order to show idle video while no video is streaming.
+   * To create this idle video use the POST https://api.d-id.com/talks (or clips) endpoint with a silent audio file or a text script with only ssml breaks
+   * https://docs.aws.amazon.com/polly/latest/dg/supportedtags.html#break-tag
+   * for seamless results use `config.fluent: true` and provide the same configuration as the streaming video
+   */
+
+  if (!event.track) return;
+
+  statsIntervalId = setInterval(async () => {
+    const stats = await peerConnection.getStats(event.track);
+    stats.forEach((report) => {
+      if (report.type === 'inbound-rtp' && report.mediaType === 'video') {
+
+        const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
+
+        if (videoStatusChanged) {
+          videoIsPlaying = report.bytesReceived > lastBytesReceived;
+          onVideoStatusChange(videoIsPlaying, event.streams[0]);
+        }
+        lastBytesReceived = report.bytesReceived;
+      }
+    });
+  }, 300);
+}
+
+function setVideoElement(stream) {
+  if (!stream) return;
+  // Add Animation Class
+  videoElement.classList.add("animated")
+
+  // Removing browsers' autoplay's 'Mute' Requirement
+  videoElement.muted = false;
+
+  videoElement.srcObject = stream;
+  videoElement.loop = false;
+
+  // Remove Animation Class after it's completed
+  setTimeout(() => {
+    videoElement.classList.remove("animated")
+  }, 300);
+
+  // safari hotfix
+  if (videoElement.paused) {
+    videoElement
+      .play()
+      .then((_) => { })
+      .catch((e) => { });
+  }
+}
+function playIdleVideo() {
+  // Add Animation Class
+  videoElement.classList.toggle("animated")
+
+  videoElement.srcObject = undefined;
+  videoElement.src = 'emma_idle.mp4';
+  videoElement.loop = true;
+
+  // Remove Animation Class after it's completed
+  setTimeout(() => {
+    videoElement.classList.remove("animated")
+  }, 300);
+}
+function stopAllStreams() {
+  if (videoElement.srcObject) {
+    console.log('stopping video streams');
+    videoElement.srcObject.getTracks().forEach((track) => track.stop());
+    videoElement.srcObject = null;
+  }
+}
+function closePC(pc = peerConnection) {
+  if (!pc) return;
+  console.log('stopping peer connection');
+  pc.close();
+  pc.removeEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
+  pc.removeEventListener('icecandidate', onIceCandidate, true);
+  pc.removeEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
+  pc.removeEventListener('connectionstatechange', onConnectionStateChange, true);
+  pc.removeEventListener('signalingstatechange', onSignalingStateChange, true);
+  pc.removeEventListener('track', onTrack, true);
+  clearInterval(statsIntervalId);
+  iceGatheringStatusLabel.innerText = '';
+  signalingStatusLabel.innerText = '';
+  iceStatusLabel.innerText = '';
+  peerStatusLabel.innerText = '';
+  console.log('stopped peer connection');
+  if (pc === peerConnection) {
+    peerConnection = null;
+  }
+}
+const maxRetryCount = 2;
+const maxDelaySec = 2;
+async function fetchWithRetries(url, options, retries = 1) {
+  try {
+    return await fetch(url, options);
+  } catch (err) {
+    if (retries <= maxRetryCount) {
+      const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 500;
+
+      await new Promise((resolve) => setTimeout(resolve, delay));
+
+      console.log(`Request failed, retrying ${retries}/${maxRetryCount}. Error ${err}`);
+      return fetchWithRetries(url, options, retries + 1);
+    } else {
+      throw new Error(`Max retries exceeded. error: ${err}`);
+    }
+  }
+}
+
+const connectButton = document.getElementById('connect-button');
+connectButton.onclick = async () => {
+
+
+  if (peerConnection && peerConnection.connectionState === 'connected') {
+    return;
+  }
+  stopAllStreams();
+  closePC();
+
+  // WEBRTC API CALL 1 - Create a new stream
+  const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg'
+    }),
+  });
+
+
+  const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+  streamId = newStreamId;
+  sessionId = newSessionId;
+  try {
+    sessionClientAnswer = await createPeerConnection(offer, iceServers);
+  } catch (e) {
+    console.log('error during streaming setup', e);
+    stopAllStreams();
+    closePC();
+    return;
+  }
+
+  // WEBRTC API CALL 2 - Start a stream
+  const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      answer: sessionClientAnswer,
+      session_id: sessionId,
+    }),
+  });
+};
+
+
+document.addEventListener("DOMContentLoaded", () => {
+
+  const speakButton = document.getElementById('speak-button');
+  speakButton.onclick = async () => {
+    if (speakButton.innerText === "Speak") {
+      // Start recording
+      await startRecording();
+      speakButton.innerText = "Stop";
+    } else {
+      // Stop recording
+      await stopRecording();
+      speakButton.innerText = "Speak";
+    }
+  };
+
+  async function startRecording() {
+    const deepgramApiKey = "ab184815a3899aea7e3add69b9d5b7bc6894dc74";
+    const deepgramLive = new deepgram.LiveTranscription(deepgramApiKey, {
+      language: "en",
+      punctuate: true,
+      smart_format: true,
+      model: "nova",
+      channels: 1,
+      sample_rate: 16000,
+      endpointing: true
+    });
+  
+    deepgramLive.addListener(deepgram.LiveTranscriptionEvent.Open, async () => {
+      console.log("Deepgram connection opened");
+    });
+  
+    deepgramLive.addListener(deepgram.LiveTranscriptionEvent.Error, (error) => {
+      console.error("Deepgram error:", error);
+    });
+  
+    // Add the Transcript event listener here
+    deepgramLive.addListener(deepgram.LiveTranscriptionEvent.Transcript, (data) => {
+      console.log("Transcript received:", data);
+      const transcript = data.channel.alternatives[0].transcript;
+      sendTranscriptToChat(transcript);
+    });
+  
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+  
+      mediaRecorder.addEventListener("dataavailable", (event) => {
+        if (event.data.size > 0) {
+          deepgramLive.send(event.data);
+        }
+      });
+  
+      mediaRecorder.start(750);
+    } catch (error) {
+      console.error("Error accessing microphone:", error);
+    }
+  }
+
+  async function stopRecording() {
+    deepgramLive.stop();
+  }
+
+  async function sendTranscriptToChat(transcript) {
+    // Pasting the user's message to the Chat History element
+    document.getElementById("msgHistory").innerHTML += `<span style='opacity:0.5'><u>User:</u> ${transcript}</span><br>`;
+
+    // Agents Overview - Step 3: Send a Message to a Chat session - Send a message to a Chat
+    const playResponse = await fetchWithRetries(`${DID_API.url}/agents/${agentId}/chat/${chatId}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        "streamId": streamId,
+        "sessionId": sessionId,
+        "messages": [
+          {
+            "role": "user",
+            "content": transcript,
+            "created_at": new Date().toString()
+          }
+        ]
+      }),
+    });
+  }
+
+});
+
+
+
+
+async function startStreaming(assistantReply) {
+  const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      script: {
+        type: 'text',
+        input: assistantReply,
+      },
+      config: {
+        fluent: true,
+        pad_audio: 0,
+      },
+      session_id: sessionId,
+    }),
+  });
+}
+
+
+
+const startButton = document.getElementById('start-button');
+startButton.onclick = async () => {
+  if (peerConnection?.signalingState === 'stable' || peerConnection?.iceConnectionState === 'connected') {
+    // Pasting the user's message to the Chat History element
+    document.getElementById("msgHistory").innerHTML += `<span style='opacity:0.5'><u>User:</u> ${textArea.value}</span><br>`;
+
+    // Add user message to chat history
+    chatHistory.push({
+      role: 'user',
+      content: textArea.value
+    });
+
+    // Clearing the text-box element
+    document.getElementById("textArea").value = "";
+
+    try {
+      const response = await fetch('http://localhost:3001/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [
+            {
+              role: 'system',
+              content: context,
+            },
+            ...chatHistory,
+          ],
+          model: 'mixtral-8x7b-32768',
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      let assistantReply = '';
+      let done = false;
+
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+
+        if (value) {
+          const chunk = new TextDecoder().decode(value);
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data:')) {
+              const data = line.substring(5).trim();
+              if (data === '[DONE]') {
+                done = true;
+                break;
+              }
+
+              const parsed = JSON.parse(data);
+              assistantReply += parsed.choices[0]?.delta?.content || '';
+            }
+          }
+        }
+      }
+
+      // Add assistant reply to chat history
+      chatHistory.push({
+        role: 'assistant',
+        content: assistantReply,
+      });
+
+      // Append the complete assistant reply to the chat history element
+      document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${assistantReply}</span><br>`;
+
+      // Initiate streaming
+      await startStreaming(assistantReply);
+    } catch (error) {
+      console.error('Error:', error);
+      // Handle the error, display an error message, etc.
+    }
+  }
+};
+
+
+const destroyButton = document.getElementById('destroy-button');
+destroyButton.onclick = async () => {
+  await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ session_id: sessionId }),
+  });
+
+  stopAllStreams();
+  closePC();
+};
+
+----
+api.js
+export default {
+    key: "YWRtaW4xQHNrb29wLmRpZ2l0YWw:quCILV7kl0vt4FJEvJLvf",
+    url: "https://api.d-id.com",
+    service: "talks",
+    groqKey: "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"
+};
+----
+app.js
+const express = require('express');
+const http = require('http');
+const cors = require('cors');
+
+const port = 3000;
+
+const app = express();
+app.use(cors());
+
+app.use('/', express.static(__dirname, {
+    setHeaders: (res, path) => {
+      if (path.endsWith('.json')) {
+        res.type('application/javascript');
+      }
+    }
+  }));
+
+app.use('/', express.static(__dirname));
+
+app.get('/', function(req, res) {
+    res.sendFile(__dirname + '/index.html')
+});
+app.get('/agents', function(req, res) {
+    res.sendFile(__dirname + '/index-agents.html')
+});
+
+const server = http.createServer(app);
+
+server.listen(port, () => console.log(`Server started on port localhost:${port}`));
+
+
+----
+groqServer.js
+const express = require('express');
+const cors = require('cors');
+const Groq = require('groq-sdk');
+
+const app = express();
+const port = 3001;
+
+const GROQ_API_KEY = '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';
+const groq = new Groq({ apiKey: GROQ_API_KEY });
+
+app.use(cors());
+app.use(express.json());;
+
+app.post('/chat', async (req, res) => {
+  const { messages, model } = req.body;
+
+  try {
+    const completion = await groq.chat.completions.create({
+      messages,
+      model,
+      stream: true,
+    });
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    });
+
+    for await (const chunk of completion) {
+      res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+    }
+
+    res.write(`data: [DONE]\n\n`);
+    res.end();
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+});
+
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
+});
+----
+index-agents.html
+<!DOCTYPE html>
+<html>
+<head>
+  <title>D-ID Agents API Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@300;400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style-agents.css">
+  <link rel="icon" type="image/png" sizes="192x192" href="https://studio.d-id.com/favicon/favicon-192x192.png">
+</head>
+
+<body>
+  <div id="content">
+    <div id="status">
+      <h4>WebRTC Connection Status</h4>
+      ICE gathering status: <label id="ice-gathering-status-label"></label><br />
+      ICE status: <label id="ice-status-label"></label><br />
+      Peer connection status: <label id="peer-status-label"></label><br />
+      Signaling status: <label id="signaling-status-label"></label><br />
+      Streaming status: <label id="streaming-status-label"></label><br />
+      <br>
+      <div id="buttons">
+        <button id="connect-button" type="button">Connect</button>
+        <button id="destroy-button" type="button">Destroy</button>
+      </div>
+    </div>
+
+    <div id="video-wrapper">
+      <div>
+        <video id="video-element" width="400" height="400" src="" autoplay loop muted class="animated"></video>
+      </div>
+    </div>
+
+    <div class="chat">
+      <h4>Chat History</h4>
+      <div id="msgHistory">
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <h3>Speak your message:</h3>
+    <button id="speak-button" type="button">Speak</button>
+  </div>
+
+  <script type="module" src="./agents-client-api.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@deepgram/sdk"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/groq-sdk@0.3.2/index.mjs?mime=application/javascript" type="module"></script>
+</body>
+</html>
+----
+index.html
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>D-ID Streaming POC</title>
+    <!-- added google fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Mulish:wght@300;400;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      .peerConnectionState-new {
+        color: cornflowerblue;
+      }
+      .peerConnectionState-connecting {
+        color: orange;
+      }
+      .peerConnectionState-connected {
+        color: green;
+      }
+      .peerConnectionState-disconnected,
+      .peerConnectionState-closed,
+      .peerConnectionState-failed {
+        color: red;
+      }
+
+      .iceConnectionState-new {
+        color: cornflowerblue;
+      }
+      .iceConnectionState-checking {
+        color: orange;
+      }
+      .iceConnectionState-connected,
+      .iceConnectionState-completed {
+        color: green;
+      }
+      .peerConnectionState-disconnected,
+      .peerConnectionState-closed,
+      .peerConnectionState-failed {
+        color: red;
+      }
+
+      .iceGatheringState-new {
+        color: cornflowerblue;
+      }
+      .iceGatheringState-gathering {
+        color: orange;
+      }
+      .iceGatheringState-complete {
+        color: black;
+      }
+
+      .signalingState-stable {
+        color: green;
+      }
+      .signalingState-have-local-offer,
+      .signalingState-have-remote-offer,
+      .signalingState-have-local-pranswer,
+      .signalingState-have-remote-pranswer {
+        color: cornflowerblue;
+      }
+      .signalingState-closed {
+        color: red;
+      }
+
+      .streamingState-streaming {
+        color: green;
+      }
+
+      .streamingState-empty {
+        color: grey;
+      }
+
+      /* added css from here */
+
+      body * {
+        font-family: 'Mulish', sans-serif;
+        text-align: center;
+      }
+
+      #content {
+        width: 820px;
+        position: relative;
+        margin: 0 auto;
+      }
+
+      #buttons {
+        clear: both;
+        padding: 0 0 0 0;
+        text-align: center;
+      }
+
+      button {
+        padding: 10px 20px;
+        border-radius: 5px;
+        border: none;
+        font-size: 16px;
+        margin: 0 5px;
+        background-color: #7459fe;
+        color: #fff;
+      }
+
+      button:hover {
+        background-color: #9480ff;
+        cursor: pointer;
+        transition: all 0.2s ease-out;
+      }
+
+      #status {
+        clear: both;
+        padding: 20px 0 0 0;
+        text-align: left;
+        display: inline-block;
+        zoom: 1;
+        line-height: 140%;
+        font-size: 15px;
+      }
+
+      #status div {
+        padding-bottom: 10px;
+      }
+
+      #video-wrapper {
+        background: url(bg.png);
+        height: 500px;
+        background-position: top;
+      }
+
+      #video-wrapper div {
+        width: 400px;
+        margin: 0 auto;
+        padding: 50px 0 0 0;
+      }
+      video {
+        display: block;
+        /*border:1px solid;*/
+        border-radius: 50%;
+        background-color: #fff;
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- adde "id=content" -->
+    <div id="content">
+      <!-- added "id=video-wrapper" -->
+      <div id="video-wrapper">
+        <div>
+          <video id="video-element" width="400" height="400" autoplay></video>
+        </div>
+      </div>
+      <br />
+
+      <!-- added div#buttons -->
+      <div id="buttons">
+        <button id="connect-button" type="button">Connect</button>
+        <button id="start-button" type="button">Start</button>
+        <button id="destroy-button" type="button">Destroy</button>
+      </div>
+
+      <!-- added div#status -->
+      <div id="status">
+        <!-- removed the wrapping <div> tags -->
+        ICE gathering status: <label id="ice-gathering-status-label"></label
+        ><br />
+        ICE status: <label id="ice-status-label"></label><br />
+        Peer connection status: <label id="peer-status-label"></label><br />
+        Signaling status: <label id="signaling-status-label"></label><br />
+        Streaming status: <label id="streaming-status-label"></label><br />
+      </div>
+    </div>
+
+    <script type="module" src="./index.js"></script>
+  </body>
+</html>
+
+----
+index.js
+import './streaming-client-api.js';
+
+----
+package.json
+{
+  "dependencies": {
+    "@deepgram/sdk": "^3.2.0",
+    "axios": "^1.4.0",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "groq-sdk": "^0.3.2"
+  },
+  "scripts": {
+    "dev": "node app.js"
+  }
+}
+----
+streaming-client-api.js
+'use strict';
+import DID_API from './api';
+
+const GROQ_API_KEY = DID_API.groqKey;
+
+if (DID_API.key == '🤫') alert('Please put your api key inside ./api.json and restart..');
+
+const RTCPeerConnection = (
+  window.RTCPeerConnection ||
+  window.webkitRTCPeerConnection ||
+  window.mozRTCPeerConnection
+).bind(window);
+
+let peerConnection;
+let streamId;
+let sessionId;
+let sessionClientAnswer;
+
+let statsIntervalId;
+let videoIsPlaying;
+let lastBytesReceived;
+
+const videoElement = document.getElementById('video-element');
+videoElement.setAttribute('playsinline', '');
+const peerStatusLabel = document.getElementById('peer-status-label');
+const iceStatusLabel = document.getElementById('ice-status-label');
+const iceGatheringStatusLabel = document.getElementById('ice-gathering-status-label');
+const signalingStatusLabel = document.getElementById('signaling-status-label');
+const streamingStatusLabel = document.getElementById('streaming-status-label');
+
+const presenterInputByService = {
+  talks: {
+    source_url: 'https://d-id-public-bucket.s3.amazonaws.com/or-roman.jpg',
+  },
+  clips: {
+    presenter_id: 'rian-lZC6MmWfC1',
+    driver_id: 'mXra4jY38i'
+  }
+}
+
+const connectButton = document.getElementById('connect-button');
+connectButton.onclick = async () => {
+  if (peerConnection && peerConnection.connectionState === 'connected') {
+    return;
+  }
+
+  stopAllStreams();
+  closePC();
+
+  const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(presenterInputByService[DID_API.service]),
+  });
+
+  const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+  streamId = newStreamId;
+  sessionId = newSessionId;
+
+  try {
+    sessionClientAnswer = await createPeerConnection(offer, iceServers);
+  } catch (e) {
+    console.log('error during streaming setup', e);
+    stopAllStreams();
+    closePC();
+    return;
+  }
+
+  const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      answer: sessionClientAnswer,
+      session_id: sessionId,
+    }),
+  });
+};
+
+const startButton = document.getElementById('start-button');
+startButton.onclick = async () => {
+  // connectionState not supported in firefox
+  if (peerConnection?.signalingState === 'stable' || peerConnection?.iceConnectionState === 'connected') {
+    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'audio',
+          audio_url: 'https://d-id-public-bucket.s3.us-west-2.amazonaws.com/webrtc.mp3',
+        },
+        ...(DID_API.service === 'clips' && {
+          background: {
+            color: '#FFFFFF'
+          }
+        }),
+        config: {
+          stitch: true,
+        },
+        session_id: sessionId,
+      }),
+    });
+  }
+};
+
+const destroyButton = document.getElementById('destroy-button');
+destroyButton.onclick = async () => {
+  await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ session_id: sessionId }),
+  });
+
+  stopAllStreams();
+  closePC();
+};
+
+function onIceGatheringStateChange() {
+  iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
+  iceGatheringStatusLabel.className = 'iceGatheringState-' + peerConnection.iceGatheringState;
+}
+function onIceCandidate(event) {
+  console.log('onIceCandidate', event);
+  if (event.candidate) {
+    const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
+
+    fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        candidate,
+        sdpMid,
+        sdpMLineIndex,
+        session_id: sessionId,
+      }),
+    });
+  }
+}
+function onIceConnectionStateChange() {
+  iceStatusLabel.innerText = peerConnection.iceConnectionState;
+  iceStatusLabel.className = 'iceConnectionState-' + peerConnection.iceConnectionState;
+  if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'closed') {
+    stopAllStreams();
+    closePC();
+  }
+}
+function onConnectionStateChange() {
+  // not supported in firefox
+  peerStatusLabel.innerText = peerConnection.connectionState;
+  peerStatusLabel.className = 'peerConnectionState-' + peerConnection.connectionState;
+}
+function onSignalingStateChange() {
+  signalingStatusLabel.innerText = peerConnection.signalingState;
+  signalingStatusLabel.className = 'signalingState-' + peerConnection.signalingState;
+}
+
+function onVideoStatusChange(videoIsPlaying, stream) {
+  let status;
+  if (videoIsPlaying) {
+    status = 'streaming';
+    const remoteStream = stream;
+    setVideoElement(remoteStream);
+  } else {
+    status = 'empty';
+    playIdleVideo();
+  }
+  streamingStatusLabel.innerText = status;
+  streamingStatusLabel.className = 'streamingState-' + status;
+}
+
+function onTrack(event) {
+  /**
+   * The following code is designed to provide information about wether currently there is data
+   * that's being streamed - It does so by periodically looking for changes in total stream data size
+   *
+   * This information in our case is used in order to show idle video while no video is streaming.
+   * To create this idle video use the POST https://api.d-id.com/talks (or clips) endpoint with a silent audio file or a text script with only ssml breaks
+   * https://docs.aws.amazon.com/polly/latest/dg/supportedtags.html#break-tag
+   * for seamless results use `config.fluent: true` and provide the same configuration as the streaming video
+   */
+
+  if (!event.track) return;
+
+  statsIntervalId = setInterval(async () => {
+    const stats = await peerConnection.getStats(event.track);
+    stats.forEach((report) => {
+      if (report.type === 'inbound-rtp' && report.mediaType === 'video') {
+        const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
+
+        if (videoStatusChanged) {
+          videoIsPlaying = report.bytesReceived > lastBytesReceived;
+          onVideoStatusChange(videoIsPlaying, event.streams[0]);
+        }
+        lastBytesReceived = report.bytesReceived;
+      }
+    });
+  }, 300);
+}
+
+async function createPeerConnection(offer, iceServers) {
+  if (!peerConnection) {
+    peerConnection = new RTCPeerConnection({ iceServers });
+    peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
+    peerConnection.addEventListener('icecandidate', onIceCandidate, true);
+    peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
+    peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
+    peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
+    peerConnection.addEventListener('track', onTrack, true);
+  }
+
+  await peerConnection.setRemoteDescription(offer);
+  console.log('set remote sdp OK');
+
+  const sessionClientAnswer = await peerConnection.createAnswer();
+  console.log('create local sdp OK');
+
+  await peerConnection.setLocalDescription(sessionClientAnswer);
+  console.log('set local sdp OK');
+
+  return sessionClientAnswer;
+}
+
+function setVideoElement(stream) {
+  if (!stream) return;
+  videoElement.srcObject = stream;
+  videoElement.loop = false;
+
+  // safari hotfix
+  if (videoElement.paused) {
+    videoElement
+      .play()
+      .then((_) => {})
+      .catch((e) => {});
+  }
+}
+
+function playIdleVideo() {
+  videoElement.srcObject = undefined;
+  videoElement.src = DID_API.service == 'clips' ? 'rian_idle.mp4' : 'or_idle.mp4';
+  videoElement.loop = true;
+}
+
+function stopAllStreams() {
+  if (videoElement.srcObject) {
+    console.log('stopping video streams');
+    videoElement.srcObject.getTracks().forEach((track) => track.stop());
+    videoElement.srcObject = null;
+  }
+}
+
+function closePC(pc = peerConnection) {
+  if (!pc) return;
+  console.log('stopping peer connection');
+  pc.close();
+  pc.removeEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
+  pc.removeEventListener('icecandidate', onIceCandidate, true);
+  pc.removeEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
+  pc.removeEventListener('connectionstatechange', onConnectionStateChange, true);
+  pc.removeEventListener('signalingstatechange', onSignalingStateChange, true);
+  pc.removeEventListener('track', onTrack, true);
+  clearInterval(statsIntervalId);
+  iceGatheringStatusLabel.innerText = '';
+  signalingStatusLabel.innerText = '';
+  iceStatusLabel.innerText = '';
+  peerStatusLabel.innerText = '';
+  console.log('stopped peer connection');
+  if (pc === peerConnection) {
+    peerConnection = null;
+  }
+}
+
+const maxRetryCount = 3;
+const maxDelaySec = 4;
+
+async function fetchWithRetries(url, options, retries = 1) {
+  try {
+    const res = await fetch(url, options);
+    if(res.status >= 200 && res.status <= 299) {
+      return res;
+    } else {
+      throw new Error(`Response status ${res.status}`);
+    }
+  } catch (err) {
+    if (retries <= maxRetryCount) {
+      const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 500;
+
+      await new Promise((resolve) => setTimeout(resolve, delay));
+
+      console.log(`Request failed, retrying ${retries}/${maxRetryCount}. Error ${err}`);
+      return fetchWithRetries(url, options, retries + 1);
+    } else {
+      throw new Error(`Max retries exceeded. error: ${err}`);
+    }
+  }
+}
+
+----
+style-agents.css
+.peerConnectionState-new {
+  color: cornflowerblue;
+}
+.peerConnectionState-connecting {
+  color: orange;
+}
+.peerConnectionState-connected {
+  color: green;
+}
+.peerConnectionState-disconnected,
+.peerConnectionState-closed,
+.peerConnectionState-failed {
+  color: red;
+}
+
+.iceConnectionState-new {
+  color: cornflowerblue;
+}
+.iceConnectionState-checking {
+  color: orange;
+}
+.iceConnectionState-connected,
+.iceConnectionState-completed {
+  color: green;
+}
+.peerConnectionState-disconnected,
+.peerConnectionState-closed,
+.peerConnectionState-failed {
+  color: red;
+}
+
+.iceGatheringState-new {
+  color: cornflowerblue;
+}
+.iceGatheringState-gathering {
+  color: orange;
+}
+.iceGatheringState-complete {
+  color: black;
+}
+
+.signalingState-stable {
+  color: green;
+}
+.signalingState-have-local-offer,
+.signalingState-have-remote-offer,
+.signalingState-have-local-pranswer,
+.signalingState-have-remote-pranswer {
+  color: cornflowerblue;
+}
+.signalingState-closed {
+  color: red;
+}
+
+.streamingState-streaming {
+  color: green;
+}
+
+.streamingState-empty {
+  color: grey;
+}
+
+#agentId-label, #chatId-label{
+  color: green;
+}
+
+/* added css from here */
+
+body * {
+  font-family: 'Mulish', sans-serif;
+  text-align: center;
+}
+
+#content {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-evenly;
+  margin-top: 50px;
+}
+
+#buttons {
+  clear: both;
+  padding: 0 0 0 0;
+  text-align: center;
+}
+
+button {
+  padding: 10px 20px;
+  border-radius: 5px;
+  border: none;
+  font-size: 16px;
+  margin: 0 5px;
+  background-color: #7459fe;
+  color: #fff;
+}
+
+button#connect-button {
+background-color: green;
+}
+button#destroy-button{
+  background-color: red;
+}
+
+button#start-button{
+  margin: 1em;
+}
+
+button:hover, #destroy-button:hover,#connect-button:hover {
+  filter: brightness(85%);
+  cursor: pointer;
+  transition: all 0.2s ease-out;
+}
+
+h4{
+  margin: 0;
+  margin-bottom: 10px;
+}
+
+textarea {
+  font-size: 16px;
+  text-align: center;
+  width: 500px;
+  border-radius: 5px;
+  padding: 10px 20px;
+  border: 2px solid #7459fe;
+  font-size: 16px;
+  margin: 0 5px;
+}
+
+#msgHistory {
+  overflow-y: auto;
+  line-break: loose;
+}
+
+#status {
+  display: inline-block;
+  zoom: 1;
+  line-height: 140%;
+  font-size: 15px;
+  width: 400px;
+}
+
+#status div {
+  padding-bottom: 10px;
+}
+
+#video-wrapper {
+  /* height: 500px; */
+  width: 400px;
+  height: 400px;
+  background-position: top;
+}
+
+.chat{
+  width: 400px;
+}
+
+
+video {
+  /* display: block; */
+  border-radius: 50%;
+  background-image: url("emma_idle.png");
+  background-position: top;
+  /* position: absolute; */
+  background-size: contain;
+}
+
+.animated {
+  animation: opacityAnimation 0.2s ease-in-out;
+}
+
+@keyframes opacityAnimation {
+from { opacity: 0.8; }
+to { opacity: 1; }
+}
+
+--END--
 ```
 
 Question:
 
-Modify this repo to use groq instead of openai. Specifically there is a demo when you visit /index-agents.html.
-Use mixtral-8x7b-32768
-We will have to mainly modify streaming-client-api.js, and maybe others. 
+I have modified this repo to use groq instead of openai. Specifically when you visit /index-agents.html.
+I used mixtral-8x7b-32768
 
-Additionally, forget about all the knowledgebase features of d-id, largely located in agents-client-api.js and instead lets define the system prompt and add in context to the user prompt for mistral. Make sure to specify a variable for the context in the file somewhere.
+Now modify the app so the we change the text input to be an microphone input.
+The button "Send" should be changed to "Speak" and once clicked the button should change to "Stop" and the user should be able to speak into the microphone. Once the user clicks "Stop" the text should be sent to the chat as if it was typed in the text input.
 
-Additionally, when submitting a new message, make sure we are including the previous messages in the conversation.
+We want to process the audio using the deepgram API so we can get back the text.
 
-Modify the file or repo accordingly, or if there is a better file to start with as a template feel free to use that. 
-
-remember that we want to modify the code to use the Mistral API for the chat functionality while still utilizing the D-ID Live Streaming API for the video streaming probably from the talks endpoint as explained in the d-id docs provided above.
-
-additionally, in the current ui for index-agents.html there is a button for "create new agent" which should be removed as we will not be using the d-id api for creating new agents. We will need the page not to require this as well.
+Modify the file or repo accordingly.
 
 when returning the files, write out the full files which need to be changed, only leaving out the content of a function if it has not changed, however you still NEED to write out the function definition. All else should be included and in the correct order.
 
+We want to make it as fast as possible. 
+
+the repo provided above is an attempt at these latest changes, however we are getting some issues:
+
+agents-client-api.js:404 
+ Uncaught TypeError: Cannot set properties of null (setting 'onclick')
+    at agents-client-api.js:404:21
+(anonymous)	@	agents-client-api.js:404
+
+agents-client-api.js:303 
+ Uncaught (in promise) TypeError: deepgram.LiveTranscription is not a constructor
+    at startRecording (agents-client-api.js:303:26)
+    at speakButton.onclick (agents-client-api.js:292:13)
+startRecording	@	agents-client-api.js:303
+speakButton.onclick	@	agents-client-api.js:292
+﻿
 
 
-Now change the text input to be an microphone input.
-The button "Send" should be changed to "Speak" and once clicked the button should change to "Stop" and the user should be able to speak into the microphone. Once the user clicks "Stop" the text should be sent to the chat as if it was typed in the text input.
+the connect button works and the head moves in idel mode, but only a console error happens when i press speak, and other than that it doesnt do anything.
+
+
+import { Deepgram, LiveTranscriptionEvents, createClient } from '@deepgram/sdk';
+whenver i add this line it fails to start.
+
+Do i need to modify the app to accomadate the streaming from deepgram.
