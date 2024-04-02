@@ -474,6 +474,7 @@ async function sendChatToGroq() {
       }),
     });
 
+
     if (!response.ok) {
       throw new Error(`HTTP error ${response.status}`);
     }
@@ -514,6 +515,7 @@ async function sendChatToGroq() {
     // Append the complete assistant reply to the chat history element
     document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${assistantReply}</span><br>`;
 
+
     // Reset inactivity timeout
     clearTimeout(inactivityTimeout);
     inactivityTimeout = setTimeout(() => {
@@ -532,6 +534,7 @@ async function sendChatToGroq() {
     }
   }
 }
+
 
 
 async function reinitializeConnection() {
