@@ -25,7 +25,6 @@ let deepgramSocket;
 let transcript = '';
 let inactivityTimeout;
 let transcriptionTimer;
-const endpointingThreshold = 2000; 
 
 
 
@@ -360,12 +359,12 @@ async function startStreaming(assistantReply) {
 }
 
 
-async function async function startRecording() {
+async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   mediaRecorder = new MediaRecorder(stream);
 
-  deepgramSocket = new WebSocket(`wss://api.deepgram.com/v1/listen?interim_results=true&endpointing=${endpointingThreshold}`, [
-    'token',
+  deepgramSocket = new WebSocket('wss://api.deepgram.com/v1/listen?interim_results=true&endpointing=1500', [
+        'token',
     DEEPGRAM_API_KEY,
   ]);
 
@@ -386,43 +385,44 @@ async function async function startRecording() {
         console.log("Sent KeepAlive message");
       }
     }, 3000);
+
+    // Start transcription timer
+    transcriptionTimer = setInterval(() => {
+      if (transcript.trim() !== '') {
+        document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User:</u> ${transcript}</span><br>`;
+        chatHistory.push({
+          role: 'user',
+          content: transcript,
+        });
+        sendChatToGroq();
+        transcript = '';
+      }
+    }, 5000); // Send transcription every 5 seconds
   };
 
   deepgramSocket.onmessage = (message) => {
     const received = JSON.parse(message.data);
     const partialTranscript = received.channel.alternatives[0].transcript;
-    const isFinal = received.speech_final;
+    const isFinal = received.is_final;
   
     if (partialTranscript) {
       if (isFinal) {
-        // Clear the transcription timer
-        clearTimeout(transcriptionTimer);
-  
-        // Remove the interim transcript from the UI
-        document.getElementById('msgHistory').innerHTML = document.getElementById('msgHistory').innerHTML.replace(/<span class="interim-transcript">[^<]*<\/span><br>/, '');
-  
-        // Add the final transcript to the UI
-        document.getElementById('msgHistory').innerHTML += `<span class="final-transcript"><u>User:</u> ${transcript}</span><br>`;
-  
-        // Start a new transcription timer
-        transcriptionTimer = setTimeout(() => {
-          if (transcript.trim() !== '') {
-            chatHistory.push({
-              role: 'user',
-              content: transcript,
-            });
-            sendChatToGroq();
-            transcript = '';
-          }
-        }, 1000); // Adjust this value as needed
+        transcript += partialTranscript;
+        document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User:</u> ${transcript}</span><br>`;
+        chatHistory.push({
+          role: 'user',
+          content: transcript,
+        });
+        sendChatToGroq();
+        transcript = '';
       } else {
         transcript += partialTranscript;
-        // Update the interim transcript in the UI
-        document.getElementById('msgHistory').innerHTML = document.getElementById('msgHistory').innerHTML.replace(/<span class="interim-transcript">[^<]*<\/span><br>/, `<span class="interim-transcript">${transcript}</span><br>`);
+        document.getElementById('msgHistory').innerHTML = document.getElementById('msgHistory').innerHTML.replace(/<span style='opacity:0.5'><u>User \(interim\):<\/u>.*<\/span><br>/, `<span style='opacity:0.5'><u>User (interim):</u> ${transcript}</span><br>`);
       }
     }
   };
   
+
   deepgramSocket.onclose = async () => {
     console.log('WebSocket connection closed');
     if (isRecording) {

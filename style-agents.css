@@ -116,16 +116,6 @@ h4{
   margin-bottom: 10px;
 }
 
-.interim-transcript {
-  color: gray;
-  font-style: italic;
-}
-
-.final-transcript {
-  color: black;
-  font-weight: bold;
-}
-
 #destroy-button, #connect-button {
   display: none;
 }
