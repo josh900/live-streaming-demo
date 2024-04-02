@@ -363,7 +363,8 @@ async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   mediaRecorder = new MediaRecorder(stream);
 
-  deepgramSocket = new WebSocket('wss://api.deepgram.com/v1/listen', [
+
+  deepgramSocket = new WebSocket('wss://api.deepgram.com/v1/listen?utterance_end_ms=1000&endpointing=500&interim_results=true', [
     'token',
     DEEPGRAM_API_KEY,
   ]);
@@ -402,11 +403,26 @@ async function startRecording() {
 
   deepgramSocket.onmessage = (message) => {
     const received = JSON.parse(message.data);
-    const partialTranscript = received.channel.alternatives[0].transcript;
 
-    if (partialTranscript) {
+    if (received.type === 'UtteranceEnd') {
+      if (transcript.trim() !== '') {
+        const finalTranscript = transcript;
+        transcript = '';
+        sendChatToGroq(finalTranscript);
+      }
+    } else if (received.type === 'SpeechStarted') {
+      transcript = '';
+    } else if (received.type === 'Results') {
+      const isFinal = received.is_final;
+      const partialTranscript = received.channel.alternatives[0].transcript;
+
+      if (isFinal) {
+        document.getElementById('msgHistory').innerHTML += `<span><u>User:</u> ${partialTranscript}</span><br>`;
+      } else {
+        document.getElementById('msgHistory').innerHTML = document.getElementById('msgHistory').innerHTML.replace(/<span class="interim"><u>User \(interim\):<\/u>.*<\/span><br>/, `<span class="interim"><u>User (interim):</u> ${partialTranscript}</span><br>`);
+      }
+
       transcript += partialTranscript;
-      document.getElementById('msgHistory').innerHTML = document.getElementById('msgHistory').innerHTML.replace(/<span style='opacity:0.5'><u>User \(interim\):<\/u>.*<\/span><br>/, `<span style='opacity:0.5'><u>User (interim):</u> ${transcript}</span><br>`);
     }
   };
 
@@ -424,6 +440,9 @@ async function startRecording() {
       startButton.click();
     }
   }, 45000); // 45 seconds
+
+  transcript = ''; 
+
 }
 
 async function stopRecording() {
@@ -442,7 +461,7 @@ async function stopRecording() {
   clearTimeout(inactivityTimeout);
 }
 
-async function sendChatToGroq() {
+async function sendChatToGroq(finalTranscript) {
   try {
     const response = await fetch('https://avatar.skoop.digital/chat', {
       method: 'POST',
@@ -456,6 +475,10 @@ async function sendChatToGroq() {
             content: context,
           },
           ...chatHistory,
+          {
+            role: 'user',
+            content: finalTranscript,
+          },
         ],
         model: 'mixtral-8x7b-32768',
       }),
@@ -520,6 +543,9 @@ async function sendChatToGroq() {
       await reinitializeConnection();
     }
   }
+
+  transcript = '';
+
 }
 
 
