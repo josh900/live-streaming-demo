@@ -111,11 +111,6 @@ button:hover, #destroy-button:hover,#connect-button:hover {
   transition: all 0.2s ease-out;
 }
 
-.interim {
-  opacity: 0.7;
-  color: gray;
-}
-
 h4{
   margin: 0;
   margin-bottom: 10px;
