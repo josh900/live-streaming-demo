@@ -360,7 +360,7 @@ async function startStreaming(assistantReply) {
 }
 
 
-async function async function startRecording() {
+async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   mediaRecorder = new MediaRecorder(stream);
 
