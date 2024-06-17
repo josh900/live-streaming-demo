@@ -27,12 +27,7 @@ let inactivityTimeout;
 let transcriptionTimer;
 
 
-
-
-const context = 
-```
-
-grocery store info:
+const context = `grocery store info:
 ---
 Product,"Aisle and side (<Aisle, Left or Right>)",Est. Price,Promo price,Category
 Double Zipper Gallon Storage Bags ,16 -  R,4,,Cleaning Products
@@ -357,7 +352,8 @@ EXIT                             ENTER
 You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentance unless absolutely needed.
 
 
-```;
+`;
+
 
 
 
