@@ -26,6 +26,15 @@ let transcript = '';
 let inactivityTimeout;
 let transcriptionTimer;
 
+const videoElement = document.getElementById('video-element');
+videoElement.setAttribute('playsinline', '');
+const peerStatusLabel = document.getElementById('peer-status-label');
+const iceStatusLabel = document.getElementById('ice-status-label');
+const iceGatheringStatusLabel = document.getElementById('ice-gathering-status-label');
+const signalingStatusLabel = document.getElementById('signaling-status-label');
+const streamingStatusLabel = document.getElementById('streaming-status-label');
+
+
 
 const context = `grocery store info:
 ---
@@ -356,15 +365,6 @@ You are a helpful, harmless, and honest assistant. Please answer the users quest
 
 
 
-
-const videoElement = document.getElementById('video-element');
-videoElement.setAttribute('playsinline', '');
-const peerStatusLabel = document.getElementById('peer-status-label');
-const iceStatusLabel = document.getElementById('ice-status-label');
-const iceGatheringStatusLabel = document.getElementById('ice-gathering-status-label');
-const signalingStatusLabel = document.getElementById('signaling-status-label');
-const streamingStatusLabel = document.getElementById('streaming-status-label');
-
 window.onload = async (event) => {
   playIdleVideo();
 
@@ -406,7 +406,6 @@ function showErrorMessage(message) {
   connectButton.style.display = 'inline-block';
 }
 
-
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
     peerConnection = new RTCPeerConnection({ iceServers });
@@ -427,15 +426,14 @@ async function createPeerConnection(offer, iceServers) {
   await peerConnection.setLocalDescription(sessionClientAnswer);
   console.log('set local sdp OK');
 
-
-
-
   return sessionClientAnswer;
 }
+
 function onIceGatheringStateChange() {
   iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
   iceGatheringStatusLabel.className = 'iceGatheringState-' + peerConnection.iceGatheringState;
 }
+
 function onIceCandidate(event) {
   if (event.candidate) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
@@ -456,6 +454,7 @@ function onIceCandidate(event) {
     });
   }
 }
+
 function onIceConnectionStateChange() {
   iceStatusLabel.innerText = peerConnection.iceConnectionState;
   iceStatusLabel.className = 'iceConnectionState-' + peerConnection.iceConnectionState;
@@ -465,22 +464,23 @@ function onIceConnectionStateChange() {
     closePC();
     showErrorMessage('Connection lost. Please try again.');
   }
-
 }
+
 function onConnectionStateChange() {
   // not supported in firefox
   peerStatusLabel.innerText = peerConnection.connectionState;
   peerStatusLabel.className = 'peerConnectionState-' + peerConnection.connectionState;
 }
+
 function onSignalingStateChange() {
   signalingStatusLabel.innerText = peerConnection.signalingState;
   signalingStatusLabel.className = 'signalingState-' + peerConnection.signalingState;
 }
+
 function onVideoStatusChange(videoIsPlaying, stream) {
   let status;
   if (videoIsPlaying) {
     status = 'streaming';
-
     const remoteStream = stream;
     setVideoElement(remoteStream);
   } else {
@@ -490,17 +490,9 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   streamingStatusLabel.innerText = status;
   streamingStatusLabel.className = 'streamingState-' + status;
 }
-function onTrack(event) {
-  /**
-   * The following code is designed to provide information about whether there is currently data
-   * that's being streamed - It does so by periodically looking for changes in total stream data size
-   *
-   * This information in our case is used in order to show idle video while no video is streaming.
-   * To create this idle video, use the POST https://api.d-id.com/talks (or clips) endpoint with a silent audio file or a text script with only ssml breaks
-   * https://docs.aws.amazon.com/polly/latest/dg/supportedtags.html#break-tag
-   * for seamless results, use `config.fluent: true` and provide the same configuration as the streaming video
-   */
 
+function onTrack(event) {
+  console.log('onTrack event:', event);
   if (!event.track) return;
 
   statsIntervalId = setInterval(async () => {
@@ -512,6 +504,7 @@ function onTrack(event) {
 
           if (videoStatusChanged) {
             videoIsPlaying = report.bytesReceived > lastBytesReceived;
+            console.log('Video status changed. Is playing:', videoIsPlaying);
             onVideoStatusChange(videoIsPlaying, event.streams[0]);
           }
           lastBytesReceived = report.bytesReceived;
@@ -523,6 +516,7 @@ function onTrack(event) {
 
 function setVideoElement(stream) {
   if (!stream) return;
+  console.log('Setting video element with stream:', stream);
   // Add Animation Class
   videoElement.classList.add("animated")
 
@@ -541,11 +535,13 @@ function setVideoElement(stream) {
   if (videoElement.paused) {
     videoElement
       .play()
-      .then((_) => { })
-      .catch((e) => { });
+      .then((_) => { console.log('Video playback started'); })
+      .catch((e) => { console.error('Error starting video playback:', e); });
   }
 }
+
 function playIdleVideo() {
+  console.log('Playing idle video');
   // Add Animation Class
   videoElement.classList.toggle("animated")
 
@@ -558,6 +554,7 @@ function playIdleVideo() {
     videoElement.classList.remove("animated")
   }, 300);
 }
+
 function stopAllStreams() {
   if (videoElement.srcObject) {
     console.log('stopping video streams');
@@ -565,6 +562,7 @@ function stopAllStreams() {
     videoElement.srcObject = null;
   }
 }
+
 function closePC(pc = peerConnection) {
   if (!pc) return;
   console.log('stopping peer connection');
@@ -585,6 +583,7 @@ function closePC(pc = peerConnection) {
     peerConnection = null;
   }
 }
+
 const maxRetryCount = 2;
 const maxDelaySec = 2;
 async function fetchWithRetries(url, options, retries = 1) {
@@ -606,8 +605,6 @@ async function fetchWithRetries(url, options, retries = 1) {
 
 const connectButton = document.getElementById('connect-button');
 connectButton.onclick = async () => {
-
-
   if (peerConnection && peerConnection.connectionState === 'connected') {
     return;
   }
@@ -626,10 +623,11 @@ connectButton.onclick = async () => {
     }),
   });
 
-
   const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
   streamId = newStreamId;
   sessionId = newSessionId;
+  console.log('Stream created. Stream ID:', streamId, 'Session ID:', sessionId);
+  
   try {
     sessionClientAnswer = await createPeerConnection(offer, iceServers);
   } catch (e) {
@@ -651,13 +649,12 @@ connectButton.onclick = async () => {
       session_id: sessionId,
     }),
   });
+  console.log('SDP response:', await sdpResponse.json());
 };
-
-
-
 
 async function startStreaming(assistantReply) {
   try {
+    console.log('Starting stream with reply:', assistantReply);
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'POST',
       headers: {
@@ -676,6 +673,7 @@ async function startStreaming(assistantReply) {
         session_id: sessionId,
       }),
     });
+    console.log('Stream start response:', await playResponse.json());
   } catch (error) {
     console.error('Error during streaming:', error);
     if (isRecording) {
@@ -683,7 +681,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -770,6 +767,7 @@ async function stopRecording() {
 
 async function sendChatToGroq() {
   try {
+    console.log('Sending chat to Groq. Chat history:', chatHistory);
     const response = await fetch('https://avatar.skoop.digital/chat', {
       method: 'POST',
       headers: {
@@ -786,7 +784,6 @@ async function sendChatToGroq() {
         model: 'mixtral-8x7b-32768',
       }),
     });
-
 
     if (!response.ok) {
       throw new Error(`HTTP error ${response.status}`);
@@ -819,6 +816,8 @@ async function sendChatToGroq() {
       }
     }
 
+    console.log('Assistant reply:', assistantReply);
+
     // Add assistant reply to chat history
     chatHistory.push({
       role: 'assistant',
@@ -827,7 +826,6 @@ async function sendChatToGroq() {
 
     // Append the complete assistant reply to the chat history element
     document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${assistantReply}</span><br>`;
-
 
     // Reset inactivity timeout
     clearTimeout(inactivityTimeout);
@@ -847,8 +845,6 @@ async function sendChatToGroq() {
     }
   }
 }
-
-
 
 async function reinitializeConnection() {
   console.log('Reinitializing connection...');
@@ -875,6 +871,7 @@ async function reinitializeConnection() {
 
 const destroyButton = document.getElementById('destroy-button');
 destroyButton.onclick = async () => {
+  console.log('Destroying stream...');
   await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
     method: 'DELETE',
     headers: {
@@ -888,20 +885,18 @@ destroyButton.onclick = async () => {
   closePC();
 };
 
-
-
 const startButton = document.getElementById('start-button');
 let isRecording = false;
 
 startButton.onclick = async () => {
   if (!isRecording) {
     startButton.textContent = 'Stop';
+    console.log('Starting recording...');
     await startRecording();
   } else {
     startButton.textContent = 'Speak';
+    console.log('Stopping recording...');
     await stopRecording();
   }
   isRecording = !isRecording;
 };
-
-
