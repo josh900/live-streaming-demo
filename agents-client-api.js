@@ -110,13 +110,12 @@ async function initializeConnection() {
   streamId = newStreamId;
   sessionId = newSessionId;
   console.log('New stream created:', streamId);
-  console.log('Session ID:', sessionId);
 
   try {
     const sessionClientAnswer = await createPeerConnection(offer, iceServers);
     await sendSDPAnswer(sessionClientAnswer);
   } catch (e) {
-    console.log('Error during streaming setup', e);
+    console.log('error during streaming setup', e);
     stopAllStreams();
     closePC();
     throw e;
@@ -275,6 +274,7 @@ async function startStreaming(assistantReply) {
       headers: {
         Authorization: `Basic ${DID_API.key}`,
         'Content-Type': 'application/json',
+        Cookie: sessionId
       },
       body: JSON.stringify({
         script: {
@@ -284,15 +284,13 @@ async function startStreaming(assistantReply) {
         config: {
           fluent: true,
           pad_audio: 0,
-        },
-        session_id: sessionId  // Add this line to include the session_id
+        }
       }),
     });
     console.log('Play response status:', playResponse.status);
     if (!playResponse.ok) {
       const errorData = await playResponse.json();
       console.error('Error in play response:', errorData);
-      throw new Error(`Failed to start streaming: ${errorData.description}`);
     }
   } catch (error) {
     console.error('Error during streaming:', error);
