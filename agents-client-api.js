@@ -36,6 +36,9 @@ const iceGatheringStatusLabel = document.getElementById('ice-gathering-status-la
 const signalingStatusLabel = document.getElementById('signaling-status-label');
 const streamingStatusLabel = document.getElementById('streaming-status-label');
 
+// Replace DID_API.url with your proxy URL
+const DID_API_PROXY_URL = '/did-api';
+
 window.onload = async (event) => {
   playIdleVideo();
   showLoadingSymbol();
@@ -117,10 +120,9 @@ function onIceCandidate(event) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
     console.log('New ICE candidate:', candidate);
 
-    fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
+    fetch(`${DID_API_PROXY_URL}/${DID_API.service}/streams/${streamId}/ice`, {
       method: 'POST',
       headers: {
-        Authorization: `Basic ${DID_API.key}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -277,7 +279,6 @@ async function fetchWithRetries(url, options, retries = 1) {
     if (retries <= maxRetryCount) {
       const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 1000;
       console.log(`Request failed, retrying ${retries}/${maxRetryCount} in ${delay}ms. Error: ${err.message}`);
-      console.log('Failed request details:', { url, method: options.method, headers: options.headers });
       await new Promise((resolve) => setTimeout(resolve, delay));
       return fetchWithRetries(url, options, retries + 1);
     } else {
@@ -286,38 +287,14 @@ async function fetchWithRetries(url, options, retries = 1) {
   }
 }
 
-
-async function validateApiKey() {
-  try {
-    const response = await fetch(`${DID_API.url}/status`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`API key validation failed: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    console.log('API key validation successful:', data);
-  } catch (error) {
-    console.error('API key validation error:', error);
-    alert('There was an error validating your D-ID API key. Please check your key and try again.');
-  }
-}
-
 async function initializeConnection() {
-  await validateApiKey();
   stopAllStreams();
   closePC();
 
   console.log('Initializing connection...');
-  const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+  const sessionResponse = await fetchWithRetries(`${DID_API_PROXY_URL}/${DID_API.service}/streams`, {
     method: 'POST',
     headers: {
-      Authorization: `Basic ${DID_API.key}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -341,10 +318,9 @@ async function initializeConnection() {
     throw e;
   }
 
-  const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+  const sdpResponse = await fetch(`${DID_API_PROXY_URL}/${DID_API.service}/streams/${streamId}/sdp`, {
     method: 'POST',
     headers: {
-      Authorization: `Basic ${DID_API.key}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -355,12 +331,11 @@ async function initializeConnection() {
 
   if (!sdpResponse.ok) {
     const errorText = await sdpResponse.text();
-    throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}. ${errorText}`);
+throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}. ${errorText}`);
   }
 
   console.log('Connection initialized successfully');
 }
-
 
 async function startStreaming(assistantReply) {
   try {
@@ -368,10 +343,9 @@ async function startStreaming(assistantReply) {
     console.log('Using streamId:', streamId);
     console.log('Using sessionId:', sessionId);
 
-    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+    const playResponse = await fetchWithRetries(`${DID_API_PROXY_URL}/${DID_API.service}/streams/${streamId}`, {
       method: 'POST',
       headers: {
-        Authorization: `Basic ${DID_API.key}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -408,10 +382,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
-
-
-
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -593,10 +563,9 @@ connectButton.onclick = initializeConnection;
 const destroyButton = document.getElementById('destroy-button');
 destroyButton.onclick = async () => {
   try {
-    await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+    await fetch(`${DID_API_PROXY_URL}/${DID_API.service}/streams/${streamId}`, {
       method: 'DELETE',
       headers: {
-        Authorization: `Basic ${DID_API.key}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ session_id: sessionId }),
