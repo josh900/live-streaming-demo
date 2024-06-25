@@ -26,9 +26,6 @@ let transcript = '';
 let inactivityTimeout;
 let transcriptionTimer;
 
-
-
-
 const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentance unless absolutely needed.`;
 
 const videoElement = document.getElementById('video-element');
@@ -80,7 +77,6 @@ function showErrorMessage(message) {
   connectButton.style.display = 'inline-block';
 }
 
-
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
     peerConnection = new RTCPeerConnection({ iceServers });
@@ -101,15 +97,14 @@ async function createPeerConnection(offer, iceServers) {
   await peerConnection.setLocalDescription(sessionClientAnswer);
   console.log('set local sdp OK');
 
-
-
-
   return sessionClientAnswer;
 }
+
 function onIceGatheringStateChange() {
   iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
   iceGatheringStatusLabel.className = 'iceGatheringState-' + peerConnection.iceGatheringState;
 }
+
 function onIceCandidate(event) {
   if (event.candidate) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
@@ -130,6 +125,7 @@ function onIceCandidate(event) {
     });
   }
 }
+
 function onIceConnectionStateChange() {
   iceStatusLabel.innerText = peerConnection.iceConnectionState;
   iceStatusLabel.className = 'iceConnectionState-' + peerConnection.iceConnectionState;
@@ -139,22 +135,23 @@ function onIceConnectionStateChange() {
     closePC();
     showErrorMessage('Connection lost. Please try again.');
   }
-
 }
+
 function onConnectionStateChange() {
   // not supported in firefox
   peerStatusLabel.innerText = peerConnection.connectionState;
   peerStatusLabel.className = 'peerConnectionState-' + peerConnection.connectionState;
 }
+
 function onSignalingStateChange() {
   signalingStatusLabel.innerText = peerConnection.signalingState;
   signalingStatusLabel.className = 'signalingState-' + peerConnection.signalingState;
 }
+
 function onVideoStatusChange(videoIsPlaying, stream) {
   let status;
   if (videoIsPlaying) {
     status = 'streaming';
-
     const remoteStream = stream;
     setVideoElement(remoteStream);
   } else {
@@ -164,17 +161,9 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   streamingStatusLabel.innerText = status;
   streamingStatusLabel.className = 'streamingState-' + status;
 }
-function onTrack(event) {
-  /**
-   * The following code is designed to provide information about whether there is currently data
-   * that's being streamed - It does so by periodically looking for changes in total stream data size
-   *
-   * This information in our case is used in order to show idle video while no video is streaming.
-   * To create this idle video, use the POST https://api.d-id.com/talks (or clips) endpoint with a silent audio file or a text script with only ssml breaks
-   * https://docs.aws.amazon.com/polly/latest/dg/supportedtags.html#break-tag
-   * for seamless results, use `config.fluent: true` and provide the same configuration as the streaming video
-   */
 
+function onTrack(event) {
+  console.log('onTrack event:', event);
   if (!event.track) return;
 
   statsIntervalId = setInterval(async () => {
@@ -184,8 +173,16 @@ function onTrack(event) {
         if (report.type === 'inbound-rtp' && report.mediaType === 'video') {
           const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
 
+          console.log('Video stats:', {
+            bytesReceived: report.bytesReceived,
+            lastBytesReceived,
+            videoIsPlaying,
+            videoStatusChanged
+          });
+
           if (videoStatusChanged) {
             videoIsPlaying = report.bytesReceived > lastBytesReceived;
+            console.log('Video status changed:', videoIsPlaying);
             onVideoStatusChange(videoIsPlaying, event.streams[0]);
           }
           lastBytesReceived = report.bytesReceived;
@@ -219,6 +216,7 @@ function setVideoElement(stream) {
       .catch((e) => { });
   }
 }
+
 function playIdleVideo() {
   // Add Animation Class
   videoElement.classList.toggle("animated")
@@ -232,6 +230,7 @@ function playIdleVideo() {
     videoElement.classList.remove("animated")
   }, 300);
 }
+
 function stopAllStreams() {
   if (videoElement.srcObject) {
     console.log('stopping video streams');
@@ -239,6 +238,7 @@ function stopAllStreams() {
     videoElement.srcObject = null;
   }
 }
+
 function closePC(pc = peerConnection) {
   if (!pc) return;
   console.log('stopping peer connection');
@@ -259,6 +259,7 @@ function closePC(pc = peerConnection) {
     peerConnection = null;
   }
 }
+
 const maxRetryCount = 2;
 const maxDelaySec = 2;
 async function fetchWithRetries(url, options, retries = 1) {
@@ -280,8 +281,6 @@ async function fetchWithRetries(url, options, retries = 1) {
 
 const connectButton = document.getElementById('connect-button');
 connectButton.onclick = async () => {
-
-
   if (peerConnection && peerConnection.connectionState === 'connected') {
     return;
   }
@@ -299,7 +298,6 @@ connectButton.onclick = async () => {
       source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg'
     }),
   });
-
 
   const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
   streamId = newStreamId;
@@ -327,11 +325,9 @@ connectButton.onclick = async () => {
   });
 };
 
-
-
-
 async function startStreaming(assistantReply) {
   try {
+    console.log('Starting streaming with reply:', assistantReply);
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'POST',
       headers: {
@@ -350,6 +346,21 @@ async function startStreaming(assistantReply) {
         session_id: sessionId,
       }),
     });
+
+    if (!playResponse.ok) {
+      throw new Error(`HTTP error ${playResponse.status}`);
+    }
+
+    const playResponseData = await playResponse.json();
+    console.log('Streaming response:', playResponseData);
+
+    // Check if the response indicates a successful stream start
+    if (playResponseData.status === 'started') {
+      console.log('Stream started successfully');
+    } else {
+      console.warn('Unexpected response status:', playResponseData.status);
+    }
+
   } catch (error) {
     console.error('Error during streaming:', error);
     if (isRecording) {
@@ -357,7 +368,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -369,7 +379,7 @@ async function startRecording() {
   ]);
 
   deepgramSocket.onopen = () => {
-    console.log('Connection opened');
+    console.log('Deepgram WebSocket Connection opened');
     mediaRecorder.addEventListener('dataavailable', async (event) => {
       if (event.data.size > 0 && deepgramSocket.readyState === 1) {
         deepgramSocket.send(event.data);
@@ -461,7 +471,6 @@ async function sendChatToGroq() {
       }),
     });
 
-
     if (!response.ok) {
       throw new Error(`HTTP error ${response.status}`);
     }
@@ -502,6 +511,7 @@ async function sendChatToGroq() {
     // Append the complete assistant reply to the chat history element
     document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${assistantReply}</span><br>`;
 
+    console.log('Assistant reply:', assistantReply);
 
     // Reset inactivity timeout
     clearTimeout(inactivityTimeout);
@@ -521,8 +531,6 @@ async function sendChatToGroq() {
     }
   }
 }
-
-
 
 async function reinitializeConnection() {
   console.log('Reinitializing connection...');
@@ -561,8 +569,6 @@ destroyButton.onclick = async () => {
   stopAllStreams();
   closePC();
 };
-
-
 
 const startButton = document.getElementById('start-button');
 let isRecording = false;
