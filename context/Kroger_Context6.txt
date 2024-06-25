@@ -1,0 +1,1300 @@
+Product: Double Zipper Gallon Storage Bags AISLE 16 - 38 ct
+ID: 1111080253
+Location: AISLE 16, R side, 4.0 shelf
+Price: Regular: $3.59, Promotional: $0.0
+Category: Cleaning Products
+Product: Double Zipper Gallon Size Freezer Bags AISLE 16 - 28 ct
+ID: 1111080254
+Location: AISLE 16, R side, 2.0 shelf
+Price: Regular: $3.59, Promotional: $0.0
+Category: Cleaning Products
+Product: Reclosable Colorful Assorted Square Snack Bags AISLE 16 - 80 ct
+ID: 1111008210
+Location: AISLE 16, R side, 7.0 shelf
+Price: Regular: $2.59, Promotional: $0.0
+Category: Cleaning Products
+Product: Quart Slider Freezer Bag AISLE 16 - 30 ct
+ID: 1111012313
+Location: AISLE 16, R side, 5.0 shelf
+Price: Regular: $3.99, Promotional: $0.0
+Category: Cleaning Products
+Product: Slider Freezer Storage Gallon Bags AISLE 16 - 25 ct
+ID: 1111012312
+Location: AISLE 16, R side, 4.0 shelf
+Price: Regular: $3.99, Promotional: $0.0
+Category: Cleaning Products
+Product: Double Zipper Quart Storage Bags AISLE 16 - 48 ct
+ID: 1111080258
+Location: AISLE 16, R side, 5.0 shelf
+Price: Regular: $3.59, Promotional: $0.0
+Category: Cleaning Products
+Product: Double Zipper Quart Freezer Bags AISLE 16 - 38 ct
+ID: 1111080259
+Location: AISLE 16, R side, 3.0 shelf
+Price: Regular: $3.59, Promotional: $0.0
+Category: Cleaning Products
+Product: Slider Freezer Storage Gallon Bags AISLE 16 - 30 ct
+ID: 1111012310
+Location: AISLE 16, R side, 4.0 shelf
+Price: Regular: $3.99, Promotional: $0.0
+Category: Cleaning Products
+Product: Reclosable Colorful Assorted Sandwich Bags 40 Count AISLE 16 - 40 ct
+ID: 1111008209
+Location: AISLE 16, R side, 7.0 shelf
+Price: Regular: $1.99, Promotional: $0.0
+Category: Cleaning Products
+Product: Strawberry Applesauce Cups AISLE 4 - 6 ct / 4 oz
+ID: 1111089919
+Location: AISLE 4, R side, 2.0 shelf
+Price: Regular: $2.39, Promotional: $1.99
+Category: Snacks
+Product: Double Zipper Quart Storage Bags AISLE 16 - 24 ct
+ID: 1111080288
+Location: AISLE 16, R side, 3.0 shelf
+Price: Regular: $2.59, Promotional: $0.0
+Category: Cleaning Products
+Product: Stand & Fill Quart Slider Storage Bag AISLE 16 - 20 ct
+ID: 1111012311
+Location: AISLE 16, R side, 3.0 shelf
+Price: Regular: $2.69, Promotional: $0.0
+Category: Cleaning Products
+Product: Double Zipper Gallon Storage Bags AISLE 16 - 19 ct
+ID: 1111080269
+Location: AISLE 16, R side, 2.0 shelf
+Price: Regular: $2.59, Promotional: $0.0
+Category: Cleaning Products
+Product: Unsweetened Applesauce Cups AISLE 4 - 6 ct / 4 oz
+ID: 1111081922
+Location: AISLE 4, R side, 3.0 shelf
+Price: Regular: $2.39, Promotional: $1.99
+Category: Snacks
+Product: Slider Gallon Storage Bags AISLE 16 - 15 ct
+ID: 1111087137
+Location: AISLE 16, R side, 2.0 shelf
+Price: Regular: $2.69, Promotional: $0.0
+Category: Cleaning Products
+Product: Quart Slider Storage Bags AISLE 16 - 40 ct
+ID: 1111012309
+Location: AISLE 16, R side, 5.0 shelf
+Price: Regular: $3.99, Promotional: $0.0
+Category: Cleaning Products
+Product: Unsweetened Applesauce AISLE 4 - 46 oz
+ID: 1111085025
+Location: AISLE 4, R side, 1.0 shelf
+Price: Regular: $3.39, Promotional: $2.99
+Category: Snacks
+Product: Twist Tie Gallon Storage Bags AISLE 16 - 75 ct
+ID: 1111086861
+Location: AISLE 16, R side, 6.0 shelf
+Price: Regular: $4.49, Promotional: $0.0
+Category: Cleaning Products
+Product: Classic Applesauce Cups AISLE 4 - 6 ct / 4 oz
+ID: 1111089895
+Location: AISLE 4, R side, 3.0 shelf
+Price: Regular: $2.39, Promotional: $1.99
+Category: Snacks
+Product: Cinnamon Applesauce Cups AISLE 4 - 6 ct / 4 oz
+ID: 1111089894
+Location: AISLE 4, R side, 2.0 shelf
+Price: Regular: $2.39, Promotional: $1.99
+Category: Snacks
+Product: Tropical Fruit Cups in 100% Juice AISLE 4 - 4 ct / 4 oz
+ID: 1111006396
+Location: AISLE 4, R side, 4.0 shelf
+Price: Regular: $2.59, Promotional: $2.5
+Category: Snacks
+Product: Cherry Mixed Fruit Cups in 100% Juice AISLE 4 - 4 ct / 4 oz
+ID: 1111008049
+Location: AISLE 4, R side, 5.0 shelf
+Price: Regular: $2.59, Promotional: $2.5
+Category: Snacks
+Product: Diced Mango Cups in 100% Juice AISLE 4 - 4 ct / 4 oz
+ID: 1111006399
+Location: AISLE 4, R side, 4.0 shelf
+Price: Regular: $2.59, Promotional: $2.5
+Category: Snacks
+Product: Yellow Cling Diced Peach Cups in 100% Juice AISLE 4 - 4 ct / 4 oz
+ID: 1111008050
+Location: AISLE 4, R side, 4.0 shelf
+Price: Regular: $2.59, Promotional: $2.5
+Category: Snacks
+Product: Apple Cinnamon & Apple Strawberry Applesauce Variety Pouches AISLE 4 - 12 ct / 3.2 oz
+ID: 1111088763
+Location: AISLE 4, R side, 5.0 shelf
+Price: Regular: $6.49, Promotional: $0.0
+Category: Snacks
+Product: Classic Applesauce AISLE 4 - 48 oz
+ID: 1111089865
+Location: AISLE 4, R side, 1.0 shelf
+Price: Regular: $3.39, Promotional: $2.99
+Category: Snacks
+Product: Mandarin Orange Cups No Sugar Added AISLE 4 - 4 ct / 4 oz
+ID: 1111009176
+Location: AISLE 4, R side, 5.0 shelf
+Price: Regular: $2.59, Promotional: $2.5
+Category: Snacks
+Product: Cinnamon Applesauce AISLE 4 - 48 oz
+ID: 1111089870
+Location: AISLE 4, R side, 1.0 shelf
+Price: Regular: $3.39, Promotional: $2.99
+Category: Snacks
+Product: Mandarin Orange Cups in 100% Juice AISLE 4 - 4 ct / 4 oz
+ID: 1111008052
+Location: AISLE 4, R side, 5.0 shelf
+Price: Regular: $2.59, Promotional: $2.5
+Category: Snacks
+Product: Yellow Cling Diced Peach Cups No Sugar Added AISLE 4 - 4 ct / 3.8 oz
+ID: 1111009183
+Location: AISLE 4, R side, 4.0 shelf
+Price: Regular: $2.59, Promotional: $2.5
+Category: Snacks
+Product: Strawberry + Cinnamon Applesauce Pouches Variety Pack BIG Deal! AISLE 4 - 24 ct / 3.2 oz
+ID: 1111083555
+Location: AISLE 4, R side, 5.0 shelf
+Price: Regular: $11.99, Promotional: $0.0
+Category: Snacks
+Product: Classic Applesauce Pouches AISLE 4 - 12 ct / 3.2 oz
+ID: 1111090140
+Location: AISLE 4, R side, 4.0 shelf
+Price: Regular: $6.49, Promotional: $0.0
+Category: Snacks
+Product: Apple Cinnamon Applesauce Pouches AISLE 4 - 12 ct / 3.2 oz
+ID: 1111087727
+Location: AISLE 4, R side, 6.0 shelf
+Price: Regular: $6.49, Promotional: $0.0
+Category: Snacks
+Product: Pineapple Tidbits Cups in 100% Pineapple Juice AISLE 4 - 4 ct / 4 oz
+ID: 1111008056
+Location: AISLE 4, R side, 4.0 shelf
+Price: Regular: $2.59, Promotional: $2.5
+Category: Snacks
+Product: Grapefruit Cups PRODUCE - 7 oz
+ID: 1111062659
+Location: PRODUCE, L side, 6.0 shelf
+Price: Regular: $1.49, Promotional: $1.0
+Category: Snacks
+Product: Apple Strawberry Applesauce Pouches AISLE 4 - 12 ct / 3.2 oz
+ID: 1111087723
+Location: AISLE 4, R side, 6.0 shelf
+Price: Regular: $6.49, Promotional: $0.0
+Category: Snacks
+Product: Chunky Applesauce AISLE 4 - 23 oz
+ID: 1111010077
+Location: AISLE 4, R side, 1.0 shelf
+Price: Regular: $2.59, Promotional: $0.0
+Category: Snacks
+Product: Grapefruit Cups PRODUCE - 7 oz
+ID: 1111062660
+Location: PRODUCE, L side, 6.0 shelf
+Price: Regular: $1.49, Promotional: $1.0
+Category: Snacks
+Product: Cherry Mixed Fruit Cups in 100% Juice AISLE 4 - 8 ct / 4 oz
+ID: 1111010229
+Location: AISLE 4, R side, 5.0 shelf
+Price: Regular: $4.99, Promotional: $0.0
+Category: Canned & Packaged
+Product: Diced Pear Cups in 100% Juice AISLE 4 - 4 ct / 4 oz
+ID: 1111008051
+Location: AISLE 4, R side, 4.0 shelf
+Price: Regular: $2.59, Promotional: $2.5
+Category: Snacks
+Product: Variety Fruit Bowls AISLE 4 - 24 ct / 4 oz
+ID: 1111013459
+Location: AISLE 4, R side, 6.0 shelf
+Price: Regular: $14.49, Promotional: $0.0
+Category: Snacks
+Product: Mixed Fruit Cups in 100% Juice AISLE 4 - 4 ct / 4 oz
+ID: 1111008055
+Location: AISLE 4, R side, 4.0 shelf
+Price: Regular: $2.59, Promotional: $2.5
+Category: Snacks
+Product: Diced Pear Cups No Sugar Added AISLE 4 - 4 ct / 3.8 oz
+ID: 1111009177
+Location: AISLE 4, R side, 4.0 shelf
+Price: Regular: $2.59, Promotional: $2.5
+Category: Snacks
+Product: Mandarin Oranges Fruit Cup PRODUCE - 7 oz
+ID: 1111062664
+Location: PRODUCE, L side, 6.0 shelf
+Price: Regular: $1.49, Promotional: $1.0
+Category: Snacks
+Product: Classic Applesauce BIG Deal! AISLE 4 - 24 ct / 3.2 oz
+ID: 1111083549
+Location: AISLE 4, R side, 4.0 shelf
+Price: Regular: $11.99, Promotional: $0.0
+Category: Snacks
+Product: Mandarin Orange Cups No Sugar Added AISLE 4 - 8 ct / 4 oz
+ID: 1111010230
+Location: AISLE 4, R side, 5.0 shelf
+Price: Regular: $4.99, Promotional: $0.0
+Category: Canned & Packaged
+Product: Mandarin Orange Cups in 100% Juice Big Deal! AISLE 4 - 24 ct / 4 oz
+ID: 1111008922
+Location: AISLE 4, R side, 6.0 shelf
+Price: Regular: $14.49, Promotional: $0.0
+Category: Snacks
+Product: Peach Chunks PRODUCE - 7 oz
+ID: 1111062663
+Location: PRODUCE, L side, 6.0 shelf
+Price: Regular: $1.49, Promotional: $1.0
+Category: Snacks
+Product: Fruity Gems Fresh Pomegranate Arils PRODUCE - 4 oz
+ID: 1111004335
+Location: PRODUCE, L side, 6.0 shelf
+Price: Regular: $3.49, Promotional: $0.0
+Category: Snacks
+Product: Cherry Fruit Medley Fruit Cup PRODUCE - 7 oz
+ID: 1111062662
+Location: PRODUCE, L side, 6.0 shelf
+Price: Regular: $1.49, Promotional: $1.0
+Category: Snacks
+Product: Vanilla Ice Cream Snowboard Sandwiches GROCERY - 12 ct
+ID: 1111009402
+Location: GROCERY, nan side, nan shelf
+Price: Regular: $2.99, Promotional: $2.79
+Category: Frozen
+Product: Purified Bottled Water AISLE 14 - 40 bottles / 16.9 fl oz
+ID: 1111009855
+Location: AISLE 14, R side, 1.0 shelf
+Price: Regular: $5.99, Promotional: $0.0
+Category: Beverages
+Product: Grade A Large White Eggs DAIRY - 18 ct
+ID: 1111060933
+Location: DAIRY, R side, 1.0 shelf
+Price: Regular: $2.98, Promotional: $2.79
+Category: Breakfast
+Product: Vitamin D Whole Milk DAIRY - 1 gal
+ID: 1111040101
+Location: DAIRY, R side, 1.0 shelf
+Price: Regular: $2.69, Promotional: $0.0
+Category: Dairy
+Product: 2% Reduced Fat Milk DAIRY - 1/2 gal
+ID: 1111041600
+Location: DAIRY, R side, 4.0 shelf
+Price: Regular: $1.8900000000000001, Promotional: $0.0
+Category: Dairy
+Product: Yellow Cling Diced Peach Cups in 100% Juice Big Deal! AISLE 4 - 24 ct / 4 oz
+ID: 1111008923
+Location: AISLE 4, R side, 6.0 shelf
+Price: Regular: $14.49, Promotional: $0.0
+Category: Snacks
+Product: Purified Bottled Water AISLE 14 - 24 bottles / 16.9 fl oz
+ID: 1111049213
+Location: AISLE 14, R side, 1.0 shelf
+Price: Regular: $3.99, Promotional: $0.0
+Category: Beverages
+Product: 2% Reduced Fat Milk DAIRY - 1 gal
+ID: 1111041700
+Location: DAIRY, R side, 1.0 shelf
+Price: Regular: $2.69, Promotional: $0.0
+Category: Dairy
+Product: Vitamin D Whole Milk DAIRY - 1/2 gal
+ID: 1111040601
+Location: DAIRY, R side, 4.0 shelf
+Price: Regular: $1.8900000000000001, Promotional: $0.0
+Category: Dairy
+Product: Large White Eggs DAIRY - 12 ct
+ID: 1111060903
+Location: DAIRY, R side, 1.0 shelf
+Price: Regular: $1.99, Promotional: $0.0
+Category: Dairy
+Product: Distilled Gallon Bottled Water AISLE 14 - 1 gallon
+ID: 1111042133
+Location: AISLE 14, R side, 3.0 shelf
+Price: Regular: $1.3900000000000001, Promotional: $0.0
+Category: Beverages
+Product: White Hamburger Buns BACK WALL - 8 ct / 12 oz
+ID: 1111011511
+Location: BACK WALL, L side, 4.0 shelf
+Price: Regular: $1.99, Promotional: $1.79
+Category: Bakery
+Product: Original Pancake Syrup SHELF EXTENDER PROGRAM - 24 fl oz
+ID: 1111067727
+Location: SHELF EXTENDER PROGRAM, L side, 10.0 shelf
+Price: Regular: $2.49, Promotional: $0.0
+Category: Breakfast
+Product: Original Sour Cream DAIRY - 16 oz
+ID: 1111046070
+Location: DAIRY, R side, 2.0 shelf
+Price: Regular: $2.19, Promotional: $0.0
+Category: Dairy
+Product: Mexican Style Blend Shredded Cheese DAIRY - 8 oz
+ID: 1111050204
+Location: DAIRY, R side, 3.0 shelf
+Price: Regular: $2.49, Promotional: $2.33
+Category: Dairy
+Product: Shredded Iceberg Lettuce Bag PRODUCE - 8 oz
+ID: 1111091613
+Location: PRODUCE, L side, 3.0 shelf
+Price: Regular: $2.29, Promotional: $0.0
+Category: Produce
+Product: Super Sweet Golden Whole Kernel Corn AISLE 4 - 15.25 oz
+ID: 1111011370
+Location: AISLE 4, R side, 4.0 shelf
+Price: Regular: $0.89, Promotional: $0.0
+Category: Canned & Packaged
+Product: White Hot Dog Buns BACK WALL - 8 ct / 11 oz
+ID: 1111011470
+Location: BACK WALL, L side, 1.0 shelf
+Price: Regular: $1.99, Promotional: $1.79
+Category: Bakery
+Product: Fresh Grape Tomatoes PRODUCE - 10 oz
+ID: 1111091686
+Location: PRODUCE, L side, 2.0 shelf
+Price: Regular: $2.49, Promotional: $0.0
+Category: Produce
+Product: Salted Butter Sticks DAIRY - 16 oz
+ID: 1111089301
+Location: DAIRY, R side, 1.0 shelf
+Price: Regular: $4.29, Promotional: $0.0
+Category: Dairy
+Product: Heavy Whipping Cream DAIRY - 1 pt
+ID: 1111050315
+Location: DAIRY, R side, 3.0 shelf
+Price: Regular: $3.69, Promotional: $0.0
+Category: Dairy
+Product: Tender Spinach Bag PRODUCE - 10 oz
+ID: 1111091649
+Location: PRODUCE, L side, 1.0 shelf
+Price: Regular: $2.29, Promotional: $0.0
+Category: Produce
+Product: Sharp Cheddar Shredded Cheese DAIRY - 8 oz
+ID: 1111050158
+Location: DAIRY, R side, 3.0 shelf
+Price: Regular: $2.49, Promotional: $2.33
+Category: Dairy
+Product: Canned Pineapple Chunks in Pineapple Juice GROCERY - 20 oz
+ID: 1111083141
+Location: GROCERY, R side, 2.0 shelf
+Price: Regular: $1.69, Promotional: $0.0
+Category: Canned & Packaged
+Product: Unsalted Butter Sticks DAIRY - 16 oz
+ID: 1111089305
+Location: DAIRY, R side, 1.0 shelf
+Price: Regular: $4.29, Promotional: $0.0
+Category: Dairy
+Product: 100% Apple Juice AISLE 13 - 64 fl oz
+ID: 1111003962
+Location: AISLE 13, R side, 3.0 shelf
+Price: Regular: $2.69, Promotional: $0.0
+Category: Beverages
+Product: Classic Garden Salad Bag PRODUCE - 12 oz
+ID: 1111091036
+Location: PRODUCE, L side, 2.0 shelf
+Price: Regular: $2.29, Promotional: $0.0
+Category: Produce
+Product: Aluminum Foil AISLE 16 - 75 sq ft
+ID: 1111089970
+Location: AISLE 16, R side, 5.0 shelf
+Price: Regular: $4.19, Promotional: $3.99
+Category: Cleaning Products
+Product: Lean Ground Beef Chuck 80/20 MEAT - 1 lb
+ID: 1111096972
+Location: MEAT, R side, 2.0 shelf
+Price: Regular: $6.49, Promotional: $0.0
+Category: Meat & Seafood
+Product: Half & Half DAIRY - 32 fl oz
+ID: 1111013329
+Location: DAIRY, R side, 4.0 shelf
+Price: Regular: $3.29, Promotional: $0.0
+Category: Dairy
+Product: 1% Lowfat Milk DAIRY - 1 gal
+ID: 1111041660
+Location: DAIRY, R side, 1.0 shelf
+Price: Regular: $2.69, Promotional: $0.0
+Category: Dairy
+Product: White Bread BACK WALL - 20 oz
+ID: 1111008485
+Location: BACK WALL, L side, 2.0 shelf
+Price: Regular: $1.99, Promotional: $1.79
+Category: Bakery
+Product: Mozzarella Shredded Cheese DAIRY - 8 oz
+ID: 1111050159
+Location: DAIRY, R side, 2.0 shelf
+Price: Regular: $2.49, Promotional: $2.33
+Category: Dairy
+Product: Pure Vegetable Oil AISLE 6 - 48 fl oz
+ID: 1111085605
+Location: AISLE 6, L side, 3.0 shelf
+Price: Regular: $3.99, Promotional: $0.0
+Category: Baking Goods
+Product: Heavy Whipping Cream DAIRY - 1 qt
+ID: 1111050312
+Location: DAIRY, R side, 3.0 shelf
+Price: Regular: $5.99, Promotional: $0.0
+Category: Dairy
+Product: Aluminum Foil AISLE 16 - 25 sq ft
+ID: 1111089964
+Location: AISLE 16, R side, 4.0 shelf
+Price: Regular: $1.99, Promotional: $0.0
+Category: Cleaning Products
+Product: Lean Ground Beef Chuck Roll MEAT - 3 lb
+ID: 1111097972
+Location: MEAT, R side, 1.0 shelf
+Price: Regular: $15.99, Promotional: $11.97
+Category: Meat & Seafood
+Product: Parmesan Shredded Cheese DAIRY - 6 oz
+ID: 1111050195
+Location: DAIRY, R side, 5.0 shelf
+Price: Regular: $2.49, Promotional: $2.33
+Category: Dairy
+Product: 3 lb. Lean Ground Beef Chuck 80/20 MEAT - 3 lb
+ID: 1111096970
+Location: MEAT, R side, 2.0 shelf
+Price: Regular: $16.99, Promotional: $0.0
+Category: Meat & Seafood
+Product: 1 lb. Lean Ground Beef Chuck Roll 80/20 MEAT - 1 lb
+ID: 1111097971
+Location: MEAT, R side, 1.0 shelf
+Price: Regular: $5.49, Promotional: $0.0
+Category: Meat & Seafood
+Product: Lean Ground Beef Chuck 80/20 Homestyle Hamburger Patties MEAT - 10 ct / 35.2 oz
+ID: 1111096732
+Location: MEAT, R side, 1.0 shelf
+Price: Regular: $10.0, Promotional: $0.0
+Category: Meat & Seafood
+Product: American Sliced Cheese Singles DAIRY - 16 slices / 12 oz
+ID: 1111009434
+Location: DAIRY, R side, 1.0 shelf
+Price: Regular: $2.79, Promotional: $2.5
+Category: Dairy
+Product: Original Tomato Ketchup SHELF EXTENDER PROGRAM - 24 oz
+ID: 1111084467
+Location: SHELF EXTENDER PROGRAM, L side, 4.0 shelf
+Price: Regular: $1.3900000000000001, Promotional: $1.25
+Category: Condiment & Sauces
+Product: 4% Milkfat Small Curd Cottage Cheese DAIRY - 24 oz
+ID: 1111044400
+Location: DAIRY, R side, 1.0 shelf
+Price: Regular: $2.99, Promotional: $0.0
+Category: Dairy
+Product: Canned Crushed Pineapple in Pineapple Juice GROCERY - 20 oz
+ID: 1111083129
+Location: GROCERY, L side, 9.0 shelf
+Price: Regular: $1.69, Promotional: $0.0
+Category: Canned & Packaged
+Product: Half & Half DAIRY - 1 pt
+ID: 1111050266
+Location: DAIRY, R side, 4.0 shelf
+Price: Regular: $1.99, Promotional: $0.0
+Category: Dairy
+Product: Honey Wheat Bread BACK WALL - 20 oz
+ID: 1111008449
+Location: BACK WALL, L side, 4.0 shelf
+Price: Regular: $2.39, Promotional: $1.79
+Category: Bakery
+Product: Kosher Sandwich Slims Dill Pickles AISLE 5 - 16 fl oz
+ID: 1111089227
+Location: AISLE 5, L side, 4.0 shelf
+Price: Regular: $2.69, Promotional: $2.49
+Category: Canned & Packaged
+Product: Soft & Strong Toilet Paper Double Roll AISLE 18 - 12 rolls
+ID: 1111010491
+Location: AISLE 18, L side, 1.0 shelf
+Price: Regular: $7.99, Promotional: $5.99
+Category: Cleaning Products
+Product: Extra Large White Eggs DAIRY - 12 ct
+ID: 1111060904
+Location: DAIRY, R side, 2.0 shelf
+Price: Regular: $2.19, Promotional: $0.0
+Category: Dairy
+Product: Gallon Water AISLE 14 - 1 gallon
+ID: 1111042130
+Location: AISLE 14, R side, 3.0 shelf
+Price: Regular: $1.3900000000000001, Promotional: $0.0
+Category: Beverages
+Product: White Bread BACK WALL - 20 oz
+ID: 1111008486
+Location: BACK WALL, L side, 4.0 shelf
+Price: Regular: $1.99, Promotional: $1.79
+Category: Bakery
+Product: Hardwood Smoked Sliced Bacon Packaged Meat - 16 oz
+ID: 1111097191
+Location: Packaged Meat, R side, 5.0 shelf
+Price: Regular: $5.29, Promotional: $0.0
+Category: Meat & Seafood
+Product: Brand Super Sweet Corn AISLE 8 - 12 oz
+ID: 1111084961
+Location: AISLE 8, R side, 3.0 shelf
+Price: Regular: $1.25, Promotional: $0.0
+Category: Frozen
+Product: Adorbs™ Easy Peel Seedless Mandarin Clementine Oranges in 5lb Bag PRODUCE - 5 lb
+ID: 1111018233
+Location: PRODUCE, R side, 4.0 shelf
+Price: Regular: $7.99, Promotional: $0.0
+Category: Produce
+Product: Non-Stick Extra Virgin Olive Oil Cooking Spray SHELF EXTENDER PROGRAM - 5 oz
+ID: 1111078955
+Location: SHELF EXTENDER PROGRAM, L side, 7.0 shelf
+Price: Regular: $4.79, Promotional: $0.0
+Category: Baking Goods
+Product: Colby Jack Shredded Cheese DAIRY - 8 oz
+ID: 1111050174
+Location: DAIRY, R side, 3.0 shelf
+Price: Regular: $2.49, Promotional: $2.33
+Category: Dairy
+Product: Hamburger Dill Oval Cut Pickle Chips AISLE 5 - 24 fl oz
+ID: 1111089312
+Location: AISLE 5, L side, 3.0 shelf
+Price: Regular: $2.79, Promotional: $0.0
+Category: Canned & Packaged
+Product: Fresh Lemons - 2 Pound Bag PRODUCE - 2 lb
+ID: 1111091188
+Location: PRODUCE, nan side, nan shelf
+Price: Regular: $4.99, Promotional: $3.99
+Category: Produce
+Product: Original Cream Cheese DAIRY - 8 oz
+ID: 1111089202
+Location: DAIRY, R side, 2.0 shelf
+Price: Regular: $1.99, Promotional: $0.0
+Category: Breakfast
+Product: Glimmer™ Select-A-Sheet® Paper Towels Double Rolls AISLE 18 - 2 rolls
+ID: 1111010621
+Location: AISLE 18, R side, 2.0 shelf
+Price: Regular: $2.49, Promotional: $0.0
+Category: Cleaning Products
+Product: 85% Lean 15% Fat Ground Turkey MEAT - 1 lb
+ID: 1111096875
+Location: MEAT, R side, 2.0 shelf
+Price: Regular: $4.49, Promotional: $0.0
+Category: Meat & Seafood
+Product: Mild Cheddar Shredded Cheese DAIRY - 8 oz
+ID: 1111050170
+Location: DAIRY, R side, 5.0 shelf
+Price: Regular: $2.49, Promotional: $2.33
+Category: Dairy
+Product: Original Saltines Crackers AISLE 12 - 16 oz
+ID: 1111009090
+Location: AISLE 12, R side, 1.0 shelf
+Price: Regular: $1.99, Promotional: $0.0
+Category: Snacks
+Product: Garlic Frozen Texas Toast AISLE 7 - 8 ct / 14 oz
+ID: 1111082902
+Location: AISLE 7, L side, 4.0 shelf
+Price: Regular: $2.29, Promotional: $0.0
+Category: Frozen
+Product: Kosher Dill Spear Pickles AISLE 5 - 24 fl oz
+ID: 1111089236
+Location: AISLE 5, L side, 3.0 shelf
+Price: Regular: $2.79, Promotional: $0.0
+Category: Canned & Packaged
+Product: Fat Free Skim Milk DAIRY - 1 gal
+ID: 1111042315
+Location: DAIRY, R side, 1.0 shelf
+Price: Regular: $2.69, Promotional: $0.0
+Category: Dairy
+Product: Spring Gallon Water AISLE 14 - 1 gallon
+ID: 1111042139
+Location: AISLE 14, R side, 3.0 shelf
+Price: Regular: $1.3900000000000001, Promotional: $0.0
+Category: Beverages
+Product: Whole Milk Mozzarella Shredded Cheese DAIRY - 8 oz
+ID: 1111001798
+Location: DAIRY, R side, 3.0 shelf
+Price: Regular: $2.49, Promotional: $2.33
+Category: Dairy
+Product: 100% Parmesan Grated Cheese AISLE 5 - 8 oz
+ID: 1111058033
+Location: AISLE 5, R side, 5.0 shelf
+Price: Regular: $3.29, Promotional: $0.0
+Category: Dairy
+Product: Classic Wavy Potato Chips AISLE 12 - 8 oz
+ID: 1111008880
+Location: AISLE 12, L side, 3.0 shelf
+Price: Regular: $1.99, Promotional: $0.0
+Category: Snacks
+Product: Peanut Butter Creamy SHELF EXTENDER PROGRAM - 16 oz
+ID: 1111001618
+Location: SHELF EXTENDER PROGRAM, L side, 12.0 shelf
+Price: Regular: $2.29, Promotional: $0.0
+Category: Condiment & Sauces
+Product: Fresh Chicken Drumsticks MEAT - 1 lb
+ID: 7496096808
+Location: MEAT, L side, 1.0 shelf
+Price: Regular: $5.0, Promotional: $0.0
+Category: Meat & Seafood
+Product: Whole Kernel Sweet Golden Corn AISLE 4 - 15.25 oz
+ID: 1111011383
+Location: AISLE 4, R side, 4.0 shelf
+Price: Regular: $0.89, Promotional: $0.0
+Category: Canned & Packaged
+Product: Original Cream Cheese DAIRY - 2 ct / 8 oz each
+ID: 1111086132
+Location: DAIRY, R side, 3.0 shelf
+Price: Regular: $3.79, Promotional: $0.0
+Category: Breakfast
+Product: Mexican Style Blend Shredded Cheese BIG DEAL! DAIRY - 32 oz
+ID: 1111058913
+Location: DAIRY, R side, 1.0 shelf
+Price: Regular: $7.99, Promotional: $0.0
+Category: Dairy
+Product: Romaine Blend Salad Bag PRODUCE - 10 oz
+ID: 1111091038
+Location: PRODUCE, L side, 4.0 shelf
+Price: Regular: $3.49, Promotional: $0.0
+Category: Produce
+Product: Hass Fresh Avocados Bag PRODUCE - 4 ct
+ID: 1111018180
+Location: PRODUCE, L side, 4.0 shelf
+Price: Regular: $3.49, Promotional: $0.0
+Category: Produce
+Product: Canned Pineapple Tidbits in Pineapple Juice GROCERY - 20 oz
+ID: 1111083155
+Location: GROCERY, nan side, nan shelf
+Price: Regular: $1.69, Promotional: $0.0
+Category: Canned & Packaged
+Product: Spaghetti Pasta AISLE 5 - 16 oz
+ID: 1111085004
+Location: AISLE 5, R side, 3.0 shelf
+Price: Regular: $1.33, Promotional: $1.25
+Category: Pasta, Sauces, Grain
+Product: 2% Low Fat Small Curd Cottage Cheese DAIRY - 24 oz
+ID: 1111045045
+Location: DAIRY, R side, 3.0 shelf
+Price: Regular: $2.99, Promotional: $0.0
+Category: Dairy
+Product: 1 lb. Ground Beef Roll 73/27 MEAT - 1 lb
+ID: 1111097920
+Location: MEAT, R side, 1.0 shelf
+Price: Regular: $4.99, Promotional: $0.0
+Category: Meat & Seafood
+Product: 4% Milkfat Small Curd Cottage Cheese DAIRY - 16 oz
+ID: 1111044760
+Location: DAIRY, R side, 1.0 shelf
+Price: Regular: $2.19, Promotional: $0.0
+Category: Dairy
+Product: Traditional Favorites Frozen Green Peas AISLE 8 - 12 oz
+ID: 1111089736
+Location: AISLE 8, R side, 5.0 shelf
+Price: Regular: $1.25, Promotional: $0.0
+Category: Frozen
+Product: Reduced Sodium Chicken Broth AISLE 5 - 32 oz
+ID: 1111004970
+Location: AISLE 5, R side, 5.0 shelf
+Price: Regular: $1.49, Promotional: $0.0
+Category: Canned & Packaged
+Product: 1% Low Fat Chocolate Milk DAIRY - 1/2 gal
+ID: 1111050574
+Location: DAIRY, R side, 2.0 shelf
+Price: Regular: $2.59, Promotional: $0.0
+Category: Dairy
+Product: Clamshell Seedless Green Grapes nan - 3 lb
+ID: 1111061375
+Location: nan, nan side, nan shelf
+Price: Regular: $7.99, Promotional: $0.0
+Category: Produce
+Product: Colby Jack Sliced Cheese DAIRY - 8 slices / 6 oz
+ID: 1111058287
+Location: DAIRY, R side, 6.0 shelf
+Price: Regular: $2.69, Promotional: $2.5
+Category: Dairy
+Product: Soft Wheat Bread BACK WALL - 20 oz
+ID: 1111008450
+Location: BACK WALL, L side, 5.0 shelf
+Price: Regular: $1.99, Promotional: $1.79
+Category: Bakery
+Product: Shredded Carrots PRODUCE - 10 oz
+ID: 1111091650
+Location: PRODUCE, L side, 3.0 shelf
+Price: Regular: $2.19, Promotional: $0.0
+Category: Produce
+Product: 99% Fat Free Chicken Broth AISLE 5 - 32 oz
+ID: 1111004969
+Location: AISLE 5, R side, 6.0 shelf
+Price: Regular: $1.49, Promotional: $0.0
+Category: Canned & Packaged
+Product: Original Sour Cream DAIRY - 24 oz
+ID: 1111046080
+Location: DAIRY, R side, 1.0 shelf
+Price: Regular: $2.99, Promotional: $0.0
+Category: Dairy
+Product: Seasoned Hash Brown Shredded Potato Patties AISLE 7 - 22.5 oz
+ID: 1111005158
+Location: AISLE 7, L side, 3.0 shelf
+Price: Regular: $3.69, Promotional: $0.0
+Category: Frozen
+Product: Boneless Pork Loin Chops MEAT - 10 ct / 2 lb
+ID: 1111063445
+Location: MEAT, R side, 4.0 shelf
+Price: Regular: $10.0, Promotional: $0.0
+Category: Meat & Seafood
+Product: Thick Cut Naturally Hardwood Smoked Bacon Packaged Meat - 16 oz
+ID: 1111097209
+Location: Packaged Meat, R side, 6.0 shelf
+Price: Regular: $5.29, Promotional: $0.0
+Category: Meat & Seafood
+Product: 1% Low Fat Chocolate Milk Jug DAIRY - 1 gal
+ID: 1111050573
+Location: DAIRY, R side, 1.0 shelf
+Price: Regular: $3.69, Promotional: $0.0
+Category: Dairy
+Product: Classic Garden Salad Bag PRODUCE - 24 oz
+ID: 1111091037
+Location: PRODUCE, L side, 1.0 shelf
+Price: Regular: $3.59, Promotional: $0.0
+Category: Produce
+Product: Petite Carrots Bag PRODUCE - 12 oz
+ID: 1111091651
+Location: PRODUCE, L side, 4.0 shelf
+Price: Regular: $2.19, Promotional: $0.0
+Category: Produce
+Product: Meal-Ready Sides Frozen Peas & Carrots AISLE 8 - 12 oz
+ID: 1111089741
+Location: AISLE 8, R side, 6.0 shelf
+Price: Regular: $1.25, Promotional: $0.0
+Category: Frozen
+Product: Light Brown Sugar AISLE 6 - 32 oz
+ID: 1111087662
+Location: AISLE 6, R side, 2.0 shelf
+Price: Regular: $2.59, Promotional: $0.0
+Category: Baking Goods
+Product: Natural Spring Bottled Water AISLE 14 - 24 bottles / 16.9 fl oz
+ID: 1111087902
+Location: AISLE 14, R side, 1.0 shelf
+Price: Regular: $4.29, Promotional: $0.0
+Category: Beverages
+Product: Original Sour Cream DAIRY - 8 oz
+ID: 1111046235
+Location: DAIRY, R side, 3.0 shelf
+Price: Regular: $1.25, Promotional: $0.0
+Category: Dairy
+Product: Sliced Black Ripe Olives SHELF EXTENDER PROGRAM - 2.25 oz
+ID: 1111082224
+Location: SHELF EXTENDER PROGRAM, L side, 13.0 shelf
+Price: Regular: $2.19, Promotional: $0.0
+Category: Canned & Packaged
+Product: Broccoli Florets BIG Deal! PRODUCE - 32 oz
+ID: 1111079549
+Location: PRODUCE, L side, 1.0 shelf
+Price: Regular: $6.49, Promotional: $0.0
+Category: Produce
+Product: Penne Rigate Pasta AISLE 5 - 16 oz
+ID: 1111085033
+Location: AISLE 5, R side, 6.0 shelf
+Price: Regular: $1.33, Promotional: $1.25
+Category: Pasta, Sauces, Grain
+Product: Classic Potato Chips AISLE 12 - 8 oz
+ID: 1111008889
+Location: AISLE 12, L side, 3.0 shelf
+Price: Regular: $1.99, Promotional: $0.0
+Category: Snacks
+Product: Swiss Sliced Cheese DAIRY - 8 slices / 6 oz
+ID: 1111058719
+Location: DAIRY, R side, 3.0 shelf
+Price: Regular: $2.69, Promotional: $2.5
+Category: Dairy
+Product: Chicken Caesar Salad Kit For One PRODUCE - 6 oz
+ID: 1111063064
+Location: PRODUCE, L side, 4.0 shelf
+Price: Regular: $3.99, Promotional: $3.67
+Category: Deli
+Product: Butter Sticks BIG DEAL! DAIRY - 2 pk / 16 oz
+ID: 1111010080
+Location: DAIRY, R side, 1.0 shelf
+Price: Regular: $7.49, Promotional: $0.0
+Category: Dairy
+Product: Mexican Style Blend Shredded Cheese DAIRY - 16 oz
+ID: 1111058880
+Location: DAIRY, R side, 1.0 shelf
+Price: Regular: $4.29, Promotional: $0.0
+Category: Dairy
+Product: Medium Cheddar Shredded Cheese DAIRY - 8 oz
+ID: 1111050339
+Location: DAIRY, R side, 5.0 shelf
+Price: Regular: $2.49, Promotional: $2.33
+Category: Dairy
+Product: Pepper Jack Sliced Cheese DAIRY - 8 slices / 6 oz
+ID: 1111058720
+Location: DAIRY, R side, 6.0 shelf
+Price: Regular: $2.69, Promotional: $2.5
+Category: Dairy
+Product: Coleslaw Mix 16 oz PRODUCE - 16 oz
+ID: 1111091040
+Location: PRODUCE, L side, 9.0 shelf
+Price: Regular: $2.59, Promotional: $2.0
+Category: Produce
+Product: 1% Lowfat Milk DAIRY - 1/2 gal
+ID: 1111041661
+Location: DAIRY, R side, 4.0 shelf
+Price: Regular: $1.8900000000000001, Promotional: $0.0
+Category: Dairy
+Product: Creamy Ranch Salad Dressing SHELF EXTENDER PROGRAM - 16 fl oz
+ID: 1111066912
+Location: SHELF EXTENDER PROGRAM, L side, 1.0 shelf
+Price: Regular: $2.49, Promotional: $2.39
+Category: Condiment & Sauces
+Product: Real Bacon Bits AISLE 5 - 3 oz
+ID: 1111080006
+Location: AISLE 5, L side, 5.0 shelf
+Price: Regular: $2.49, Promotional: $0.0
+Category: Condiment & Sauces
+Product: Fat Free Skim Milk DAIRY - 1/2 gal
+ID: 1111042305
+Location: DAIRY, R side, 4.0 shelf
+Price: Regular: $1.8900000000000001, Promotional: $0.0
+Category: Dairy
+Product: Deluxe Vividly Vanilla Ice Cream Tub AISLE 9 - 48 oz
+ID: 1111050729
+Location: AISLE 9, R side, 2.0 shelf
+Price: Regular: $2.99, Promotional: $2.79
+Category: Frozen
+Product: 85% Lean Fresh Ground Turkey MEAT - 3 lb
+ID: 1111097993
+Location: MEAT, R side, 1.0 shelf
+Price: Regular: $10.0, Promotional: $0.0
+Category: Meat & Seafood
+Product: Cheddar Jack Shredded Cheese DAIRY - 8 oz
+ID: 1111050183
+Location: DAIRY, R side, 5.0 shelf
+Price: Regular: $2.49, Promotional: $2.33
+Category: Dairy
+Product: Sweet & Mesquite BBQ Flavored Potato Chips AISLE 12 - 7.75 oz
+ID: 1111008883
+Location: AISLE 12, L side, 2.0 shelf
+Price: Regular: $1.99, Promotional: $0.0
+Category: Snacks
+Product: Real Mayo AISLE 5 - 30 fl oz
+ID: 1111001988
+Location: AISLE 5, L side, 2.0 shelf
+Price: Regular: $3.99, Promotional: $0.0
+Category: Condiment & Sauces
+Product: Purified Gallon Water AISLE 14 - 1 gallon
+ID: 1111084557
+Location: AISLE 14, R side, 3.0 shelf
+Price: Regular: $1.5899999999999999, Promotional: $0.0
+Category: Beverages
+Product: Original Taco Seasoning SHELF EXTENDER PROGRAM - 1.25 oz
+ID: 1111071503
+Location: SHELF EXTENDER PROGRAM, L side, 1.0 shelf
+Price: Regular: $0.59, Promotional: $0.0
+Category: Baking Goods
+Product: Dutch Milk Chocolate Hot Cocoa Mix GROCERY - 8 ct
+ID: 1111004288
+Location: GROCERY, L side, 1.0 shelf
+Price: Regular: $2.99, Promotional: $0.0
+Category: Beverages
+Product: Distilled White Vinegar AISLE 6 - 1 gal
+ID: 1111003113
+Location: AISLE 6, R side, 1.0 shelf
+Price: Regular: $3.99, Promotional: $0.0
+Category: Baking Goods
+Product: Vine Ripe Fresh Tomatoes PRODUCE - 20 oz
+ID: 1111091688
+Location: PRODUCE, L side, 6.0 shelf
+Price: Regular: $3.29, Promotional: $0.0
+Category: Produce
+Product: Elbow Macaroni AISLE 5 - 16 oz
+ID: 1111085021
+Location: AISLE 5, R side, 5.0 shelf
+Price: Regular: $1.33, Promotional: $1.25
+Category: Pasta, Sauces, Grain
+Product: Smoke Flavored Provolone Sliced Cheese DAIRY - 8 slices / 6 oz
+ID: 1111058716
+Location: DAIRY, R side, 4.0 shelf
+Price: Regular: $2.69, Promotional: $2.5
+Category: Dairy
+Product: Reduced Fat Mexican Style Shredded Cheese DAIRY - 8 oz
+ID: 1111050171
+Location: DAIRY, R side, 5.0 shelf
+Price: Regular: $2.49, Promotional: $2.33
+Category: Dairy
+Product: Original Pulp Free 100% Orange Juice DAIRY - 52 fl oz
+ID: 1111050658
+Location: DAIRY, R side, 4.0 shelf
+Price: Regular: $4.29, Promotional: $0.0
+Category: Beverages
+Product: Beef Shaved Steak MEAT - 14 oz
+ID: 1111034567
+Location: MEAT, R side, 1.0 shelf
+Price: Regular: $6.0, Promotional: $0.0
+Category: Meat & Seafood
+Product: Tomato Sauce AISLE 4 - 8 oz
+ID: 1111011970
+Location: AISLE 4, R side, 5.0 shelf
+Price: Regular: $0.69, Promotional: $0.0
+Category: Canned & Packaged
+Product: Idaho Potatoes PRODUCE - 10 lb
+ID: 1111091757
+Location: PRODUCE, nan side, nan shelf
+Price: Regular: $5.49, Promotional: $0.0
+Category: Produce
+Product: Soft Taco Size Flour Tortillas AISLE 4 - 10 ct / 17.5 oz
+ID: 1111005265
+Location: AISLE 4, L side, 4.0 shelf
+Price: Regular: $2.29, Promotional: $0.0
+Category: International
+Product: Baker Russet Potatoes PRODUCE - 4 ct
+ID: 1111018214
+Location: PRODUCE, nan side, nan shelf
+Price: Regular: $3.99, Promotional: $0.0
+Category: Produce
+Product: Mozzarella Shredded Cheese BIG DEAL! DAIRY - 32 oz
+ID: 1111059669
+Location: DAIRY, R side, 1.0 shelf
+Price: Regular: $7.99, Promotional: $0.0
+Category: Dairy
+Product: Ultra Absorbing Power Paper Towels Double Rolls AISLE 18 - 2 rolls
+ID: 1111010515
+Location: AISLE 18, R side, 2.0 shelf
+Price: Regular: $5.49, Promotional: $0.0
+Category: Cleaning Products
+Product: Brand Broccoli Florets PRODUCE - 12 oz
+ID: 1111060319
+Location: PRODUCE, L side, 2.0 shelf
+Price: Regular: $2.99, Promotional: $0.0
+Category: Produce
+Product: Ultra Absorbing Power Paper Towels Double Rolls AISLE 18 - 6 rolls
+ID: 1111010514
+Location: AISLE 18, R side, 1.0 shelf
+Price: Regular: $9.99, Promotional: $0.0
+Category: Cleaning Products
+Product: Lean Fresh Ground Turkey MEAT - 1 lb
+ID: 1111096874
+Location: MEAT, R side, 2.0 shelf
+Price: Regular: $4.99, Promotional: $0.0
+Category: Meat & Seafood
+Product: Original White Restaurant Style Tortilla Chips AISLE 12 - 13 oz
+ID: 1111010996
+Location: AISLE 12, L side, 1.0 shelf
+Price: Regular: $2.29, Promotional: $0.0
+Category: Snacks
+Product: Singles American Sliced Cheese DAIRY - 24 slices / 16 oz
+ID: 1111009435
+Location: DAIRY, R side, 1.0 shelf
+Price: Regular: $3.29, Promotional: $0.0
+Category: Dairy
+Product: Meal-Ready Sides Frozen Mixed Vegetables AISLE 8 - 12 oz
+ID: 1111084962
+Location: AISLE 8, R side, 3.0 shelf
+Price: Regular: $1.25, Promotional: $0.0
+Category: Frozen
+Product: Original Breakfast Sausage Links Packaged Meat - 12 oz
+ID: 1111097293
+Location: Packaged Meat, R side, 1.0 shelf
+Price: Regular: $3.29, Promotional: $0.0
+Category: Meat & Seafood
+Product: Mild Italian Ground Sausage MEAT - 16 oz
+ID: 1111097272
+Location: MEAT, R side, 1.0 shelf
+Price: Regular: $5.49, Promotional: $0.0
+Category: Meat & Seafood
+Product: Colby Jack Block Cheese DAIRY - 8 oz
+ID: 1111058678
+Location: DAIRY, R side, 3.0 shelf
+Price: Regular: $2.49, Promotional: $2.33
+Category: Dairy
+Product: Clover Honey Bear SHELF EXTENDER PROGRAM - 12 oz
+ID: 1111086170
+Location: SHELF EXTENDER PROGRAM, L side, 1.0 shelf
+Price: Regular: $4.99, Promotional: $3.99
+Category: Condiment & Sauces
+Product: Flour Tortillas Handmade Style Burrito Size AISLE 4 - 8 ct / 20 oz
+ID: 1111005266
+Location: AISLE 4, L side, 2.0 shelf
+Price: Regular: $2.29, Promotional: $0.0
+Category: International
+Product: Tater Bites AISLE 7 - 32 oz
+ID: 1111087577
+Location: AISLE 7, L side, 5.0 shelf
+Price: Regular: $3.99, Promotional: $0.0
+Category: Frozen
+Product: Italian Style Blend Shredded Cheese DAIRY - 8 oz
+ID: 1111050205
+Location: DAIRY, R side, 3.0 shelf
+Price: Regular: $2.49, Promotional: $2.33
+Category: Dairy
+Product: Fully Cooked Hardwood Smoke Flavor Traditional Bacon MEAT - 2.1 oz
+ID: 1111097205
+Location: MEAT, L side, 6.0 shelf
+Price: Regular: $3.99, Promotional: $3.5
+Category: Meat & Seafood
+Product: Lactose Free 2% Reduced Fat Milk DAIRY - 1/2 gal
+ID: 1111082556
+Location: DAIRY, R side, 3.0 shelf
+Price: Regular: $3.79, Promotional: $0.0
+Category: Dairy
+Product: 85/15 Lean Ground Beef MEAT - 1 lb
+ID: 1111096968
+Location: MEAT, R side, 3.0 shelf
+Price: Regular: $7.49, Promotional: $0.0
+Category: Meat & Seafood
+Product: Wild Caught Chunk Light Tuna in Water AISLE 4 - 5 oz
+ID: 1111089084
+Location: AISLE 4, R side, 1.0 shelf
+Price: Regular: $1.0, Promotional: $0.0
+Category: Canned & Packaged
+Product: Powdered Sugar AISLE 6 - 32 oz
+ID: 1111087664
+Location: AISLE 6, R side, 3.0 shelf
+Price: Regular: $2.59, Promotional: $0.0
+Category: Baking Goods
+Product: Medium Cheddar Sliced Cheese DAIRY - 8 slices / 6 oz
+ID: 1111058718
+Location: DAIRY, R side, 5.0 shelf
+Price: Regular: $2.69, Promotional: $2.5
+Category: Dairy
+Product: French Vanilla Coffee Creamer DAIRY - 32 fl oz
+ID: 1111088104
+Location: DAIRY, R side, 2.0 shelf
+Price: Regular: $2.99, Promotional: $0.0
+Category: Beverages
+Product: Baby Spinach PRODUCE - 6 oz
+ID: 1111091049
+Location: PRODUCE, L side, 2.0 shelf
+Price: Regular: $3.49, Promotional: $0.0
+Category: Produce
+Product: Celebration Paper Plates AISLE 18 - 48 ct / 8.5 in
+ID: 1111086951
+Location: AISLE 18, R side, 4.0 shelf
+Price: Regular: $3.49, Promotional: $0.0
+Category: Cleaning Products
+Product: Hardwood Smoked Sliced Bacon Packaged Meat - 12 oz
+ID: 1111060578
+Location: Packaged Meat, R side, 2.0 shelf
+Price: Regular: $4.49, Promotional: $0.0
+Category: Meat & Seafood
+Product: Pure Canola Oil AISLE 6 - 48 fl oz
+ID: 1111085634
+Location: AISLE 6, L side, 2.0 shelf
+Price: Regular: $4.49, Promotional: $0.0
+Category: Baking Goods
+Product: Fruity Freezer Pops GROCERY - 36 ct
+ID: 1111002915
+Location: GROCERY, L side, 3.0 shelf
+Price: Regular: $3.99, Promotional: $2.99
+Category: Frozen
+Product: Crinkle Cut French Fries AISLE 7 - 32 oz
+ID: 1111087508
+Location: AISLE 7, L side, 5.0 shelf
+Price: Regular: $3.69, Promotional: $0.0
+Category: Frozen
+Product: Cheddar and Sour Cream Ripples Potato Chips AISLE 12 - 7.5 oz
+ID: 1111008887
+Location: AISLE 12, L side, 1.0 shelf
+Price: Regular: $1.99, Promotional: $0.0
+Category: Snacks
+Product: French Onion Sour Cream Dip & Spread DAIRY - 16 oz
+ID: 1111009784
+Location: DAIRY, R side, 5.0 shelf
+Price: Regular: $2.19, Promotional: $0.0
+Category: Dairy
+Product: Grade A Jumbo White Eggs DAIRY - 12 ct
+ID: 1111060905
+Location: DAIRY, R side, 2.0 shelf
+Price: Regular: $2.39, Promotional: $0.0
+Category: Breakfast
+Product: Traditional Pork Sausage Patties Packaged Meat - 12 oz
+ID: 1111097045
+Location: Packaged Meat, R side, 1.0 shelf
+Price: Regular: $3.29, Promotional: $0.0
+Category: Meat & Seafood
+Product: Large White Eggs DAIRY - 6 ct
+ID: 1111060906
+Location: DAIRY, R side, 5.0 shelf
+Price: Regular: $1.49, Promotional: $0.0
+Category: Breakfast
+Product: Sharp Cheddar Block Cheese DAIRY - 8 oz
+ID: 1111058627
+Location: DAIRY, R side, 3.0 shelf
+Price: Regular: $2.49, Promotional: $2.33
+Category: Dairy
+Product: Big K® Cola Soda Bottle AISLE 14 - 2 liter
+ID: 1111049180
+Location: AISLE 14, L side, 5.0 shelf
+Price: Regular: $1.5, Promotional: $1.25
+Category: Beverages
+Product: Sliced Pepperoni MEAT - 6 oz
+ID: 1111099380
+Location: MEAT, L side, 7.0 shelf
+Price: Regular: $2.99, Promotional: $2.79
+Category: Meat & Seafood
+Product: Tri-Color Coleslaw PRODUCE - 14 oz
+ID: 1111062869
+Location: PRODUCE, L side, 7.0 shelf
+Price: Regular: $2.29, Promotional: $2.0
+Category: Produce
+Product: Lightly Salted Wavy Potato Chips AISLE 12 - 7.75 oz
+ID: 1111008884
+Location: AISLE 12, L side, 3.0 shelf
+Price: Regular: $1.99, Promotional: $0.0
+Category: Snacks
+Product: Tater Rounds Shredded Potatoes AISLE 7 - 30 oz
+ID: 1111087586
+Location: AISLE 7, L side, 3.0 shelf
+Price: Regular: $3.99, Promotional: $0.0
+Category: Frozen
+Product: Mozzarella String Cheese DAIRY - 24 ct / 1 oz
+ID: 1111058151
+Location: DAIRY, R side, 2.0 shelf
+Price: Regular: $5.79, Promotional: $0.0
+Category: Dairy
+Product: Clamshell Seedless Red Grapes nan - 3 lb
+ID: 1111061376
+Location: nan, nan side, nan shelf
+Price: Regular: $7.99, Promotional: $0.0
+Category: Produce
+Product: Santa Fe Salad Bowl PRODUCE - 6 oz
+ID: 1111063034
+Location: PRODUCE, L side, 3.0 shelf
+Price: Regular: $3.99, Promotional: $3.67
+Category: Produce
+Product: Vanilla Ice Cream Snowboard Sandwiches AISLE 9 - 12 ct
+ID: 1111011827
+Location: AISLE 9, R side, 4.0 shelf
+Price: Regular: $2.99, Promotional: $2.79
+Category: Frozen
+Product: 2% Low Fat Small Curd Cottage Cheese DAIRY - 16 oz
+ID: 1111045043
+Location: DAIRY, R side, 3.0 shelf
+Price: Regular: $2.19, Promotional: $0.0
+Category: Dairy
+Product: Chef Salad Kit For One PRODUCE - 6.7 oz
+ID: 1111063061
+Location: PRODUCE, L side, 3.0 shelf
+Price: Regular: $3.99, Promotional: $3.67
+Category: Deli
+Product: 5 lb. Ground Beef Roll 73/27 MEAT - 5 lb
+ID: 1111097922
+Location: MEAT, R side, 1.0 shelf
+Price: Regular: $18.99, Promotional: $17.99
+Category: Meat & Seafood
+Product: Navel Oranges PRODUCE - 8 lb
+ID: 1111018199
+Location: PRODUCE, nan side, nan shelf
+Price: Regular: $8.99, Promotional: $0.0
+Category: Produce
+Product: Double Zipper Sandwich Bags AISLE 16 - 90 ct
+ID: 1111087130
+Location: AISLE 16, R side, 4.0 shelf
+Price: Regular: $2.59, Promotional: $0.0
+Category: Cleaning Products
+Product: Yellow Mustard AISLE 5 - 8 oz
+ID: 1111081237
+Location: AISLE 5, L side, 5.0 shelf
+Price: Regular: $0.99, Promotional: $0.0
+Category: Condiment & Sauces
+Product: Whipping Cream DAIRY - 1 pt
+ID: 1111050313
+Location: DAIRY, R side, 5.0 shelf
+Price: Regular: $3.59, Promotional: $0.0
+Category: Dairy
+Product: Garlic Cheese Frozen Texas Toast AISLE 7 - 8 ct / 13 oz
+ID: 1111088632
+Location: AISLE 7, L side, 2.0 shelf
+Price: Regular: $2.69, Promotional: $0.0
+Category: Frozen
+Product: Deluxe Cookies N' Cream Ice Cream Tub AISLE 9 - 48 oz
+ID: 1111050719
+Location: AISLE 9, R side, 3.0 shelf
+Price: Regular: $2.99, Promotional: $2.79
+Category: Frozen
+Product: Black Beans AISLE 4 - 15.5 oz
+ID: 1111010647
+Location: AISLE 4, R side, 4.0 shelf
+Price: Regular: $0.89, Promotional: $0.0
+Category: Canned & Packaged
+Product: Traditional Favorites Frozen Cut Green Beans AISLE 8 - 12 oz
+ID: 1111089730
+Location: AISLE 8, R side, 4.0 shelf
+Price: Regular: $1.25, Promotional: $0.0
+Category: Frozen
+Product: Whole Garlic Bulbs PRODUCE - 5 ct
+ID: 1111002824
+Location: PRODUCE, nan side, nan shelf
+Price: Regular: $1.99, Promotional: $0.0
+Category: Produce
+Product: Tomato Paste AISLE 4 - 6 oz
+ID: 1111011971
+Location: AISLE 4, R side, 6.0 shelf
+Price: Regular: $0.99, Promotional: $0.0
+Category: Canned & Packaged
+Product: 4% Milkfat Large Curd Cottage Cheese DAIRY - 24 oz
+ID: 1111044500
+Location: DAIRY, R side, 2.0 shelf
+Price: Regular: $2.99, Promotional: $0.0
+Category: Dairy
+Product: Purified Mini Bottled Water AISLE 14 - 24 bottles / 8 fl oz
+ID: 1111085808
+Location: AISLE 14, R side, 4.0 shelf
+Price: Regular: $4.29, Promotional: $3.5
+Category: Beverages
+Product: Mild Pork Sausage Roll Packaged Meat - 16 oz
+ID: 1111097298
+Location: Packaged Meat, R side, 5.0 shelf
+Price: Regular: $3.19, Promotional: $0.0
+Category: Meat & Seafood
+Product: Heavy Duty Aluminum Foil AISLE 16 - 50 sq ft
+ID: 1111089998
+Location: AISLE 16, R side, 2.0 shelf
+Price: Regular: $4.19, Promotional: $3.99
+Category: Cleaning Products
+Product: Fruity Mighty Ice Pops GROCERY - 20 ct
+ID: 1111010270
+Location: GROCERY, nan side, nan shelf
+Price: Regular: $2.99, Promotional: $0.0
+Category: Frozen
+Product: Sweetened Condensed Milk AISLE 6 - 14 oz
+ID: 1111088310
+Location: AISLE 6, L side, 3.0 shelf
+Price: Regular: $2.49, Promotional: $0.0
+Category: Baking Goods
+Product: Large White Eggs DAIRY - 60 ct
+ID: 1111060914
+Location: DAIRY, R side, 2.0 shelf
+Price: Regular: $9.89, Promotional: $0.0
+Category: Dairy
+Product: Facial Tissue AISLE 18 - 160 ct
+ID: 1111012823
+Location: AISLE 18, L side, 3.0 shelf
+Price: Regular: $1.79, Promotional: $1.25
+Category: Cleaning Products
+Product: Honey Lemon Flavor Cough Drops DRUG/GM - 30 ct
+ID: 4126036431
+Location: DRUG/GM, nan side, nan shelf
+Price: Regular: $1.5899999999999999, Promotional: $0.0
+Category: Health
+Product: Classic Wavy Potato Chips Family Size AISLE 12 - 13 oz
+ID: 1111008893
+Location: AISLE 12, L side, 6.0 shelf
+Price: Regular: $3.19, Promotional: $2.99
+Category: Snacks
+Product: Deluxe Artisan Vanilla Bean Ice Cream Tub AISLE 9 - 48 oz
+ID: 1111050701
+Location: AISLE 9, R side, 3.0 shelf
+Price: Regular: $2.99, Promotional: $2.79
+Category: Frozen
+Product: 1000 Sheets per Roll Toilet Paper AISLE 18 - 4 rolls
+ID: 1111012016
+Location: AISLE 18, L side, 2.0 shelf
+Price: Regular: $3.49, Promotional: $2.99
+Category: Cleaning Products
+Product: Evaporated Milk AISLE 6 - 12 fl oz
+ID: 1111088301
+Location: AISLE 6, L side, 4.0 shelf
+Price: Regular: $1.3900000000000001, Promotional: $0.0
+Category: Baking Goods
+Product: Recipe Beginnings Frozen 3 Pepper & Onion Blend AISLE 8 - 12 oz
+ID: 1111089786
+Location: AISLE 8, R side, 6.0 shelf
+Price: Regular: $1.79, Promotional: $0.0
+Category: Frozen
+Product: Nacho & Taco Blend Shredded Cheese DAIRY - 8 oz
+ID: 1111050176
+Location: DAIRY, R side, 6.0 shelf
+Price: Regular: $2.49, Promotional: $2.33
+Category: Dairy
+Product: Whole Sweet Gherkins Pickles AISLE 5 - 16 fl oz
+ID: 1111089442
+Location: AISLE 5, L side, 4.0 shelf
+Price: Regular: $3.29, Promotional: $2.49
+Category: Canned & Packaged
+Product: Vanilla Caramel Coffee Creamer DAIRY - 32 fl oz
+ID: 1111088111
+Location: DAIRY, R side, 1.0 shelf
+Price: Regular: $2.99, Promotional: $0.0
+Category: Beverages
+Product: Zesty Hot Dill Zingers AISLE 5 - 24 fl oz
+ID: 1111089279
+Location: AISLE 5, L side, 3.0 shelf
+Price: Regular: $2.79, Promotional: $0.0
+Category: Canned & Packaged
