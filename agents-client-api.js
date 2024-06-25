@@ -355,37 +355,63 @@ connectButton.onclick = async () => {
 
 async function startStreaming(assistantReply) {
   console.log('Starting streaming with reply:', assistantReply);
-  try {
-    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: assistantReply,
+  const maxRetries = 3;
+  let retryCount = 0;
+
+  while (retryCount < maxRetries) {
+    try {
+      const playResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
         },
-        config: {
-          fluent: true,
-          pad_audio: 0,
-        },
-        session_id: sessionId,
-      }),
-    });
-    console.log('Play response status:', playResponse.status);
-    if (!playResponse.ok) {
-      const errorData = await playResponse.json();
-      console.error('Error in play response:', errorData);
-    }
-  } catch (error) {
-    console.error('Error during streaming:', error);
-    if (isRecording) {
-      await reinitializeConnection();
+        body: JSON.stringify({
+          script: {
+            type: 'text',
+            input: assistantReply,
+          },
+          config: {
+            fluent: true,
+            pad_audio: 0,
+          },
+          session_id: sessionId,  // Ensure this is the correct session ID, not a cookie value
+        }),
+      });
+
+      console.log('Play response status:', playResponse.status);
+      
+      if (playResponse.ok) {
+        console.log('Streaming started successfully');
+        return;
+      } else {
+        const errorData = await playResponse.json();
+        console.error('Error in play response:', errorData);
+        
+        if (playResponse.status === 500) {
+          retryCount++;
+          console.log(`Retrying... Attempt ${retryCount} of ${maxRetries}`);
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second before retrying
+        } else {
+          throw new Error(`HTTP error ${playResponse.status}`);
+        }
+      }
+    } catch (error) {
+      console.error('Error during streaming:', error);
+      retryCount++;
+      if (retryCount >= maxRetries) {
+        console.error('Max retries reached. Unable to start streaming.');
+        if (isRecording) {
+          await reinitializeConnection();
+        }
+        break;
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second before retrying
     }
   }
 }
+
+
 
 async function startRecording() {
   console.log('Starting recording');
