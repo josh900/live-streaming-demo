@@ -1,30 +1,35 @@
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
+const path = require('path');
 
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
-app.use('/', express.static(__dirname, {
-    setHeaders: (res, path) => {
-      if (path.endsWith('.json')) {
-        res.type('application/javascript');
-      }
-    }
-  }));
+// Serve static files
+app.use(express.static(path.join(__dirname, 'public')));
 
-app.use('/', express.static(__dirname));
-
-app.get('/', function(req, res) {
-    res.sendFile(__dirname + '/index.html')
+// Routes
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
-app.get('/agents', function(req, res) {
-    res.sendFile(__dirname + '/index-agents.html')
-});
+
+// Add any additional routes or API endpoints here
 
 const server = http.createServer(app);
 
-server.listen(port, () => console.log(`Server started on port localhost:${port}`));
+server.listen(port, () => console.log(`Server started on port ${port}`));
 
+// WebSocket setup for real-time communication (if needed)
+// const WebSocket = require('ws');
+// const wss = new WebSocket.Server({ server });
+// 
+// wss.on('connection', (ws) => {
+//   console.log('New WebSocket connection');
+//   // Handle WebSocket messages here
+// });
+
+module.exports = app;
