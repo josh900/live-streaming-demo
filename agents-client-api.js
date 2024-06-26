@@ -240,6 +240,8 @@ connectButton.onclick = async () => {
   closePC();
 
   try {
+    console.log('Using API key:', DID_API.key);
+
     const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
       method: 'POST',
       headers: {
@@ -259,6 +261,8 @@ connectButton.onclick = async () => {
 
     const data = await sessionResponse.json();
     console.log('Full stream creation response:', data);
+    console.log('Using API key:', DID_API.key);
+
     streamId = data.id;
     sessionId = data.session_id;
     console.log('Stream created:', { streamId, sessionId });
@@ -289,6 +293,8 @@ connectButton.onclick = async () => {
 
     console.log('SDP answer sent successfully');
     console.log('Connection setup completed. Session ID:', sessionId);
+    console.log('Using API key:', DID_API.key);
+
   } catch (error) {
     console.error('Error during connection setup:', error);
     sessionId = null; // Reset sessionId if there's an error
@@ -318,9 +324,9 @@ async function startStreaming(assistantReply) {
           type: 'text',
           input: assistantReply,
         },
+        driver_url: 'bank://lively/',
         config: {
-          fluent: true,
-          pad_audio: 0,
+          stitch: true,
         },
         session_id: sessionId,
       }),
@@ -339,9 +345,10 @@ async function startStreaming(assistantReply) {
 
   } catch (error) {
     console.error('Error during streaming:', error);
-    // Don't reinitialize here, as the connection seems to be fine
   }
 }
+
+
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
