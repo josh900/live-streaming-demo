@@ -88,10 +88,30 @@ function onIceGatheringStateChange() {
 function onIceCandidate(event) {
   if (event.candidate) {
     console.log('New ICE candidate:', event.candidate);
-    // Send this candidate to the remote peer
-    // You'll need to implement this part based on your signaling mechanism
+    
+    fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        candidate: event.candidate.candidate,
+        sdpMid: event.candidate.sdpMid,
+        sdpMLineIndex: event.candidate.sdpMLineIndex,
+        session_id: sessionId,
+      }),
+    }).then(response => {
+      if (!response.ok) {
+        console.error('Failed to send ICE candidate:', response.statusText);
+      }
+    }).catch(error => {
+      console.error('Error sending ICE candidate:', error);
+    });
   }
 }
+
+
 
 function onIceConnectionStateChange() {
   if (peerConnection) {
@@ -137,7 +157,13 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
     peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
     peerConnection.addEventListener('track', onTrack, true);
+    
+    // Add this new event listener
+    peerConnection.addEventListener('negotiationneeded', (event) => {
+      console.log('Negotiation needed:', event);
+    });
   }
+
 
   await peerConnection.setRemoteDescription(offer);
   console.log('set remote sdp OK');
@@ -310,6 +336,12 @@ async function startStreaming(assistantReply) {
     console.error('Missing session ID or stream ID. Cannot start streaming.');
     return;
   }
+
+  if (peerConnection.connectionState !== 'connected') {
+    console.error('PeerConnection is not in "connected" state. Current state:', peerConnection.connectionState);
+    return;
+  }
+
 
   try {
     console.log(`Sending streaming request to: ${DID_API.url}/${DID_API.service}/streams/${streamId}`);
