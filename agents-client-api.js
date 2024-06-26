@@ -407,7 +407,8 @@ function handleStreamingFailure(assistantReply) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant (text-only fallback):</u> ${assistantReply}</span><br>`;
   // 2. Attempt to use a different API or service
   // 3. Notify the user about the issue
-  alert('We're experiencing issues with video streaming. The conversation will continue in text-only mode.');
+    console.error('experiencing issues with video streaming. The conversation will continue in text-only mode.');
+
 }
 
 
