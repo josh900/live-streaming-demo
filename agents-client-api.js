@@ -1,10 +1,9 @@
 'use strict';
-import DID_API from './api.js';
 
-const GROQ_API_KEY = DID_API.groqKey;
-const DEEPGRAM_API_KEY = DID_API.deepgramKey;
+const fetchJsonFile = await fetch("./api.json");
+const DID_API = await fetchJsonFile.json();
 
-if (DID_API.key == '🤫') alert('Please put your api key inside ./api.js and restart..');
+if (DID_API.key == '🤫') alert('Please put your api key inside ./api.json and restart..');
 
 const RTCPeerConnection = (
   window.RTCPeerConnection ||
@@ -13,65 +12,46 @@ const RTCPeerConnection = (
 ).bind(window);
 
 let peerConnection;
+let pcDataChannel;
 let streamId;
 let sessionId;
 let sessionClientAnswer;
+
 let statsIntervalId;
-let videoIsPlaying;
+let videoIsPlaying = false;
 let lastBytesReceived;
-let chatHistory = [];
-let mediaRecorder;
-let deepgramSocket;
-let transcript = '';
-let inactivityTimeout;
-let transcriptionTimer;
+let streamVideoOpacity = 0;
 
-const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentance unless absolutely needed.`;
+const stream_warmup = true;
+let isStreamReady = !stream_warmup;
 
-const videoElement = document.getElementById('video-element');
-videoElement.setAttribute('playsinline', '');
+const idleVideoElement = document.getElementById('idle-video-element');
+const streamVideoElement = document.getElementById('stream-video-element');
+idleVideoElement.setAttribute('playsinline', '');
+streamVideoElement.setAttribute('playsinline', '');
+
 const peerStatusLabel = document.getElementById('peer-status-label');
 const iceStatusLabel = document.getElementById('ice-status-label');
 const iceGatheringStatusLabel = document.getElementById('ice-gathering-status-label');
 const signalingStatusLabel = document.getElementById('signaling-status-label');
 const streamingStatusLabel = document.getElementById('streaming-status-label');
+const streamEventLabel = document.getElementById('stream-event-label');
+const agentIdLabel = document.getElementById('agentId-label');
+const chatIdLabel = document.getElementById('chatId-label');
+const textArea = document.getElementById("textArea");
 
-window.onload = async (event) => {
+// Play the idle video when the page is loaded
+window.onload = (event) => {
   playIdleVideo();
 
-  const loadingSymbol = document.createElement('div');
-  loadingSymbol.innerHTML = 'Connecting...';
-  loadingSymbol.style.position = 'absolute';
-  loadingSymbol.style.top = '50%';
-  loadingSymbol.style.left = '50%';
-  loadingSymbol.style.transform = 'translate(-50%, -50%)';
-  loadingSymbol.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
-  loadingSymbol.style.color = 'white';
-  loadingSymbol.style.padding = '10px';
-  loadingSymbol.style.borderRadius = '5px';
-  loadingSymbol.style.zIndex = '9999';
-  document.body.appendChild(loadingSymbol);
-
-  try {
-    await connectButton.onclick();
-    document.body.removeChild(loadingSymbol);
-  } catch (error) {
-    console.error('Error during auto-initialization:', error);
-    document.body.removeChild(loadingSymbol);
-    showErrorMessage('Failed to connect. Please try again.');
+  if (agentId == "" || agentId == undefined) {
+    console.log("Empty 'agentID' and 'chatID' variables\n\n1. Click on the 'Create new Agent with Knowledge' button\n2. Open the Console and wait for the process to complete\n3. Press on the 'Connect' button\n4. Type and send a message to the chat\nNOTE: You can store the created 'agentID' and 'chatId' variables at the bottom of the JS file for future chats");
+  } else {
+    console.log("You are good to go!\nClick on the 'Connect Button', Then send a new message\nAgent ID: ", agentId, "\nChat ID: ", chatId);
+    agentIdLabel.innerHTML = agentId;
+    chatIdLabel.innerHTML = chatId;
   }
 };
-
-function showErrorMessage(message) {
-  const errorMessage = document.createElement('div');
-  errorMessage.innerHTML = message;
-  errorMessage.style.color = 'red';
-  errorMessage.style.marginBottom = '10px';
-  document.body.appendChild(errorMessage);
-
-  destroyButton.style.display = 'inline-block';
-  connectButton.style.display = 'inline-block';
-}
 
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
@@ -84,22 +64,30 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.addEventListener('track', onTrack, true);
   }
 
-  try {
-    await peerConnection.setRemoteDescription(offer);
-    console.log('Set remote description OK');
+  await peerConnection.setRemoteDescription(offer);
+  console.log('set remote sdp OK');
 
-    const sessionClientAnswer = await peerConnection.createAnswer();
-    console.log('Created answer OK');
+  const sessionClientAnswer = await peerConnection.createAnswer();
+  console.log('create local sdp OK');
 
-    await peerConnection.setLocalDescription(sessionClientAnswer);
-    console.log('Set local description OK');
+  await peerConnection.setLocalDescription(sessionClientAnswer);
+  console.log('set local sdp OK');
 
-    return sessionClientAnswer;
-  } catch (error) {
-    console.error('Error in createPeerConnection:', error);
-    throw error;
-  }
-  
+  // Data Channel creation (for displaying the Agent's responses as text)
+  pcDataChannel = peerConnection.createDataChannel("JanusDataChannel");
+  pcDataChannel.onopen = () => {
+    console.log("datachannel open");
+  };
+
+  let decodedMsg;
+  // Agent Text Responses - Decoding the responses, pasting to the HTML element
+  pcDataChannel.onmessage = onStreamEvent;
+
+  pcDataChannel.onclose = () => {
+    console.log("datachannel close");
+  };
+
+  return sessionClientAnswer;
 }
 
 function onIceGatheringStateChange() {
@@ -111,7 +99,7 @@ function onIceCandidate(event) {
   if (event.candidate) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
 
-    fetch(`${DID_API.url}/talks/streams/${streamId}/ice`, {
+    fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -121,6 +109,18 @@ function onIceCandidate(event) {
         candidate,
         sdpMid,
         sdpMLineIndex,
+        session_id: sessionId,
+      }),
+    });
+  } else {
+    // For the initial 2 sec idle stream at the beginning of the connection, we utilize a null ice candidate.
+    fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
         session_id: sessionId,
       }),
     });
@@ -141,6 +141,17 @@ function onIceConnectionStateChange() {
 function onConnectionStateChange() {
   peerStatusLabel.innerText = peerConnection.connectionState;
   peerStatusLabel.className = 'peerConnectionState-' + peerConnection.connectionState;
+  if (peerConnection.connectionState === 'connected') {
+    playIdleVideo();
+    setTimeout(() => {
+      if (!isStreamReady) {
+        console.log('forcing stream/ready');
+        isStreamReady = true;
+        streamEventLabel.innerText = 'ready';
+        streamEventLabel.className = 'streamEvent-ready';
+      }
+    }, 5000);
+  }
 }
 
 function onSignalingStateChange() {
@@ -152,12 +163,17 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   let status;
   if (videoIsPlaying) {
     status = 'streaming';
-    const remoteStream = stream;
-    setVideoElement(remoteStream);
+    streamVideoOpacity = isStreamReady ? 1 : 0;
+    setStreamVideoElement(stream);
   } else {
     status = 'empty';
     playIdleVideo();
+    streamVideoOpacity = 0;
   }
+
+  streamVideoElement.style.opacity = streamVideoOpacity;
+  idleVideoElement.style.opacity = 1 - streamVideoOpacity;
+
   streamingStatusLabel.innerText = status;
   streamingStatusLabel.className = 'streamingState-' + status;
 }
@@ -170,7 +186,7 @@ function onTrack(event) {
     if (peerConnection && event.track) {
       const stats = await peerConnection.getStats(event.track);
       stats.forEach((report) => {
-        if (report.type === 'inbound-rtp' && report.mediaType === 'video') {
+        if (report.type === 'inbound-rtp' && report.kind === 'video') {
           const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
 
           if (videoStatusChanged) {
@@ -181,49 +197,75 @@ function onTrack(event) {
         }
       });
     }
-  }, 300);
+  }, 500);
 }
 
-function setVideoElement(stream) {
-  if (!stream) {
-    console.error('No stream provided to setVideoElement');
-    return;
+function onStreamEvent(message) {
+  if (pcDataChannel.readyState === 'open') {
+    let status;
+    const [event, data] = message.data.split(':');
+
+    switch (event) {
+      case 'stream/started':
+        status = 'started';
+        break;
+      case 'stream/done':
+        status = 'done';
+        break;
+      case 'stream/ready':
+        status = 'ready';
+        break;
+      case 'stream/error':
+        status = 'error';
+        break;
+      case 'chat/answer':
+        const decodedMsg = decodeURIComponent(data);
+        document.getElementById("msgHistory").innerHTML += `<span>${decodedMsg}</span><br><br>`;
+        return;
+      default:
+        status = 'dont-care';
+        break;
+    }
+
+    if (status === 'ready') {
+      setTimeout(() => {
+        console.log('stream/ready');
+        isStreamReady = true;
+        streamEventLabel.innerText = 'ready';
+        streamEventLabel.className = 'streamEvent-ready';
+      }, 1000);
+    } else {
+      console.log(event);
+      streamEventLabel.innerText = status === 'dont-care' ? event : status;
+      streamEventLabel.className = 'streamEvent-' + status;
+    }
   }
-  videoElement.classList.add("animated");
-  videoElement.muted = false;
-  videoElement.srcObject = stream;
-  videoElement.loop = false;
+}
 
-  console.log('Setting video source object:', stream);
+function setStreamVideoElement(stream) {
+  if (!stream) return;
+  streamVideoElement.srcObject = stream;
+  streamVideoElement.loop = false;
+  streamVideoElement.muted = !isStreamReady;
 
-  setTimeout(() => {
-    videoElement.classList.remove("animated");
-  }, 300);
-
-  videoElement.play().then(() => {
-    console.log('Video playback started');
-  }).catch((e) => {
-    console.error('Error playing video:', e);
-    showErrorMessage(`Video playback error: ${e.message}`);
-  });
+  if (streamVideoElement.paused) {
+    streamVideoElement
+      .play()
+      .then((_) => {})
+      .catch((e) => {});
+  }
 }
 
 function playIdleVideo() {
-  videoElement.classList.toggle("animated");
-  videoElement.srcObject = undefined;
-  videoElement.src = 'emma_idle.mp4';
-  videoElement.loop = true;
-
-  setTimeout(() => {
-    videoElement.classList.remove("animated");
-  }, 300);
+  idleVideoElement.src = DID_API.service == 'clips' ? 'rian_idle.mp4' : 'emma_idle.mp4';
 }
 
 function stopAllStreams() {
-  if (videoElement.srcObject) {
+  if (streamVideoElement.srcObject) {
     console.log('stopping video streams');
-    videoElement.srcObject.getTracks().forEach((track) => track.stop());
-    videoElement.srcObject = null;
+    streamVideoElement.srcObject.getTracks().forEach((track) => track.stop());
+    streamVideoElement.srcObject = null;
+    streamVideoOpacity = 0;
   }
 }
 
@@ -238,10 +280,13 @@ function closePC(pc = peerConnection) {
   pc.removeEventListener('signalingstatechange', onSignalingStateChange, true);
   pc.removeEventListener('track', onTrack, true);
   clearInterval(statsIntervalId);
+  isStreamReady = !stream_warmup;
+  streamVideoOpacity = 0;
   iceGatheringStatusLabel.innerText = '';
   signalingStatusLabel.innerText = '';
   iceStatusLabel.innerText = '';
   peerStatusLabel.innerText = '';
+  streamEventLabel.innerText = '';
   console.log('stopped peer connection');
   if (pc === peerConnection) {
     peerConnection = null;
@@ -271,6 +316,10 @@ async function fetchWithRetries(url, options, retries = 1) {
 
 const connectButton = document.getElementById('connect-button');
 connectButton.onclick = async () => {
+  if (agentId == "" || agentId === undefined) {
+    return alert("1. Click on the 'Create new Agent with Knowledge' button\n2. Open the Console and wait for the process to complete\n3. Press on the 'Connect' button\n4. Type and send a message to the chat\nNOTE: You can store the created 'agentID' and 'chatId' variables at the bottom of the JS file for future chats");
+  }
+
   if (peerConnection && peerConnection.connectionState === 'connected') {
     return;
   }
@@ -279,14 +328,15 @@ connectButton.onclick = async () => {
 
   try {
     console.log('Initializing connection...');
-    const sessionResponse = await fetchWithRetries(`${DID_API.url}/talks/streams`, {
+    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg'
+        source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg',
+        stream_warmup: stream_warmup
       }),
     });
 
@@ -304,7 +354,7 @@ connectButton.onclick = async () => {
       return;
     }
 
-    const sdpResponse = await fetch(`${DID_API.url}/talks/streams/${streamId}/sdp`, {
+    const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -326,224 +376,61 @@ connectButton.onclick = async () => {
     showErrorMessage('Failed to initialize connection. Please try again.');
   }
 };
+const startButton = document.getElementById('start-button');
+startButton.onclick = async () => {
+  if (
+    (peerConnection?.signalingState === 'stable' || peerConnection?.iceConnectionState === 'connected') &&
+    isStreamReady
+  ) {
+    // Pasting the user's message to the Chat History element
+    document.getElementById("msgHistory").innerHTML += `<span style='opacity:0.5'><u>User:</u> ${textArea.value}</span><br>`;
 
-async function startStreaming(assistantReply) {
-  if (!sessionId) {
-    console.error('No valid session ID');
-    showErrorMessage('No valid session ID. Please reconnect.');
-    return;
-  }
-  try {
-    console.log('Starting streaming with reply:', assistantReply);
-    const playResponse = await fetchWithRetries(`${DID_API.url}/talks/streams/${streamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: assistantReply,
+    // Storing the Text Area value
+    let txtAreaValue = document.getElementById("textArea").value;
+
+    // Clearing the text-box element
+    document.getElementById("textArea").value = "";
+
+    // Agents Overview - Step 3: Send a Message to a Chat session - Send a message to a Chat
+    try {
+      const playResponse = await fetchWithRetries(`${DID_API.url}/agents/${agentId}/chat/${chatId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
         },
-        config: {
-          fluent: true,
-          pacd_audio: 0,
-        },
-        session_id: sessionId,
-      }),
-    });
-
-    if (!playResponse.ok) {
-      const errorBody = await playResponse.text();
-      throw new Error(`Play response error: ${playResponse.status}. Body: ${errorBody}`);
-    }
-
-    const playResult = await playResponse.json();
-    console.log('Streaming started successfully:', playResult);
-  } catch (error) {
-    console.error('Error during streaming:', error);
-    showErrorMessage(`Streaming error: ${error.message}`);
-    if (isRecording) {
-      await reinitializeConnection();
-    }
-  }
-}
-
-
-async function startRecording() {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  mediaRecorder = new MediaRecorder(stream);
-
-  deepgramSocket = new WebSocket('wss://api.deepgram.com/v1/listen', [
-    'token',
-    DEEPGRAM_API_KEY,
-  ]);
-
-  deepgramSocket.onopen = () => {
-    console.log('Deepgram WebSocket connection opened');
-    mediaRecorder.addEventListener('dataavailable', async (event) => {
-      if (event.data.size > 0 && deepgramSocket.readyState === 1) {
-        deepgramSocket.send(event.data);
-      }
-    });
-    mediaRecorder.start(1000);
-
-    setInterval(() => {
-      if (deepgramSocket.readyState === 1) {
-        const keepAliveMsg = JSON.stringify({ type: "KeepAlive" });
-        deepgramSocket.send(keepAliveMsg);
-        console.log("Sent KeepAlive message to Deepgram");
-      }
-    }, 3000);
-
-    transcriptionTimer = setInterval(() => {
-      if (transcript.trim() !== '') {
-        document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User:</u> ${transcript}</span><br>`;
-        chatHistory.push({
-          role: 'user',
-          content: transcript,
-        });
-        sendChatToGroq();
-        transcript = '';
-      }
-    }, 5000);
-  };
-
-  deepgramSocket.onmessage = (message) => {
-    const received = JSON.parse(message.data);
-    const partialTranscript = received.channel.alternatives[0].transcript;
-
-    if (partialTranscript) {
-      transcript += partialTranscript;
-      document.getElementById('msgHistory').innerHTML = document.getElementById('msgHistory').innerHTML.replace(/<span style='opacity:0.5'><u>User \(interim\):<\/u>.*<\/span><br>/, `<span style='opacity:0.5'><u>User (interim):</u> ${transcript}</span><br>`);
-    }
-  };
-
-  deepgramSocket.onclose = async () => {
-    console.log('Deepgram WebSocket connection closed');
-    if (isRecording) {
-      await reinitializeConnection();
-    }
-  };
-
-  inactivityTimeout = setTimeout(() => {
-    if (isRecording) {
-      console.log('Inactivity timeout reached. Stopping recording.');
-      startButton.click();
-    }
-  }, 45000);
-}
-
-async function stopRecording() {
-  if (mediaRecorder && mediaRecorder.state === 'recording') {
-    mediaRecorder.stop();
-    const closeMsg = JSON.stringify({ type: "CloseStream" });
-    deepgramSocket.send(closeMsg);
-    deepgramSocket.close();
-    mediaRecorder = null;
-  }
-
-  clearInterval(transcriptionTimer);
-  clearTimeout(inactivityTimeout);
-}
-
-async function sendChatToGroq() {
-  try {
-    const response = await fetch('https://avatar.skoop.digital/chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messages: [
-          {
-            role: 'system',
-            content: context,
-          },
-          ...chatHistory,
-        ],
-        model: 'mixtral-8x7b-32768',
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error ${response.status}`);
-    }
-
-    const reader = response.body.getReader();
-    let assistantReply = '';
-    let done = false;
-
-    while (!done) {
-      const { value, done: readerDone } = await reader.read();
-      done = readerDone;
-
-      if (value) {
-        const chunk = new TextDecoder().decode(value);
-        const lines = chunk.split('\n');
-
-        for (const line of lines) {
-          if (line.startsWith('data:')) {
-            const data = line.substring(5).trim();
-            if (data === '[DONE]') {
-              done = true;
-              break;
+        body: JSON.stringify({
+          "streamId": streamId,
+          "sessionId": sessionId,
+          "messages": [
+            {
+              "role": "user",
+              "content": txtAreaValue,
+              "created_at": new Date().toString()
             }
+          ]
+        }),
+      });
 
-            const parsed = JSON.parse(data);
-            assistantReply += parsed.choices[0]?.delta?.content || '';
-          }
-        }
+      const playResponseData = await playResponse.json();
+      if (playResponse.status === 200 && playResponseData.chatMode === 'TextOnly') {
+        console.log('User is out of credit, API only return text messages');
+        document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'> ${playResponseData.result}</span><br>`;
       }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      showErrorMessage('Failed to send message. Please try again.');
     }
-
-    chatHistory.push({
-      role: 'assistant',
-      content: assistantReply,
-    });
-
-    document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${assistantReply}</span><br>`;
-
-    clearTimeout(inactivityTimeout);
-    inactivityTimeout = setTimeout(() => {
-      if (isRecording) {
-        console.log('Inactivity timeout reached. Stopping recording.');
-        startButton.click();
-      }
-    }, 45000);
-
-    await startStreaming(assistantReply);
-  } catch (error) {
-    console.error('Error:', error);
-    if (isRecording) {
-      await reinitializeConnection();
-    }
+  } else {
+    console.log('Connection not ready or stream not ready');
+    showErrorMessage('Connection or stream not ready. Please wait and try again.');
   }
-}
-
-async function reinitializeConnection() {
-  console.log('Reinitializing connection...');
-  stopAllStreams();
-  closePC();
-
-  clearInterval(transcriptionTimer);
-  clearTimeout(inactivityTimeout);
-
-  transcript = '';
-  chatHistory = chatHistory.slice(0, -1);
-
-  const msgHistory = document.getElementById('msgHistory');
-  msgHistory.innerHTML = msgHistory.innerHTML.slice(0, msgHistory.innerHTML.lastIndexOf('<span style=\'opacity:0.5\'><u>User:</u>'));
-
-  await connectButton.onclick();
-  await startRecording();
-}
+};
 
 const destroyButton = document.getElementById('destroy-button');
 destroyButton.onclick = async () => {
   try {
-    const response = await fetch(`${DID_API.url}/talks/streams/${streamId}`, {
+    await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'DELETE',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -551,10 +438,6 @@ destroyButton.onclick = async () => {
       },
       body: JSON.stringify({ session_id: sessionId }),
     });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error ${response.status}`);
-    }
 
     console.log('Stream destroyed successfully');
   } catch (error) {
@@ -565,47 +448,142 @@ destroyButton.onclick = async () => {
   closePC();
 };
 
-const startButton = document.getElementById('start-button');
-let isRecording = false;
+// Agents API Workflow
+async function agentsAPIworkflow() {
+  agentIdLabel.innerHTML = `<span style='color:orange'>Processing...<style='color:orange'>`;
+  chatIdLabel.innerHTML = `<span style='color:orange'>Processing...<style='color:orange'>`;
+  axios.defaults.baseURL = `${DID_API.url}`;
+  axios.defaults.headers.common['Authorization'] = `Basic ${DID_API.key}`;
+  axios.defaults.headers.common['content-type'] = 'application/json';
 
-startButton.onclick = async () => {
-  if (!isRecording) {
-    startButton.textContent = 'Stop';
-    await startRecording();
-  } else {
-    startButton.textContent = 'Speak';
-    await stopRecording();
+  // Retry Mechanism (Polling) for this demo only - Please use Webhooks in real life applications! 
+  // as described in https://docs.d-id.com/reference/knowledge-overview#%EF%B8%8F-step-2-add-documents-to-the-knowledge-base
+  async function retry(url, retries = 1) {
+    const maxRetryCount = 5; // Maximum number of retries
+    const maxDelaySec = 10; // Maximum delay in seconds
+    try {
+      let response = await axios.get(`${url}`);
+      if (response.data.status == "done") {
+        return console.log(response.data.id + ": " + response.data.status);
+      }
+      else {
+        throw new Error("Status is not 'done'");
+      }
+    } catch (err) {
+      if (retries <= maxRetryCount) {
+        const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 1000;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        console.log(`Retrying ${retries}/${maxRetryCount}. ${err}`);
+        return retry(url, retries + 1);
+      } else {
+        agentIdLabel.innerHTML = `<span style='color:red'>Failed</span>`;
+        chatIdLabel.innerHTML = `<span style='color:red'>Failed</span>`;
+        throw new Error(`Max retries exceeded. error: ${err}`);
+      }
+    }
   }
-  isRecording = !isRecording;
-};
 
-// Add this function to check CORS configuration
-async function checkCORSConfiguration() {
   try {
-    const response = await fetch(`${DID_API.url}/talks/streams`, {
-      method: 'OPTIONS',
-      headers: {
-        'Origin': window.location.origin,
-      },
+    // Knowledge Overview - Step 1: Create a new Knowledge Base
+    const createKnowledge = await axios.post('/knowledge', {
+      name: "knowledge",
+      description: "D-ID Agents API"
     });
+    console.log("Create Knowledge:", createKnowledge.data);
 
-    console.log('CORS preflight response:', response);
-    console.log('Access-Control-Allow-Origin:', response.headers.get('Access-Control-Allow-Origin'));
-    console.log('Access-Control-Allow-Methods:', response.headers.get('Access-Control-Allow-Methods'));
-    console.log('Access-Control-Allow-Headers:', response.headers.get('Access-Control-Allow-Headers'));
+    let knowledgeId = createKnowledge.data.id;
+    console.log("Knowledge ID: " + knowledgeId);
+
+    // Knowledge Overview - Step 2: Add Documents to the Knowledge Base
+    const createDocument = await axios.post(`/knowledge/${knowledgeId}/documents`, {
+      text: "Prompt Engineering is the practice of designing and refining input prompts to effectively communicate with AI language models. It involves crafting clear, specific instructions to guide the model's responses. RAG (Retrieval-Augmented Generation) is a technique that enhances language models by retrieving relevant information from external sources before generating responses, improving accuracy and contextual relevance."
+    });
+    console.log("Create Document: ", createDocument.data);
+
+    // Split the # to use in documentID
+    let documentId = createDocument.data.id;
+    let splitArr = documentId.split("#");
+    documentId = splitArr[1];
+    console.log("Document ID: " + documentId);
+
+    // Knowledge Overview - Step 3: Retrieving the Document and Knowledge status
+    await retry(`/knowledge/${knowledgeId}/documents/${documentId}`);
+    await retry(`/knowledge/${knowledgeId}`);
+
+    // Agents Overview - Step 1: Create an Agent
+    const createAgent = await axios.post('/agents', {
+      "knowledge": {
+        "provider": "pinecone",
+        "embedder": {
+          "provider": "pinecone",
+          "model": "ada02"
+        },
+        "id": knowledgeId
+      },
+      "presenter": {
+        "type": "talk",
+        "voice": {
+          "type": "microsoft",
+          "voice_id": "en-US-JennyMultilingualV2Neural"
+        },
+        "thumbnail": "https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg",
+        "source_url": "https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg"
+      },
+      "llm": {
+        "type": "openai",
+        "provider": "openai",
+        "model": "gpt-3.5-turbo-1106",
+        "instructions": "Your name is Emma, an AI designed to assist with information about Prompt Engineering and RAG"
+      },
+      "preview_name": "Emma"
+    });
+    console.log("Create Agent: ", createAgent.data);
+    let agentId = createAgent.data.id;
+    console.log("Agent ID: " + agentId);
+
+    // Agents Overview - Step 2: Create a new Chat session with the Agent
+    const createChat = await axios.post(`/agents/${agentId}/chat`);
+    console.log("Create Chat: ", createChat.data);
+    let chatId = createChat.data.id;
+    console.log("Chat ID: " + chatId);
+
+    console.log("Create new Agent with Knowledge - DONE!\n Press on the 'Connect' button to proceed.\n Store the created 'agentID' and 'chatId' variables at the bottom of the JS file for future chats");
+    agentIdLabel.innerHTML = agentId;
+    chatIdLabel.innerHTML = chatId;
+    return { agentId: agentId, chatId: chatId };
   } catch (error) {
-    console.error('Error checking CORS configuration:', error);
+    console.error('Error in agentsAPIworkflow:', error);
+    agentIdLabel.innerHTML = `<span style='color:red'>Failed</span>`;
+    chatIdLabel.innerHTML = `<span style='color:red'>Failed</span>`;
+    throw error;
   }
 }
 
-// Call this function when the page loads
-window.addEventListener('load', checkCORSConfiguration);
-
-// Export necessary functions and variables
-export {
-  connectButton,
-  destroyButton,
-  startButton,
-  checkCORSConfiguration,
+const agentsButton = document.getElementById("agents-button");
+agentsButton.onclick = async () => {
+  try {
+    const agentsIds = await agentsAPIworkflow();
+    console.log(agentsIds);
+    agentId = agentsIds.agentId;
+    chatId = agentsIds.chatId;
+  } catch (err) {
+    console.error('Error creating agent:', err);
+    showErrorMessage('Failed to create agent. Please try again.');
+  }
 };
 
+function showErrorMessage(message) {
+  const errorMessage = document.createElement('div');
+  errorMessage.innerHTML = message;
+  errorMessage.style.color = 'red';
+  errorMessage.style.marginBottom = '10px';
+  document.body.appendChild(errorMessage);
+
+  setTimeout(() => {
+    document.body.removeChild(errorMessage);
+  }, 5000);
+}
+
+// Paste Your Created Agent and Chat IDs Here:
+let agentId = "";
+let chatId = "";
