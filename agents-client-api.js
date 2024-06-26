@@ -84,22 +84,16 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.addEventListener('track', onTrack, true);
   }
 
-  try {
-    await peerConnection.setRemoteDescription(offer);
-    console.log('Set remote description OK');
+  await peerConnection.setRemoteDescription(offer);
+  console.log('set remote sdp OK');
 
-    const sessionClientAnswer = await peerConnection.createAnswer();
-    console.log('Created answer OK');
+  const sessionClientAnswer = await peerConnection.createAnswer();
+  console.log('create local sdp OK');
 
-    await peerConnection.setLocalDescription(sessionClientAnswer);
-    console.log('Set local description OK');
+  await peerConnection.setLocalDescription(sessionClientAnswer);
+  console.log('set local sdp OK');
 
-    return sessionClientAnswer;
-  } catch (error) {
-    console.error('Error in createPeerConnection:', error);
-    throw error;
-  }
-  
+  return sessionClientAnswer;
 }
 
 function onIceGatheringStateChange() {
@@ -111,7 +105,7 @@ function onIceCandidate(event) {
   if (event.candidate) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
 
-    fetch(`${DID_API.url}/talks/streams/${streamId}/ice`, {
+    fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -185,27 +179,21 @@ function onTrack(event) {
 }
 
 function setVideoElement(stream) {
-  if (!stream) {
-    console.error('No stream provided to setVideoElement');
-    return;
-  }
+  if (!stream) return;
   videoElement.classList.add("animated");
   videoElement.muted = false;
   videoElement.srcObject = stream;
   videoElement.loop = false;
 
-  console.log('Setting video source object:', stream);
-
   setTimeout(() => {
     videoElement.classList.remove("animated");
   }, 300);
 
-  videoElement.play().then(() => {
-    console.log('Video playback started');
-  }).catch((e) => {
-    console.error('Error playing video:', e);
-    showErrorMessage(`Video playback error: ${e.message}`);
-  });
+  if (videoElement.paused) {
+    videoElement.play().then(() => {}).catch((e) => {
+      console.error('Error playing video:', e);
+    });
+  }
 }
 
 function playIdleVideo() {
@@ -279,7 +267,7 @@ connectButton.onclick = async () => {
 
   try {
     console.log('Initializing connection...');
-    const sessionResponse = await fetchWithRetries(`${DID_API.url}/talks/streams`, {
+    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -304,7 +292,7 @@ connectButton.onclick = async () => {
       return;
     }
 
-    const sdpResponse = await fetch(`${DID_API.url}/talks/streams/${streamId}/sdp`, {
+    const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -328,14 +316,9 @@ connectButton.onclick = async () => {
 };
 
 async function startStreaming(assistantReply) {
-  if (!sessionId) {
-    console.error('No valid session ID');
-    showErrorMessage('No valid session ID. Please reconnect.');
-    return;
-  }
   try {
     console.log('Starting streaming with reply:', assistantReply);
-    const playResponse = await fetchWithRetries(`${DID_API.url}/talks/streams/${streamId}`, {
+    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -348,28 +331,25 @@ async function startStreaming(assistantReply) {
         },
         config: {
           fluent: true,
-          pacd_audio: 0,
+          pad_audio: 0,
         },
         session_id: sessionId,
       }),
     });
 
     if (!playResponse.ok) {
-      const errorBody = await playResponse.text();
-      throw new Error(`Play response error: ${playResponse.status}. Body: ${errorBody}`);
+      throw new Error(`Play response error: ${playResponse.status}`);
     }
 
     const playResult = await playResponse.json();
     console.log('Streaming started successfully:', playResult);
   } catch (error) {
     console.error('Error during streaming:', error);
-    showErrorMessage(`Streaming error: ${error.message}`);
     if (isRecording) {
       await reinitializeConnection();
     }
   }
 }
-
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -543,7 +523,7 @@ async function reinitializeConnection() {
 const destroyButton = document.getElementById('destroy-button');
 destroyButton.onclick = async () => {
   try {
-    const response = await fetch(`${DID_API.url}/talks/streams/${streamId}`, {
+    const response = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'DELETE',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -582,7 +562,7 @@ startButton.onclick = async () => {
 // Add this function to check CORS configuration
 async function checkCORSConfiguration() {
   try {
-    const response = await fetch(`${DID_API.url}/talks/streams`, {
+    const response = await fetch(`${DID_API.url}/${DID_API.service}/streams`, {
       method: 'OPTIONS',
       headers: {
         'Origin': window.location.origin,
@@ -600,12 +580,3 @@ async function checkCORSConfiguration() {
 
 // Call this function when the page loads
 window.addEventListener('load', checkCORSConfiguration);
-
-// Export necessary functions and variables
-export {
-  connectButton,
-  destroyButton,
-  startButton,
-  checkCORSConfiguration,
-};
-
