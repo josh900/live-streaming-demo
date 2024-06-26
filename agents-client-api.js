@@ -17,8 +17,8 @@ let streamId;
 let sessionId;
 let sessionClientAnswer;
 let statsIntervalId;
-let videoIsPlaying;
-let lastBytesReceived;
+let videoIsPlaying = false;
+let lastBytesReceived = 0;
 let chatHistory = [];
 let mediaRecorder;
 let deepgramSocket;
@@ -26,10 +26,7 @@ let transcript = '';
 let inactivityTimeout;
 let transcriptionTimer;
 
-
-
-
-const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentance unless absolutely needed.`;
+const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentence unless absolutely needed.`;
 
 const videoElement = document.getElementById('video-element');
 videoElement.setAttribute('playsinline', '');
@@ -80,7 +77,6 @@ function showErrorMessage(message) {
   connectButton.style.display = 'inline-block';
 }
 
-
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
     peerConnection = new RTCPeerConnection({ iceServers });
@@ -101,11 +97,9 @@ async function createPeerConnection(offer, iceServers) {
   await peerConnection.setLocalDescription(sessionClientAnswer);
   console.log('set local sdp OK');
 
-
-
-
   return sessionClientAnswer;
 }
+
 function onIceGatheringStateChange() {
   iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
   iceGatheringStatusLabel.className = 'iceGatheringState-' + peerConnection.iceGatheringState;
@@ -114,7 +108,6 @@ function onIceCandidate(event) {
   if (event.candidate) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
 
-    // WEBRTC API CALL 3 - Submit network information
     fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
       method: 'POST',
       headers: {
@@ -139,7 +132,6 @@ function onIceConnectionStateChange() {
     closePC();
     showErrorMessage('Connection lost. Please try again.');
   }
-
 }
 function onConnectionStateChange() {
   // not supported in firefox
@@ -165,16 +157,6 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   streamingStatusLabel.className = 'streamingState-' + status;
 }
 function onTrack(event) {
-  /**
-   * The following code is designed to provide information about whether there is currently data
-   * that's being streamed - It does so by periodically looking for changes in total stream data size
-   *
-   * This information in our case is used in order to show idle video while no video is streaming.
-   * To create this idle video, use the POST https://api.d-id.com/talks (or clips) endpoint with a silent audio file or a text script with only ssml breaks
-   * https://docs.aws.amazon.com/polly/latest/dg/supportedtags.html#break-tag
-   * for seamless results, use `config.fluent: true` and provide the same configuration as the streaming video
-   */
-
   if (!event.track) return;
 
   statsIntervalId = setInterval(async () => {
@@ -197,41 +179,20 @@ function onTrack(event) {
 
 function setVideoElement(stream) {
   if (!stream) return;
-  // Add Animation Class
-  videoElement.classList.add("animated")
-
-  // Removing browsers' autoplay's 'Mute' Requirement
-  videoElement.muted = false;
-
   videoElement.srcObject = stream;
-  videoElement.loop = false;
-
-  // Remove Animation Class after it's completed
-  setTimeout(() => {
-    videoElement.classList.remove("animated")
-  }, 300);
 
   // safari hotfix
   if (videoElement.paused) {
-    videoElement
-      .play()
-      .then((_) => { })
-      .catch((e) => { });
+    videoElement.play().then(_ => {}).catch(e => {});
   }
 }
-function playIdleVideo() {
-  // Add Animation Class
-  videoElement.classList.toggle("animated")
 
+function playIdleVideo() {
   videoElement.srcObject = undefined;
   videoElement.src = 'emma_idle.mp4';
   videoElement.loop = true;
-
-  // Remove Animation Class after it's completed
-  setTimeout(() => {
-    videoElement.classList.remove("animated")
-  }, 300);
 }
+
 function stopAllStreams() {
   if (videoElement.srcObject) {
     console.log('stopping video streams');
@@ -239,6 +200,7 @@ function stopAllStreams() {
     videoElement.srcObject = null;
   }
 }
+
 function closePC(pc = peerConnection) {
   if (!pc) return;
   console.log('stopping peer connection');
@@ -259,6 +221,7 @@ function closePC(pc = peerConnection) {
     peerConnection = null;
   }
 }
+
 const maxRetryCount = 2;
 const maxDelaySec = 2;
 async function fetchWithRetries(url, options, retries = 1) {
@@ -280,8 +243,6 @@ async function fetchWithRetries(url, options, retries = 1) {
 
 const connectButton = document.getElementById('connect-button');
 connectButton.onclick = async () => {
-
-
   if (peerConnection && peerConnection.connectionState === 'connected') {
     return;
   }
@@ -300,10 +261,10 @@ connectButton.onclick = async () => {
     }),
   });
 
-
   const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
   streamId = newStreamId;
   sessionId = newSessionId;
+
   try {
     sessionClientAnswer = await createPeerConnection(offer, iceServers);
   } catch (e) {
@@ -327,9 +288,6 @@ connectButton.onclick = async () => {
   });
 };
 
-
-
-
 async function startStreaming(assistantReply) {
   try {
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
@@ -350,6 +308,10 @@ async function startStreaming(assistantReply) {
         session_id: sessionId,
       }),
     });
+
+    if (!playResponse.ok) {
+      throw new Error(`HTTP error ${playResponse.status}`);
+    }
   } catch (error) {
     console.error('Error during streaming:', error);
     if (isRecording) {
@@ -357,7 +319,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -461,7 +422,6 @@ async function sendChatToGroq() {
       }),
     });
 
-
     if (!response.ok) {
       throw new Error(`HTTP error ${response.status}`);
     }
@@ -502,7 +462,6 @@ async function sendChatToGroq() {
     // Append the complete assistant reply to the chat history element
     document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${assistantReply}</span><br>`;
 
-
     // Reset inactivity timeout
     clearTimeout(inactivityTimeout);
     inactivityTimeout = setTimeout(() => {
@@ -521,8 +480,6 @@ async function sendChatToGroq() {
     }
   }
 }
-
-
 
 async function reinitializeConnection() {
   console.log('Reinitializing connection...');
@@ -562,8 +519,6 @@ destroyButton.onclick = async () => {
   closePC();
 };
 
-
-
 const startButton = document.getElementById('start-button');
 let isRecording = false;
 
@@ -573,9 +528,6 @@ startButton.onclick = async () => {
     await startRecording();
   } else {
     startButton.textContent = 'Speak';
-    await stopRecording();
-  }
-  isRecording = !isRecording;
-};
-
-
+    await stopRecording}
+    isRecording = !isRecording;
+  };
