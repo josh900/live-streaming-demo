@@ -296,57 +296,71 @@ async function fetchWithRetries(url, options, retries = 1) {
 
 const connectButton = document.getElementById('connect-button');
 connectButton.onclick = async () => {
-
-
   if (peerConnection && peerConnection.connectionState === 'connected') {
     return;
   }
   stopAllStreams();
   closePC();
 
-  // WEBRTC API CALL 1 - Create a new stream
-  const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg'
-    }),
-  });
-
-
-  const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
-  streamId = newStreamId;
-  sessionId = newSessionId;
   try {
-    sessionClientAnswer = await createPeerConnection(offer, iceServers);
-  } catch (e) {
-    console.log('error during streaming setup', e);
-    stopAllStreams();
-    closePC();
-    return;
-  }
+    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg'
+      }),
+    });
 
-  // WEBRTC API CALL 2 - Start a stream
-  const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      answer: sessionClientAnswer,
-      session_id: sessionId,
-    }),
-  });
+    if (!sessionResponse.ok) {
+      const errorData = await sessionResponse.json();
+      console.error('Session creation error:', errorData);
+      throw new Error(`Session creation failed: ${errorData.description || sessionResponse.statusText}`);
+    }
+
+    const data = await sessionResponse.json();
+    streamId = data.id;
+    sessionId = data.session_id;
+    console.log('Stream created:', { streamId, sessionId });
+
+    if (!sessionId) {
+      throw new Error('No session ID received from the server');
+    }
+
+    sessionClientAnswer = await createPeerConnection(data.offer, data.ice_servers);
+
+    const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        answer: sessionClientAnswer,
+        session_id: sessionId,
+      }),
+    });
+
+    if (!sdpResponse.ok) {
+      const errorData = await sdpResponse.json();
+      console.error('SDP error:', errorData);
+      throw new Error(`SDP request failed: ${errorData.description || sdpResponse.statusText}`);
+    }
+
+    console.log('SDP answer sent successfully');
+    console.log('Connection setup completed. Session ID:', sessionId);
+  } catch (error) {
+    console.error('Error during connection setup:', error);
+    sessionId = null; // Reset sessionId if there's an error
+  }
 };
 
 
 
-
 async function startStreaming(assistantReply) {
+  console.log('Starting streaming. Current session ID:', sessionId);
   if (!sessionId) {
     console.error('No valid session ID available. Cannot start streaming.');
     return;
@@ -388,6 +402,8 @@ async function startStreaming(assistantReply) {
     }
   }
 }
+
+
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -573,8 +589,19 @@ async function reinitializeConnection() {
   const msgHistory = document.getElementById('msgHistory');
   msgHistory.innerHTML = msgHistory.innerHTML.slice(0, msgHistory.innerHTML.lastIndexOf('<span style=\'opacity:0.5\'><u>User:</u>'));
 
+  // Reset session variables
+  sessionId = null;
+  streamId = null;
+
+  // Attempt to re-establish connection
   await connectButton.onclick();
-  await startRecording();
+  
+  if (sessionId) {
+    console.log('Connection reinitialized successfully. New session ID:', sessionId);
+    await startRecording();
+  } else {
+    console.error('Failed to reinitialize connection.');
+  }
 }
 
 const destroyButton = document.getElementById('destroy-button');
