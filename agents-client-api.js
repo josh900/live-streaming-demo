@@ -113,26 +113,30 @@ function onIceCandidate(event) {
 
 
 async function startStreamingWithRetry(assistantReply, maxRetries = 3) {
-  for (let i = 0; i < maxRetries; i++) {
+  let retries = 0;
+
+  while (retries < maxRetries) {
+    retries++;
+    console.log(`Attempt ${retries} to start streaming`);
+
     try {
-      console.log(`Attempt ${i + 1} to start streaming`);
       await startStreaming(assistantReply);
-      console.log('Streaming started successfully');
-      return; // Success, exit the function
+      return; // Streaming started successfully
     } catch (error) {
-      console.error(`Attempt ${i + 1} failed:`, error);
-      if (i === maxRetries - 1) {
-        console.error('Max retries reached. Streaming failed.');
-        // Implement fallback behavior here
-        handleStreamingFailure(assistantReply);
-      } else {
-        const delay = 1000 * (i + 1); // Exponential backoff
+      console.error(`Attempt ${retries} failed:`, error);
+
+      if (retries < maxRetries) {
+        const delay = Math.min(Math.pow(2, retries) * 500, 4000);
         console.log(`Waiting ${delay}ms before retrying...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      } else {
+        console.error('Max retries reached. Streaming failed.');
+        handleStreamingFailure();
       }
     }
   }
 }
+
 
 
 function onIceConnectionStateChange() {
