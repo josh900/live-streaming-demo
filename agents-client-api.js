@@ -26,9 +26,6 @@ let transcript = '';
 let inactivityTimeout;
 let transcriptionTimer;
 
-
-
-
 const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentance unless absolutely needed.`;
 
 const videoElement = document.getElementById('video-element');
@@ -80,10 +77,56 @@ function showErrorMessage(message) {
   connectButton.style.display = 'inline-block';
 }
 
+function onIceGatheringStateChange() {
+  if (peerConnection) {
+    console.log(`ICE gathering state changed: ${peerConnection.iceGatheringState}`);
+    iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
+    iceGatheringStatusLabel.className = 'iceGatheringState-' + peerConnection.iceGatheringState;
+  }
+}
 
+function onIceCandidate(event) {
+  if (event.candidate) {
+    console.log('New ICE candidate:', event.candidate);
+    // Send this candidate to the remote peer
+    // You'll need to implement this part based on your signaling mechanism
+  }
+}
 
+function onIceConnectionStateChange() {
+  if (peerConnection) {
+    console.log(`ICE connection state changed: ${peerConnection.iceConnectionState}`);
+    iceStatusLabel.innerText = peerConnection.iceConnectionState;
+    iceStatusLabel.className = 'iceConnectionState-' + peerConnection.iceConnectionState;
+    if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'closed') {
+      stopAllStreams();
+      closePC();
+    }
+  }
+}
 
+function onConnectionStateChange() {
+  if (peerConnection) {
+    console.log(`Connection state change: ${peerConnection.connectionState}`);
+    peerStatusLabel.innerText = peerConnection.connectionState;
+    peerStatusLabel.className = 'peerConnectionState-' + peerConnection.connectionState;
+  }
+}
 
+function onSignalingStateChange() {
+  if (peerConnection) {
+    console.log(`Signaling state change: ${peerConnection.signalingState}`);
+    signalingStatusLabel.innerText = peerConnection.signalingState;
+    signalingStatusLabel.className = 'signalingState-' + peerConnection.signalingState;
+  }
+}
+
+function onTrack(event) {
+  console.log('Track event:', event);
+  if (event.track.kind === 'video') {
+    videoElement.srcObject = event.streams[0];
+  }
+}
 
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
@@ -108,132 +151,8 @@ async function createPeerConnection(offer, iceServers) {
   return sessionClientAnswer;
 }
 
-function onIceGatheringStateChange() {
-  iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
-  iceGatheringStatusLabel.className = 'iceGatheringState-' + peerConnection.iceGatheringState;
-}
-function onIceCandidate(event) {
-  if (event.candidate) {
-    const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
-
-    // WEBRTC API CALL 3 - Submit network information
-    fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        candidate,
-        sdpMid,
-        sdpMLineIndex,
-        session_id: sessionId,
-      }),
-    });
-  }
-}
-function onIceConnectionStateChange() {
-  iceStatusLabel.innerText = peerConnection.iceConnectionState;
-  iceStatusLabel.className = 'iceConnectionState-' + peerConnection.iceConnectionState;
-
-  if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'closed') {
-    stopAllStreams();
-    closePC();
-    showErrorMessage('Connection lost. Please try again.');
-  }
-
-}
-function onConnectionStateChange() {
-  // not supported in firefox
-  peerStatusLabel.innerText = peerConnection.connectionState;
-  peerStatusLabel.className = 'peerConnectionState-' + peerConnection.connectionState;
-}
-function onSignalingStateChange() {
-  signalingStatusLabel.innerText = peerConnection.signalingState;
-  signalingStatusLabel.className = 'signalingState-' + peerConnection.signalingState;
-}
-function onVideoStatusChange(videoIsPlaying, stream) {
-  let status;
-  if (videoIsPlaying) {
-    status = 'streaming';
-
-    const remoteStream = stream;
-    setVideoElement(remoteStream);
-  } else {
-    status = 'empty';
-    playIdleVideo();
-  }
-  streamingStatusLabel.innerText = status;
-  streamingStatusLabel.className = 'streamingState-' + status;
-}
-
-function onTrack(event) {
-  if (!event.track) return;
-
-  clearInterval(statsIntervalId);
-  statsIntervalId = setInterval(async () => {
-    if (peerConnection && peerConnection.getReceivers().length > 0) {
-      const stats = await peerConnection.getStats(peerConnection.getReceivers()[0].track);
-      stats.forEach((report) => {
-        if (report.type === 'inbound-rtp' && report.kind === 'video') {
-          const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
-
-          if (videoStatusChanged) {
-            videoIsPlaying = report.bytesReceived > lastBytesReceived;
-            onVideoStatusChange(videoIsPlaying, event.streams[0]);
-          }
-          lastBytesReceived = report.bytesReceived;
-        }
-      });
-    }
-  }, 1000);
-}
-
-
-
 function setVideoElement(stream) {
-  if (!stream) return;async function startStreaming(assistantReply) {
-    if (!sessionId) {
-      console.error('No valid session ID available. Cannot start streaming.');
-      return;
-    }
-  
-    try {
-      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${DID_API.key}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          script: {
-            type: 'text',
-            input: assistantReply,
-          },
-          config: {
-            fluent: true,
-            pad_audio: 0,
-          },
-          session_id: sessionId,
-        }),
-      });
-  
-      if (!playResponse.ok) {
-        const errorData = await playResponse.json();
-        console.error('Streaming error:', errorData);
-        throw new Error(`Streaming failed: ${errorData.description || playResponse.statusText}`);
-      }
-  
-      const responseData = await playResponse.json();
-      console.log('Streaming response:', responseData);
-  
-    } catch (error) {
-      console.error('Error during streaming:', error);
-      if (isRecording) {
-        await reinitializeConnection();
-      }
-    }
-  }
+  if (!stream) return;
   // Add Animation Class
   videoElement.classList.add("animated")
 
@@ -256,6 +175,7 @@ function setVideoElement(stream) {
       .catch((e) => { });
   }
 }
+
 function playIdleVideo() {
   // Add Animation Class
   videoElement.classList.toggle("animated")
@@ -269,6 +189,7 @@ function playIdleVideo() {
     videoElement.classList.remove("animated")
   }, 300);
 }
+
 function stopAllStreams() {
   if (videoElement.srcObject) {
     console.log('stopping video streams');
@@ -276,6 +197,7 @@ function stopAllStreams() {
     videoElement.srcObject = null;
   }
 }
+
 function closePC(pc = peerConnection) {
   if (!pc) return;
   console.log('stopping peer connection');
@@ -296,22 +218,16 @@ function closePC(pc = peerConnection) {
     peerConnection = null;
   }
 }
-const maxRetryCount = 2;
-const maxDelaySec = 2;
-async function fetchWithRetries(url, options, retries = 1) {
+
+async function fetchWithRetries(url, options, retries = 3) {
   try {
     return await fetch(url, options);
   } catch (err) {
-    if (retries <= maxRetryCount) {
-      const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 500;
-
-      await new Promise((resolve) => setTimeout(resolve, delay));
-
-      console.log(`Request failed, retrying ${retries}/${maxRetryCount}. Error ${err}`);
-      return fetchWithRetries(url, options, retries + 1);
-    } else {
-      throw new Error(`Max retries exceeded. error: ${err}`);
+    if (retries > 0) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return fetchWithRetries(url, options, retries - 1);
     }
+    throw err;
   }
 }
 
@@ -342,6 +258,7 @@ connectButton.onclick = async () => {
     }
 
     const data = await sessionResponse.json();
+    console.log('Full stream creation response:', data);
     streamId = data.id;
     sessionId = data.session_id;
     console.log('Stream created:', { streamId, sessionId });
@@ -378,15 +295,18 @@ connectButton.onclick = async () => {
   }
 };
 
-
 async function startStreaming(assistantReply) {
   console.log('Starting streaming. Current session ID:', sessionId);
-  if (!sessionId) {
-    console.error('No valid session ID available. Cannot start streaming.');
+  console.log('Current stream ID:', streamId);
+  console.log('Assistant reply:', assistantReply);
+
+  if (!sessionId || !streamId) {
+    console.error('Missing session ID or stream ID. Cannot start streaming.');
     return;
   }
 
   try {
+    console.log(`Sending streaming request to: ${DID_API.url}/${DID_API.service}/streams/${streamId}`);
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'POST',
       headers: {
@@ -408,7 +328,9 @@ async function startStreaming(assistantReply) {
 
     if (!playResponse.ok) {
       const errorData = await playResponse.json();
-      console.error('Streaming error:', errorData);
+      console.error('Streaming error response:', errorData);
+      console.error('Response status:', playResponse.status);
+      console.error('Response headers:', Object.fromEntries(playResponse.headers.entries()));
       throw new Error(`Streaming failed: ${errorData.description || playResponse.statusText}`);
     }
 
@@ -417,13 +339,9 @@ async function startStreaming(assistantReply) {
 
   } catch (error) {
     console.error('Error during streaming:', error);
-    if (isRecording) {
-      await reinitializeConnection();
-    }
+    // Don't reinitialize here, as the connection seems to be fine
   }
 }
-
-
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -509,6 +427,11 @@ async function stopRecording() {
 }
 
 async function sendChatToGroq() {
+  if (!sessionId) {
+    console.error('No valid session. Please connect first.');
+    return;
+  }
+
   try {
     const response = await fetch('https://avatar.skoop.digital/chat', {
       method: 'POST',
@@ -526,7 +449,6 @@ async function sendChatToGroq() {
         model: 'mixtral-8x7b-32768',
       }),
     });
-
 
     if (!response.ok) {
       throw new Error(`HTTP error ${response.status}`);
@@ -568,7 +490,6 @@ async function sendChatToGroq() {
     // Append the complete assistant reply to the chat history element
     document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${assistantReply}</span><br>`;
 
-
     // Reset inactivity timeout
     clearTimeout(inactivityTimeout);
     inactivityTimeout = setTimeout(() => {
@@ -577,6 +498,9 @@ async function sendChatToGroq() {
         startButton.click();
       }
     }, 45000); // 45 seconds
+
+    // Add a small delay before starting the stream
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Initiate streaming
     await startStreaming(assistantReply);
@@ -587,8 +511,6 @@ async function sendChatToGroq() {
     }
   }
 }
-
-
 
 async function reinitializeConnection() {
   console.log('Reinitializing connection...');
@@ -639,8 +561,6 @@ destroyButton.onclick = async () => {
   closePC();
 };
 
-
-
 const startButton = document.getElementById('start-button');
 let isRecording = false;
 
@@ -654,5 +574,3 @@ startButton.onclick = async () => {
   }
   isRecording = !isRecording;
 };
-
-
