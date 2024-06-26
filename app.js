@@ -7,6 +7,8 @@ const port = 3000;
 const app = express();
 app.use(cors({
   origin: ['https://avatar.skoop.digital', 'http://localhost:3000'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
 
@@ -17,6 +19,8 @@ app.use('/', express.static(__dirname, {
     }
   }
 }));
+
+
 
 app.get('/', function(req, res) {
     res.sendFile(__dirname + '/index.html')

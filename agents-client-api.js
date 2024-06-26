@@ -81,31 +81,12 @@ function showErrorMessage(message) {
 }
 
 
-async function createPeerConnection(offer, iceServers) {
-  if (!peerConnection) {
-    peerConnection = new RTCPeerConnection({ iceServers });
-    peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
-    peerConnection.addEventListener('icecandidate', onIceCandidate, true);
-    peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
-    peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
-    peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
-    peerConnection.addEventListener('track', onTrack, true);
-  }
-
-  await peerConnection.setRemoteDescription(offer);
-  console.log('set remote sdp OK');
-
-  const sessionClientAnswer = await peerConnection.createAnswer();
-  console.log('create local sdp OK');
-
-  await peerConnection.setLocalDescription(sessionClientAnswer);
-  console.log('set local sdp OK');
 
 
 
 
-  return sessionClientAnswer;
-}
+
+
 function onIceGatheringStateChange() {
   iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
   iceGatheringStatusLabel.className = 'iceGatheringState-' + peerConnection.iceGatheringState;
@@ -164,24 +145,16 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   streamingStatusLabel.innerText = status;
   streamingStatusLabel.className = 'streamingState-' + status;
 }
-function onTrack(event) {
-  /**
-   * The following code is designed to provide information about whether there is currently data
-   * that's being streamed - It does so by periodically looking for changes in total stream data size
-   *
-   * This information in our case is used in order to show idle video while no video is streaming.
-   * To create this idle video, use the POST https://api.d-id.com/talks (or clips) endpoint with a silent audio file or a text script with only ssml breaks
-   * https://docs.aws.amazon.com/polly/latest/dg/supportedtags.html#break-tag
-   * for seamless results, use `config.fluent: true` and provide the same configuration as the streaming video
-   */
 
+function onTrack(event) {
   if (!event.track) return;
 
+  clearInterval(statsIntervalId);
   statsIntervalId = setInterval(async () => {
-    if (peerConnection && event.track) {
-      const stats = await peerConnection.getStats(event.track);
+    if (peerConnection && peerConnection.getReceivers().length > 0) {
+      const stats = await peerConnection.getStats(peerConnection.getReceivers()[0].track);
       stats.forEach((report) => {
-        if (report.type === 'inbound-rtp' && report.mediaType === 'video') {
+        if (report.type === 'inbound-rtp' && report.kind === 'video') {
           const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
 
           if (videoStatusChanged) {
@@ -192,11 +165,54 @@ function onTrack(event) {
         }
       });
     }
-  }, 300);
+  }, 1000);
 }
 
+
+
 function setVideoElement(stream) {
-  if (!stream) return;
+  if (!stream) return;async function startStreaming(assistantReply) {
+    if (!sessionId) {
+      console.error('No valid session ID available. Cannot start streaming.');
+      return;
+    }
+  
+    try {
+      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          script: {
+            type: 'text',
+            input: assistantReply,
+          },
+          config: {
+            fluent: true,
+            pad_audio: 0,
+          },
+          session_id: sessionId,
+        }),
+      });
+  
+      if (!playResponse.ok) {
+        const errorData = await playResponse.json();
+        console.error('Streaming error:', errorData);
+        throw new Error(`Streaming failed: ${errorData.description || playResponse.statusText}`);
+      }
+  
+      const responseData = await playResponse.json();
+      console.log('Streaming response:', responseData);
+  
+    } catch (error) {
+      console.error('Error during streaming:', error);
+      if (isRecording) {
+        await reinitializeConnection();
+      }
+    }
+  }
   // Add Animation Class
   videoElement.classList.add("animated")
 
@@ -331,6 +347,11 @@ connectButton.onclick = async () => {
 
 
 async function startStreaming(assistantReply) {
+  if (!sessionId) {
+    console.error('No valid session ID available. Cannot start streaming.');
+    return;
+  }
+
   try {
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'POST',
@@ -367,8 +388,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
-
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
