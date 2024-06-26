@@ -8,11 +8,8 @@ const port = 3001;
 const GROQ_API_KEY = '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';
 const groq = new Groq({ apiKey: GROQ_API_KEY });
 
-app.use(cors({
-  origin: ['https://avatar.skoop.digital', 'http://localhost:3000'],
-  credentials: true
-}));
-app.use(express.json());
+app.use(cors());
+app.use(express.json());;
 
 app.post('/chat', async (req, res) => {
   const { messages, model } = req.body;
@@ -27,7 +24,7 @@ app.post('/chat', async (req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
+      Connection: 'keep-alive',
     });
 
     for await (const chunk of completion) {
