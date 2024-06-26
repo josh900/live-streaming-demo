@@ -157,25 +157,18 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
     peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
     peerConnection.addEventListener('track', onTrack, true);
-    
-    // Add this new event listener
-    peerConnection.addEventListener('negotiationneeded', (event) => {
-      console.log('Negotiation needed:', event);
-    });
   }
 
+  await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+  console.log('Set remote description');
 
-  await peerConnection.setRemoteDescription(offer);
-  console.log('set remote sdp OK');
+  const answer = await peerConnection.createAnswer();
+  await peerConnection.setLocalDescription(answer);
+  console.log('Set local description');
 
-  const sessionClientAnswer = await peerConnection.createAnswer();
-  console.log('create local sdp OK');
-
-  await peerConnection.setLocalDescription(sessionClientAnswer);
-  console.log('set local sdp OK');
-
-  return sessionClientAnswer;
+  return peerConnection.localDescription;
 }
+
 
 function setVideoElement(stream) {
   if (!stream) return;
@@ -260,14 +253,16 @@ async function fetchWithRetries(url, options, retries = 3) {
 const connectButton = document.getElementById('connect-button');
 connectButton.onclick = async () => {
   if (peerConnection && peerConnection.connectionState === 'connected') {
+    console.log('Already connected.');
     return;
   }
+
+  console.log('Initializing connection...');
   stopAllStreams();
   closePC();
 
   try {
-    console.log('Using API key:', DID_API.key);
-
+    console.log('Creating new stream...');
     const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
       method: 'POST',
       headers: {
@@ -280,25 +275,19 @@ connectButton.onclick = async () => {
     });
 
     if (!sessionResponse.ok) {
-      const errorData = await sessionResponse.json();
-      console.error('Session creation error:', errorData);
-      throw new Error(`Session creation failed: ${errorData.description || sessionResponse.statusText}`);
+      throw new Error(`Failed to create stream: ${sessionResponse.status} ${sessionResponse.statusText}`);
     }
 
-    const data = await sessionResponse.json();
-    console.log('Full stream creation response:', data);
-    console.log('Using API key:', DID_API.key);
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+    console.log('Stream created:', { streamId: newStreamId, sessionId: newSessionId });
+    
+    streamId = newStreamId;
+    sessionId = newSessionId;
 
-    streamId = data.id;
-    sessionId = data.session_id;
-    console.log('Stream created:', { streamId, sessionId });
-
-    if (!sessionId) {
-      throw new Error('No session ID received from the server');
-    }
-
-    sessionClientAnswer = await createPeerConnection(data.offer, data.ice_servers);
-
+    console.log('Creating peer connection...');
+    const answer = await createPeerConnection(offer, iceServers);
+    
+    console.log('Sending SDP answer...');
     const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
       method: 'POST',
       headers: {
@@ -306,24 +295,37 @@ connectButton.onclick = async () => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        answer: sessionClientAnswer,
+        answer: answer,
         session_id: sessionId,
       }),
     });
 
     if (!sdpResponse.ok) {
-      const errorData = await sdpResponse.json();
-      console.error('SDP error:', errorData);
-      throw new Error(`SDP request failed: ${errorData.description || sdpResponse.statusText}`);
+      throw new Error(`SDP response error: ${sdpResponse.status} ${sdpResponse.statusText}`);
     }
 
     console.log('SDP answer sent successfully');
-    console.log('Connection setup completed. Session ID:', sessionId);
-    console.log('Using API key:', DID_API.key);
+    console.log('Waiting for connection to be established...');
 
+    // Wait for connection to be established
+    await new Promise((resolve, reject) => {
+      const checkState = () => {
+        if (peerConnection.connectionState === 'connected') {
+          resolve();
+        } else if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'closed') {
+          reject(new Error('Connection failed or closed'));
+        } else {
+          setTimeout(checkState, 100);
+        }
+      };
+      checkState();
+    });
+
+    console.log('Connection established successfully!');
   } catch (error) {
     console.error('Error during connection setup:', error);
-    sessionId = null; // Reset sessionId if there's an error
+    stopAllStreams();
+    closePC();
   }
 };
 
