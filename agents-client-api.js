@@ -110,7 +110,7 @@ function onIceCandidate(event) {
   if (event.candidate) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
 
-    fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
+    fetch(`/api/d-id/${DID_API.service}/streams/${streamId}/ice`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -190,8 +190,7 @@ function setVideoElement(stream) {
   videoElement.srcObject = stream;
   videoElement.loop = false;
 
-  setTimeout(() => {
-    videoElement.classList.remove("animated");
+  setTimeout(()    videoElement.classList.remove("animated");
   }, 300);
 
   if (videoElement.paused) {
@@ -201,8 +200,7 @@ function setVideoElement(stream) {
   }
 }
 
-function playIdleVideo() {
-  videoElement.classList.toggle("animated");
+function playId  videoElement.classList.toggle("animated");
   videoElement.srcObject = undefined;
   videoElement.src = 'emma_idle.mp4';
   videoElement.loop = true;
@@ -212,31 +210,27 @@ function playIdleVideo() {
   }, 300);
 }
 
-function stopAllStreams() {
-  if (videoElement.srcObject) {
+function stopAllStre  if (videoElement.srcObject) {
     console.log('stopping video streams');
     videoElement.srcObject.getTracks().forEach((track) => track.stop());
     videoElement.srcObject = null;
   }
 }
 
-function closePC(pc = peerConnection) {
-  if (!pc) return;
+function clo  if (!pc) return;
   console.log('stopping peer connection');
   pc.close();
   pc.removeEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
   pc.removeEventListener('icecandidate', onIceCandidate, true);
   pc.removeEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
   pc.removeEventListener('connectionstatechange', onConnectionStateChange, true);
-  pc.removeEventListener('signalingstatechange', onSignalingStateChange, true);
-  pc.removeEventListener('track', onTrack, true);
+  pc.removeEventListener('signalingstatechange',  pc.removeEventListener('track', onTrack, true);
   clearInterval(statsIntervalId);
   iceGatheringStatusLabel.innerText = '';
   signalingStatusLabel.innerText = '';
   iceStatusLabel.innerText = '';
   peerStatusLabel.innerText = '';
-  console.log('stopped peer connection');
-  if (pc === peerConnection) {
+  console.log('stopped peer connec  if (pc === peerConnection) {
     peerConnection = null;
   }
 }
@@ -244,8 +238,7 @@ function closePC(pc = peerConnection) {
 const maxRetryCount = 2;
 const maxDelaySec = 2;
 async function fetchWithRetries(url, options, retries = 1) {
-  try {
-    const response = await fetch(url, options);
+  try {    const response = await fetch(url, options);
     if (!response.ok) {
       throw new Error(`HTTP error ${response.status}`);
     }
@@ -257,8 +250,7 @@ async function fetchWithRetries(url, options, retries = 1) {
       console.log(`Request failed, retrying ${retries}/${maxRetryCount}. Error ${err}`);
       return fetchWithRetries(url, options, retries + 1);
     } else {
-      throw new Error(`Max retries exceeded. error: ${err}`);
-    }
+      throw new Error(`Max retries exceeded. error: ${    }
   }
 }
 
@@ -267,16 +259,14 @@ connectButton.onclick = async () => {
   if (peerConnection && peerConnection.connectionState === 'connected') {
     return;
   }
-  stopAllStreams();
-  closePC();
+  st  closePC();
 
   try {
     console.log('Initializing connection...');
-    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+    const sessionResponse = await fetchWithRetries(`/api/d-id/${DID_API.service}/streams`, {
       method: 'POST',
       headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
+        Authoriz        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg'
@@ -286,20 +276,17 @@ connectButton.onclick = async () => {
     const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
     streamId = newStreamId;
     sessionId = newSessionId;
-    console.log('Stream created:', { streamId, sessionId });
-
+    console.log('Stream created:',
     try {
       sessionClientAnswer = await createPeerConnection(offer, iceServers);
     } catch (e) {
-      console.error('Error during streaming setup', e);
-      stopAllStreams();
+      console.error('Error d      stopAllStreams();
       closePC();
       return;
     }
 
-    const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
-      method: 'POST',
-      headers: {
+    const sdpResponse = await fetch(`/api/d-id/${DID_API.service}/streams/${streamId}/sdp`, {
+      method: 'POST',      headers: {
         Authorization: `Basic ${DID_API.key}`,
         'Content-Type': 'application/json',
       },
@@ -309,8 +296,7 @@ connectButton.onclick = async () => {
       }),
     });
 
-    if (!sdpResponse.ok) {
-      throw new Error(`SDP response error: ${sdpResponse.status}`);
+    if (!sdpResponse      throw new Error(`SDP response error: ${sdpResponse.status}`);
     }
 
     console.log('Connection initialized successfully');
@@ -322,7 +308,7 @@ connectButton.onclick = async () => {
 
 async function isSessionValid() {
   try {
-    const response = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+    const response = await fetch(`/api/d-id/${DID_API.service}/streams/${streamId}`, {
       method: 'GET',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -344,7 +330,7 @@ async function startStreaming(assistantReply) {
     }
 
     console.log('Starting streaming with reply:', assistantReply);
-    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+    const playResponse = await fetchWithRetries(`/api/d-id/${DID_API.service}/streams/${streamId}`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -373,8 +359,7 @@ async function startStreaming(assistantReply) {
   } catch (error) {
     console.error('Error during streaming:', error);
     if (isRecording) {
-      await reinitializeConnection();
-    }
+      await reinitializeConnection()    }
   }
 }
 
@@ -404,7 +389,10 @@ async function startRecording() {
       }
     }, 3000);
 
-    transcriptionTimer = setInterval(() => {
+
+
+
+        transcriptionTimer = setInterval(() => {
       if (transcript.trim() !== '') {
         document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User:</u> ${transcript}</span><br>`;
         chatHistory.push({
@@ -550,7 +538,7 @@ async function reinitializeConnection() {
 const destroyButton = document.getElementById('destroy-button');
 destroyButton.onclick = async () => {
   try {
-    const response = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+    const response = await fetch(`/api/d-id/${DID_API.service}/streams/${streamId}`, {
       method: 'DELETE',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -588,7 +576,7 @@ startButton.onclick = async () => {
 
 async function checkCORSConfiguration() {
   try {
-    const response = await fetch(`${DID_API.url}/${DID_API.service}/streams`, {
+    const response = await fetch(`/api/d-id/${DID_API.service}/streams`, {
       method: 'OPTIONS',
       headers: {
         'Origin': window.location.origin,
