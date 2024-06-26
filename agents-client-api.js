@@ -333,13 +333,17 @@ connectButton.onclick = async () => {
     }
 
     console.log('Connection initialized successfully');
+
+    // Validate the session before proceeding
+    const isSessionValid = await validateSession();
+    if (!isSessionValid) {
+      throw new Error('Session validation failed');
+    }
   } catch (error) {
     console.error('Error during connection initialization:', error);
     showErrorMessage('Failed to initialize connection. Please try again.');
   }
 };
-
-
 
 
 
@@ -374,10 +378,7 @@ async function startStreaming(assistantReply) {
     console.log('Streaming started successfully:', playResult);
   } catch (error) {
     console.error('Error during streaming:', error);
-    if (error.message.includes('403') || error.message.includes('401')) {
-      console.log('Session might be invalid or expired. Reinitializing connection...');
-      await reinitializeConnection();
-    } else if (isRecording) {
+    if (isRecording) {
       await reinitializeConnection();
     }
   }
@@ -526,8 +527,14 @@ async function sendChatToGroq() {
       }
     }, 45000);
 
-    await startStreaming(assistantReply);
 
+    if (isSessionValid) {
+      await startStreaming(assistantReply);
+    } else {
+      console.error('Cannot start streaming: Invalid session');
+      await reinitializeConnection();
+    }
+    
   } catch (error) {
     console.error('Error:', error);
     if (isRecording) {
@@ -593,14 +600,13 @@ startButton.onclick = async () => {
   isRecording = !isRecording;
 };
 
+// Add this function to check CORS configuration
 async function checkCORSConfiguration() {
   try {
     const response = await fetch(`${DID_API.url}/${DID_API.service}/streams`, {
       method: 'OPTIONS',
       headers: {
         'Origin': window.location.origin,
-        'Access-Control-Request-Method': 'POST',
-        'Access-Control-Request-Headers': 'Authorization,Content-Type',
       },
     });
 
