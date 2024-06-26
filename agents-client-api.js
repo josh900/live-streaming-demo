@@ -296,36 +296,65 @@ connectButton.onclick = async () => {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg'
-    }),
-  });
+      const connectButton = document.getElementById('connect-button');
+connectButton.onclick = async () => {
+  if (peerConnection && peerConnection.connectionState === 'connected') {
+    return;
+  }
+  stopAllStreams();
+  closePC();
 
-
-  const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
-  streamId = newStreamId;
-  sessionId = newSessionId;
   try {
-    sessionClientAnswer = await createPeerConnection(offer, iceServers);
+    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg'
+      }),
+    });
+
+    const data = await sessionResponse.json();
+    streamId = data.id;
+    sessionId = data.session_id;
+    console.log('Stream created:', { streamId, sessionId });
+
+    sessionClientAnswer = await createPeerConnection(data.offer, data.ice_servers);
   } catch (e) {
-    console.log('error during streaming setup', e);
+    console.error('Error during streaming setup', e);
     stopAllStreams();
     closePC();
     return;
   }
 
-  // WEBRTC API CALL 2 - Start a stream
-  const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      answer: sessionClientAnswer,
-      session_id: sessionId,
-    }),
-  });
+  try {
+    const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        answer: sessionClientAnswer,
+        session_id: sessionId,
+      }),
+    });
+
+    if (!sdpResponse.ok) {
+      const errorData = await sdpResponse.json();
+      console.error('SDP error:', errorData);
+      throw new Error(`SDP request failed: ${errorData.description || sdpResponse.statusText}`);
+    }
+
+    console.log('SDP answer sent successfully');
+  } catch (error) {
+    console.error('Error sending SDP answer:', error);
+  }
 };
+
+
 
 
 
@@ -350,6 +379,16 @@ async function startStreaming(assistantReply) {
         session_id: sessionId,
       }),
     });
+
+    if (!playResponse.ok) {
+      const errorData = await playResponse.json();
+      console.error('Streaming error:', errorData);
+      throw new Error(`Streaming failed: ${errorData.description || playResponse.statusText}`);
+    }
+
+    const responseData = await playResponse.json();
+    console.log('Streaming response:', responseData);
+
   } catch (error) {
     console.error('Error during streaming:', error);
     if (isRecording) {
@@ -357,6 +396,7 @@ async function startStreaming(assistantReply) {
     }
   }
 }
+
 
 
 async function startRecording() {
