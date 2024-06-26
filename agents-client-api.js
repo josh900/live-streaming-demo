@@ -1,3 +1,4 @@
+
 'use strict';
 import DID_API from './api.js';
 
@@ -111,8 +112,6 @@ function onIceCandidate(event) {
   }
 }
 
-
-
 function onIceConnectionStateChange() {
   if (peerConnection) {
     console.log(`ICE connection state changed: ${peerConnection.iceConnectionState}`);
@@ -158,12 +157,10 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
     peerConnection.addEventListener('track', onTrack, true);
     
-    // Add this new event listener
     peerConnection.addEventListener('negotiationneeded', (event) => {
       console.log('Negotiation needed:', event);
     });
   }
-
 
   await peerConnection.setRemoteDescription(offer);
   console.log('set remote sdp OK');
@@ -179,38 +176,29 @@ async function createPeerConnection(offer, iceServers) {
 
 function setVideoElement(stream) {
   if (!stream) return;
-  // Add Animation Class
   videoElement.classList.add("animated")
-
-  // Removing browsers' autoplay's 'Mute' Requirement
   videoElement.muted = false;
-
   videoElement.srcObject = stream;
   videoElement.loop = false;
 
-  // Remove Animation Class after it's completed
   setTimeout(() => {
     videoElement.classList.remove("animated")
   }, 300);
 
-  // safari hotfix
   if (videoElement.paused) {
     videoElement
       .play()
-      .then((_) => { })
-      .catch((e) => { });
+      .then((_) => {})
+      .catch((e) => {});
   }
 }
 
 function playIdleVideo() {
-  // Add Animation Class
   videoElement.classList.toggle("animated")
-
   videoElement.srcObject = undefined;
   videoElement.src = 'emma_idle.mp4';
   videoElement.loop = true;
 
-  // Remove Animation Class after it's completed
   setTimeout(() => {
     videoElement.classList.remove("animated")
   }, 300);
@@ -342,7 +330,6 @@ async function startStreaming(assistantReply) {
     return;
   }
 
-
   try {
     console.log(`Sending streaming request to: ${DID_API.url}/${DID_API.service}/streams/${streamId}`);
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
@@ -379,7 +366,6 @@ async function startStreaming(assistantReply) {
     console.error('Error during streaming:', error);
   }
 }
-
 
 
 async function startRecording() {
