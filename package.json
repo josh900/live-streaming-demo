@@ -1,10 +1,13 @@
 {
+  "name": "live-streaming-demo",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node app.js"
+  },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.18.2",
-    "groq-sdk": "^0.3.2"
-  },
-  "scripts": {
-    "dev": "node app.js"
+    "node-fetch": "^3.3.1"
   }
 }
