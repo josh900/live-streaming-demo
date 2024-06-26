@@ -25,6 +25,7 @@ let deepgramSocket;
 let transcript = '';
 let inactivityTimeout;
 let transcriptionTimer;
+let isRecording = false;
 
 const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentance unless absolutely needed.`;
 
@@ -215,28 +216,6 @@ function stopAllStreams() {
   }
 }
 
-async function validateSession() {
-  try {
-    const response = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Session validation failed: ${response.status}`);
-    }
-
-    const sessionData = await response.json();
-    console.log('Session validation successful:', sessionData);
-    return true;
-  } catch (error) {
-    console.error('Session validation error:', error);
-    return false;
-  }
-}
-
 function closePC(pc = peerConnection) {
   if (!pc) return;
   console.log('stopping peer connection');
@@ -339,10 +318,6 @@ connectButton.onclick = async () => {
   }
 };
 
-
-
-
-
 async function startStreaming(assistantReply) {
   try {
     console.log('Starting streaming with reply:', assistantReply);
@@ -382,7 +357,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -527,7 +501,6 @@ async function sendChatToGroq() {
     }, 45000);
 
     await startStreaming(assistantReply);
-
   } catch (error) {
     console.error('Error:', error);
     if (isRecording) {
@@ -580,7 +553,6 @@ destroyButton.onclick = async () => {
 };
 
 const startButton = document.getElementById('start-button');
-let isRecording = false;
 
 startButton.onclick = async () => {
   if (!isRecording) {
@@ -613,5 +585,4 @@ async function checkCORSConfiguration() {
   }
 }
 
-// Call this function when the page loads
 window.addEventListener('load', checkCORSConfiguration);
