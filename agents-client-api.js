@@ -85,7 +85,28 @@ function showErrorMessage(message) {
 
 
 
+async function createPeerConnection(offer, iceServers) {
+  if (!peerConnection) {
+    peerConnection = new RTCPeerConnection({ iceServers });
+    peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
+    peerConnection.addEventListener('icecandidate', onIceCandidate, true);
+    peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
+    peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
+    peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
+    peerConnection.addEventListener('track', onTrack, true);
+  }
 
+  await peerConnection.setRemoteDescription(offer);
+  console.log('set remote sdp OK');
+
+  const sessionClientAnswer = await peerConnection.createAnswer();
+  console.log('create local sdp OK');
+
+  await peerConnection.setLocalDescription(sessionClientAnswer);
+  console.log('set local sdp OK');
+
+  return sessionClientAnswer;
+}
 
 function onIceGatheringStateChange() {
   iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
@@ -356,7 +377,6 @@ connectButton.onclick = async () => {
     sessionId = null; // Reset sessionId if there's an error
   }
 };
-
 
 
 async function startStreaming(assistantReply) {
