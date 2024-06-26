@@ -112,28 +112,6 @@ function onIceCandidate(event) {
 }
 
 
-async function startStreamingWithRetry(assistantReply, maxRetries = 3) {
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      console.log(`Attempt ${i + 1} to start streaming`);
-      await startStreaming(assistantReply);
-      console.log('Streaming started successfully');
-      return; // Success, exit the function
-    } catch (error) {
-      console.error(`Attempt ${i + 1} failed:`, error);
-      if (i === maxRetries - 1) {
-        console.error('Max retries reached. Streaming failed.');
-        // Implement fallback behavior here
-        handleStreamingFailure(assistantReply);
-      } else {
-        const delay = 1000 * (i + 1); // Exponential backoff
-        console.log(`Waiting ${delay}ms before retrying...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-    }
-  }
-}
-
 
 function onIceConnectionStateChange() {
   if (peerConnection) {
@@ -355,61 +333,52 @@ async function startStreaming(assistantReply) {
   console.log('Assistant reply:', assistantReply);
 
   if (!sessionId || !streamId) {
-    throw new Error('Missing session ID or stream ID. Cannot start streaming.');
+    console.error('Missing session ID or stream ID. Cannot start streaming.');
+    return;
   }
 
   if (peerConnection.connectionState !== 'connected') {
-    throw new Error(`PeerConnection is not in "connected" state. Current state: ${peerConnection.connectionState}`);
+    console.error('PeerConnection is not in "connected" state. Current state:', peerConnection.connectionState);
+    return;
   }
 
-  const payload = {
-    script: {
-      type: 'text',
-      input: assistantReply,
-    },
-    driver_url: 'bank://lively/',
-    config: {
-      stitch: true,
-    },
-    session_id: sessionId,
-  };
 
-  console.log('Streaming request payload:', JSON.stringify(payload, null, 2));
+  try {
+    console.log(`Sending streaming request to: ${DID_API.url}/${DID_API.service}/streams/${streamId}`);
+    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: assistantReply,
+        },
+        driver_url: 'bank://lively/',
+        config: {
+          stitch: true,
+        },
+        session_id: sessionId,
+      }),
+    });
 
-  console.log(`Sending streaming request to: ${DID_API.url}/${DID_API.service}/streams/${streamId}`);
-  const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
+    if (!playResponse.ok) {
+      const errorData = await playResponse.json();
+      console.error('Streaming error response:', errorData);
+      console.error('Response status:', playResponse.status);
+      console.error('Response headers:', Object.fromEntries(playResponse.headers.entries()));
+      throw new Error(`Streaming failed: ${errorData.description || playResponse.statusText}`);
+    }
 
-  if (!playResponse.ok) {
-    const errorData = await playResponse.json();
-    console.error('Streaming error response:', errorData);
-    console.error('Response status:', playResponse.status);
-    console.error('Response headers:', Object.fromEntries(playResponse.headers.entries()));
-    throw new Error(`Streaming failed: ${errorData.description || playResponse.statusText}`);
+    const responseData = await playResponse.json();
+    console.log('Streaming response:', responseData);
+
+  } catch (error) {
+    console.error('Error during streaming:', error);
   }
-
-  const responseData = await playResponse.json();
-  console.log('Streaming response:', responseData);
 }
-
-
-
-function handleStreamingFailure(assistantReply) {
-  console.error('Streaming failed after multiple attempts. Implementing fallback behavior.');
-  // Implement your fallback behavior here. For example:
-  // 1. Display the assistant's reply as text only
-  document.getElementById('msgHistory').innerHTML += `<span><u>Assistant (text-only fallback):</u> ${assistantReply}</span><br>`;
-  // 2. Attempt to use a different API or service
-  // 3. Notify the user about the issue
-  alert('We're experiencing issues with video streaming. The conversation will continue in text-only mode.');
-}
-
 
 
 
@@ -569,8 +538,11 @@ async function sendChatToGroq() {
       }
     }, 45000); // 45 seconds
 
-    // Use the new startStreamingWithRetry function
-    await startStreamingWithRetry(assistantReply);
+    // Add a small delay before starting the stream
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Initiate streaming
+    await startStreaming(assistantReply);
   } catch (error) {
     console.error('Error:', error);
     if (isRecording) {
@@ -578,7 +550,6 @@ async function sendChatToGroq() {
     }
   }
 }
-
 
 async function reinitializeConnection() {
   console.log('Reinitializing connection...');
