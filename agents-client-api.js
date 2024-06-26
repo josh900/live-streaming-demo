@@ -215,6 +215,28 @@ function stopAllStreams() {
   }
 }
 
+async function validateSession() {
+  try {
+    const response = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Session validation failed: ${response.status}`);
+    }
+
+    const sessionData = await response.json();
+    console.log('Session validation successful:', sessionData);
+    return true;
+  } catch (error) {
+    console.error('Session validation error:', error);
+    return false;
+  }
+}
+
 function closePC(pc = peerConnection) {
   if (!pc) return;
   console.log('stopping peer connection');
@@ -242,10 +264,12 @@ async function fetchWithRetries(url, options, retries = 1) {
   try {
     const response = await fetch(url, options);
     if (!response.ok) {
-      throw new Error(`HTTP error ${response.status}`);
+      const errorData = await response.json();
+      throw new Error(`HTTP error ${response.status}: ${JSON.stringify(errorData)}`);
     }
     return response;
   } catch (err) {
+    console.error(`Attempt ${retries} failed:`, err);
     if (retries <= maxRetryCount) {
       const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 500;
       await new Promise((resolve) => setTimeout(resolve, delay));
@@ -309,11 +333,19 @@ connectButton.onclick = async () => {
     }
 
     console.log('Connection initialized successfully');
+
+    // Validate the session before proceeding
+    const isSessionValid = await validateSession();
+    if (!isSessionValid) {
+      throw new Error('Session validation failed');
+    }
   } catch (error) {
     console.error('Error during connection initialization:', error);
     showErrorMessage('Failed to initialize connection. Please try again.');
   }
 };
+
+
 
 async function startStreaming(assistantReply) {
   try {
@@ -329,16 +361,17 @@ async function startStreaming(assistantReply) {
           type: 'text',
           input: assistantReply,
         },
+        driver_url: 'bank://lively/',
         config: {
-          fluent: true,
-          pad_audio: 0,
+          stitch: true,
         },
         session_id: sessionId,
       }),
     });
 
     if (!playResponse.ok) {
-      throw new Error(`Play response error: ${playResponse.status}`);
+      const errorData = await playResponse.json();
+      throw new Error(`Play response error: ${playResponse.status}, ${JSON.stringify(errorData)}`);
     }
 
     const playResult = await playResponse.json();
@@ -350,6 +383,7 @@ async function startStreaming(assistantReply) {
     }
   }
 }
+
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -493,7 +527,14 @@ async function sendChatToGroq() {
       }
     }, 45000);
 
-    await startStreaming(assistantReply);
+
+    if (isSessionValid) {
+      await startStreaming(assistantReply);
+    } else {
+      console.error('Cannot start streaming: Invalid session');
+      await reinitializeConnection();
+    }
+    
   } catch (error) {
     console.error('Error:', error);
     if (isRecording) {
