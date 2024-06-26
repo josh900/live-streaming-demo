@@ -1,8 +1,10 @@
 'use strict';
 import DID_API from './api.js';
 
+const GROQ_API_KEY = DID_API.groqKey;
 const DEEPGRAM_API_KEY = DID_API.deepgramKey;
 
+if (DID_API.key == '🤫') alert('Please put your api key inside ./api.js and restart..');
 
 const RTCPeerConnection = (
   window.RTCPeerConnection ||

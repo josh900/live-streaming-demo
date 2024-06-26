@@ -1,13 +1,12 @@
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
-const { createProxyMiddleware } = require('http-proxy-middleware');
 
-const app = express();
 const port = 3000;
 
+const app = express();
 app.use(cors({
-  origin: 'https://avatar.skoop.digital',
+  origin: ['https://avatar.skoop.digital', 'http://localhost:3000','https://api.d-id.com' ],
   credentials: true
 }));
 
@@ -19,18 +18,7 @@ app.use('/', express.static(__dirname, {
   }
 }));
 
-const didApiProxy = createProxyMiddleware({
-  target: 'https://api.d-id.com',
-  changeOrigin: true,
-  pathRewrite: {
-    '^/api/d-id': '', // remove /api/d-id from the beginning of the path
-  },
-  onProxyRes: function (proxyRes, req, res) {
-    proxyRes.headers['Access-Control-Allow-Origin'] = 'https://avatar.skoop.digital';
-  },
-});
-
-app.use('/api/d-id', didApiProxy);
+app.use('/', express.static(__dirname));
 
 app.get('/', function(req, res) {
   res.sendFile(__dirname + '/index.html');

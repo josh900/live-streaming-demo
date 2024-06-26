@@ -5,10 +5,7 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 const app = express();
 const port = 3001; // Use a different port from your main server
 
-app.use(cors({
-  origin: 'https://avatar.skoop.digital',
-  credentials: true
-}));
+app.use(cors());
 
 const didApiProxy = createProxyMiddleware({
   target: 'https://api.d-id.com',
@@ -17,7 +14,7 @@ const didApiProxy = createProxyMiddleware({
     '^/api/d-id': '', // remove /api/d-id from the beginning of the path
   },
   onProxyRes: function (proxyRes, req, res) {
-    proxyRes.headers['Access-Control-Allow-Origin'] = 'https://avatar.skoop.digital';
+    proxyRes.headers['Access-Control-Allow-Origin'] = '*';
   },
 });
 
