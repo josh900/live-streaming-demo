@@ -77,12 +77,71 @@ function showErrorMessage(message) {
   connectButton.style.display = 'inline-block';
 }
 
-function onIceGatheringStateChange() {
-  if (peerConnection) {
-    console.log(`ICE gathering state changed: ${peerConnection.iceGatheringState}`);
-    iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
-    iceGatheringStatusLabel.className = 'iceGatheringState-' + peerConnection.iceGatheringState;
+function parseSdp(sdp) {
+  const sections = sdp.split('\r\nm=');
+  return {
+    global: sections[0],
+    audio: sections.find(s => s.startsWith('audio')),
+    video: sections.find(s => s.startsWith('video')),
+    application: sections.find(s => s.startsWith('application'))
+  };
+}
+
+function createModifiedSdp(parsedSdp) {
+  let modified = parsedSdp.global;
+  if (parsedSdp.audio) {
+    modified += '\r\nm=' + parsedSdp.audio.replace('sendonly', 'recvonly');
   }
+  if (parsedSdp.video) {
+    modified += '\r\nm=' + parsedSdp.video.replace('sendonly', 'recvonly');
+  }
+  if (parsedSdp.application) {
+    modified += '\r\nm=' + parsedSdp.application;
+  }
+  return modified;
+}
+
+async function createPeerConnection(offer, iceServers) {
+  if (!peerConnection) {
+    const config = {
+      iceServers: iceServers,
+      iceTransportPolicy: 'all',
+      bundlePolicy: 'max-bundle',
+      rtcpMuxPolicy: 'require',
+      sdpSemantics: 'unified-plan'
+    };
+    peerConnection = new RTCPeerConnection(config);
+    peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
+    peerConnection.addEventListener('icecandidate', onIceCandidate, true);
+    peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
+    peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
+    peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
+    peerConnection.addEventListener('track', onTrack, true);
+
+    // Add a data channel
+    const dataChannel = peerConnection.createDataChannel('JanusDataChannel');
+    dataChannel.onmessage = onDataChannelMessage;
+  }
+
+  // Parse and modify the SDP
+  const parsedSdp = parseSdp(offer.sdp);
+  const modifiedSdp = createModifiedSdp(parsedSdp);
+  
+  await peerConnection.setRemoteDescription({type: offer.type, sdp: modifiedSdp});
+  console.log('set remote sdp OK');
+
+  const answer = await peerConnection.createAnswer();
+  console.log('create local sdp OK');
+
+  await peerConnection.setLocalDescription(answer);
+  console.log('set local sdp OK');
+
+  return peerConnection.localDescription;
+}
+
+function onIceGatheringStateChange() {
+  iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
+  iceGatheringStatusLabel.className = 'iceGatheringState-' + peerConnection.iceGatheringState;
 }
 
 function onIceCandidate(event) {
@@ -111,101 +170,67 @@ function onIceCandidate(event) {
   }
 }
 
-
-
 function onIceConnectionStateChange() {
-  if (peerConnection) {
-    console.log(`ICE connection state changed: ${peerConnection.iceConnectionState}`);
-    iceStatusLabel.innerText = peerConnection.iceConnectionState;
-    iceStatusLabel.className = 'iceConnectionState-' + peerConnection.iceConnectionState;
-    if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'closed') {
-      stopAllStreams();
-      closePC();
-    }
+  iceStatusLabel.innerText = peerConnection.iceConnectionState;
+  iceStatusLabel.className = 'iceConnectionState-' + peerConnection.iceConnectionState;
+  console.log('ICE connection state is ' + peerConnection.iceConnectionState);
+  if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'closed') {
+    stopAllStreams();
+    closePC();
   }
 }
 
 function onConnectionStateChange() {
-  if (peerConnection) {
-    console.log(`Connection state change: ${peerConnection.connectionState}`);
-    peerStatusLabel.innerText = peerConnection.connectionState;
-    peerStatusLabel.className = 'peerConnectionState-' + peerConnection.connectionState;
-  }
+  peerStatusLabel.innerText = peerConnection.connectionState;
+  peerStatusLabel.className = 'peerConnectionState-' + peerConnection.connectionState;
+  console.log('Connection state change: ' + peerConnection.connectionState);
 }
 
 function onSignalingStateChange() {
-  if (peerConnection) {
-    console.log(`Signaling state change: ${peerConnection.signalingState}`);
-    signalingStatusLabel.innerText = peerConnection.signalingState;
-    signalingStatusLabel.className = 'signalingState-' + peerConnection.signalingState;
-  }
+  signalingStatusLabel.innerText = peerConnection.signalingState;
+  signalingStatusLabel.className = 'signalingState-' + peerConnection.signalingState;
 }
 
 function onTrack(event) {
   console.log('Track event:', event);
   if (event.track.kind === 'video') {
+    console.log('Video track received:', event.track);
     videoElement.srcObject = event.streams[0];
+  } else if (event.track.kind === 'audio') {
+    console.log('Audio track received:', event.track);
+    // Handle audio track if needed
   }
 }
 
-async function createPeerConnection(offer, iceServers) {
-  if (!peerConnection) {
-    peerConnection = new RTCPeerConnection({ iceServers });
-    peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
-    peerConnection.addEventListener('icecandidate', onIceCandidate, true);
-    peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
-    peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
-    peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
-    peerConnection.addEventListener('track', onTrack, true);
-  }
-
-  await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-  console.log('Set remote description');
-
-  const answer = await peerConnection.createAnswer();
-  await peerConnection.setLocalDescription(answer);
-  console.log('Set local description');
-
-  return peerConnection.localDescription;
+function onDataChannelMessage(event) {
+  console.log('Data channel message received:', event.data);
+  // Handle any messages received on the data channel
 }
-
 
 function setVideoElement(stream) {
   if (!stream) return;
-  // Add Animation Class
-  videoElement.classList.add("animated")
-
-  // Removing browsers' autoplay's 'Mute' Requirement
+  videoElement.classList.add("animated");
   videoElement.muted = false;
-
   videoElement.srcObject = stream;
   videoElement.loop = false;
 
-  // Remove Animation Class after it's completed
   setTimeout(() => {
-    videoElement.classList.remove("animated")
+    videoElement.classList.remove("animated");
   }, 300);
 
-  // safari hotfix
   if (videoElement.paused) {
-    videoElement
-      .play()
-      .then((_) => { })
-      .catch((e) => { });
+    videoElement.play().then(() => {}).catch(e => console.error('Error playing video:', e));
   }
 }
 
 function playIdleVideo() {
-  // Add Animation Class
-  videoElement.classList.toggle("animated")
-
+  videoElement.classList.toggle("animated");
   videoElement.srcObject = undefined;
   videoElement.src = 'emma_idle.mp4';
   videoElement.loop = true;
 
-  // Remove Animation Class after it's completed
   setTimeout(() => {
-    videoElement.classList.remove("animated")
+    videoElement.classList.remove("animated");
   }, 300);
 }
 
@@ -253,16 +278,12 @@ async function fetchWithRetries(url, options, retries = 3) {
 const connectButton = document.getElementById('connect-button');
 connectButton.onclick = async () => {
   if (peerConnection && peerConnection.connectionState === 'connected') {
-    console.log('Already connected.');
     return;
   }
-
-  console.log('Initializing connection...');
   stopAllStreams();
   closePC();
 
   try {
-    console.log('Creating new stream...');
     const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
       method: 'POST',
       headers: {
@@ -275,19 +296,36 @@ connectButton.onclick = async () => {
     });
 
     if (!sessionResponse.ok) {
-      throw new Error(`Failed to create stream: ${sessionResponse.status} ${sessionResponse.statusText}`);
+      const errorData = await sessionResponse.json();
+      console.error('Session creation error:', errorData);
+      throw new Error(`Session creation failed: ${errorData.description || sessionResponse.statusText}`);
     }
 
-    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
-    console.log('Stream created:', { streamId: newStreamId, sessionId: newSessionId });
-    
-    streamId = newStreamId;
-    sessionId = newSessionId;
+    const data = await sessionResponse.json();
+    console.log('Full stream creation response:', data);
+    streamId = data.id;
+    sessionId = data.session_id;
+    console.log('Stream created:', { streamId, sessionId });
 
-    console.log('Creating peer connection...');
-    const answer = await createPeerConnection(offer, iceServers);
-    
-    console.log('Sending SDP answer...');
+    if (!sessionId) {
+      throw new Error('No session ID received from the server');
+    }
+
+    sessionClientAnswer = await createPeerConnection(data.offer, data.ice_servers);
+
+    // Wait for ICE gathering to complete
+    await new Promise((resolve) => {
+      if (peerConnection.iceGatheringState === 'complete') {
+        resolve();
+      } else {
+        peerConnection.addEventListener('icegatheringstatechange', () => {
+          if (peerConnection.iceGatheringState === 'complete') {
+            resolve();
+          }
+        });
+      }
+    });
+
     const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
       method: 'POST',
       headers: {
@@ -295,37 +333,22 @@ connectButton.onclick = async () => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        answer: answer,
+        answer: sessionClientAnswer,
         session_id: sessionId,
       }),
     });
 
     if (!sdpResponse.ok) {
-      throw new Error(`SDP response error: ${sdpResponse.status} ${sdpResponse.statusText}`);
+      const errorData = await sdpResponse.json();
+      console.error('SDP error:', errorData);
+      throw new Error(`SDP request failed: ${errorData.description || sdpResponse.statusText}`);
     }
 
     console.log('SDP answer sent successfully');
-    console.log('Waiting for connection to be established...');
-
-    // Wait for connection to be established
-    await new Promise((resolve, reject) => {
-      const checkState = () => {
-        if (peerConnection.connectionState === 'connected') {
-          resolve();
-        } else if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'closed') {
-          reject(new Error('Connection failed or closed'));
-        } else {
-          setTimeout(checkState, 100);
-        }
-      };
-      checkState();
-    });
-
-    console.log('Connection established successfully!');
+    console.log('Connection setup completed. Session ID:', sessionId);
   } catch (error) {
     console.error('Error during connection setup:', error);
-    stopAllStreams();
-    closePC();
+    sessionId = null; // Reset sessionId if there's an error
   }
 };
 
@@ -338,12 +361,6 @@ async function startStreaming(assistantReply) {
     console.error('Missing session ID or stream ID. Cannot start streaming.');
     return;
   }
-
-  if (peerConnection.connectionState !== 'connected') {
-    console.error('PeerConnection is not in "connected" state. Current state:', peerConnection.connectionState);
-    return;
-  }
-
 
   try {
     console.log(`Sending streaming request to: ${DID_API.url}/${DID_API.service}/streams/${streamId}`);
@@ -381,8 +398,6 @@ async function startStreaming(assistantReply) {
     console.error('Error during streaming:', error);
   }
 }
-
-
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -541,8 +556,7 @@ async function sendChatToGroq() {
     }, 45000); // 45 seconds
 
     // Add a small delay before starting the stream
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
+    await new Promise(resolve => setTimeout(resolve, 100
     // Initiate streaming
     await startStreaming(assistantReply);
   } catch (error) {

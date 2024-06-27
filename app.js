@@ -9,7 +9,8 @@ app.use(cors({
   origin: ['https://avatar.skoop.digital', 'http://localhost:3000'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
+  credentials: true,
+  optionsSuccessStatus: 200
 }));
 
 app.use('/', express.static(__dirname, {
