@@ -556,7 +556,8 @@ async function sendChatToGroq() {
     }, 45000); // 45 seconds
 
     // Add a small delay before starting the stream
-    await new Promise(resolve => setTimeout(resolve, 100
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
     // Initiate streaming
     await startStreaming(assistantReply);
   } catch (error) {
