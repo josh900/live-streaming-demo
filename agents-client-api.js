@@ -1,4 +1,3 @@
-
 'use strict';
 import DID_API from './api.js';
 
@@ -78,14 +77,57 @@ function showErrorMessage(message) {
   connectButton.style.display = 'inline-block';
 }
 
+function parseSdp(sdp) {
+  const sections = sdp.split('\r\nm=');
+  const parsed = { global: sections[0] };
+  for (let i = 1; i < sections.length; i++) {
+    const mediaType = sections[i].split(' ')[0];
+    parsed[mediaType] = 'm=' + sections[i];
+  }
+  return parsed;
+}
+
+function filterCodecs(sdp, preferredVideoCodec) {
+  const parsed = parseSdp(sdp);
+  let modifiedSdp = parsed.global;
+
+  if (parsed.audio) {
+    modifiedSdp += '\r\n' + parsed.audio.replace('sendonly', 'recvonly');
+  }
+
+  if (parsed.video) {
+    const videoLines = parsed.video.split('\r\n');
+    let modifiedVideoLines = [];
+
+    let rtxPayloadType;
+    for (let line of videoLines) {
+      if (line.startsWith('a=rtpmap:')) {
+        const [, payloadType, codecName] = line.split(' ');
+        if (codecName.startsWith(preferredVideoCodec)) {
+          modifiedVideoLines.push(line);
+        } else if (codecName.startsWith('rtx')) {
+          rtxPayloadType = payloadType.split(':')[1];
+        }
+      } else if (line.startsWith('a=fmtp:') && rtxPayloadType && line.includes(`apt=${preferredVideoCodec.split('/')[0]}`)) {
+        modifiedVideoLines.push(line);
+      } else {
+        modifiedVideoLines.push(line);
+      }
+    }
+
+    modifiedSdp += '\r\n' + modifiedVideoLines.join('\r\n').replace('sendonly', 'recvonly');
+  }
+
+  if (parsed.application) {
+    modifiedSdp += '\r\n' + parsed.application;
+  }
+
+  return modifiedSdp;
+}
+
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
-    const config = {
-      iceServers: iceServers,
-      sdpSemantics: 'unified-plan'
-    };
-
-    peerConnection = new RTCPeerConnection(config);
+    peerConnection = new RTCPeerConnection({ iceServers });
     peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
     peerConnection.addEventListener('icecandidate', onIceCandidate, true);
     peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
@@ -94,11 +136,8 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.addEventListener('track', onTrack, true);
   }
 
-  // Modify the SDP to ensure H.264 is the preferred codec
-  const modifiedOffer = {
-    type: offer.type,
-    sdp: preferH264(offer.sdp)
-  };
+  const preferredVideoCodec = 'H264';
+  const modifiedOffer = { type: offer.type, sdp: filterCodecs(offer.sdp, preferredVideoCodec) };
 
   await peerConnection.setRemoteDescription(modifiedOffer);
   console.log('set remote sdp OK');
@@ -106,29 +145,10 @@ async function createPeerConnection(offer, iceServers) {
   const sessionClientAnswer = await peerConnection.createAnswer();
   console.log('create local sdp OK');
 
-  const modifiedAnswer = {
-    type: sessionClientAnswer.type,
-    sdp: preferH264(sessionClientAnswer.sdp)
-  };
-
-  await peerConnection.setLocalDescription(modifiedAnswer);
+  await peerConnection.setLocalDescription(sessionClientAnswer);
   console.log('set local sdp OK');
 
-  return modifiedAnswer;
-}
-
-function preferH264(sdp) {
-  return sdp.replace(
-    /m=video (\d+) [^\r\n]+/g,
-    (line) => {
-      const mLine = line.match(/m=video (\d+) [^\r\n]+/)[0];
-      const codecPayloads = sdp.match(/a=rtpmap:(\d+) H264\/\d+/g);
-      const h264Payloads = codecPayloads
-        ? codecPayloads.map(payload => payload.match(/a=rtpmap:(\d+)/)[1])
-        : [];
-      return `${mLine} ${h264Payloads.join(' ')}`;
-    }
-  );
+  return sessionClientAnswer;
 }
 
 function onIceGatheringStateChange() {
@@ -169,6 +189,7 @@ function onIceConnectionStateChange() {
 }
 
 function onConnectionStateChange() {
+  // not supported in firefox
   peerStatusLabel.innerText = peerConnection.connectionState;
   peerStatusLabel.className = 'peerConnectionState-' + peerConnection.connectionState;
 }
@@ -182,6 +203,7 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   let status;
   if (videoIsPlaying) {
     status = 'streaming';
+
     const remoteStream = stream;
     setVideoElement(remoteStream);
   } else {
@@ -193,13 +215,23 @@ function onVideoStatusChange(videoIsPlaying, stream) {
 }
 
 function onTrack(event) {
+  /**
+   * The following code is designed to provide information about whether there is currently data
+   * that's being streamed - It does so by periodically looking for changes in total stream data size
+   *
+   * This information in our case is used in order to show idle video while no video is streaming.
+   * To create this idle video, use the POST https://api.d-id.com/talks (or clips) endpoint with a silent audio file or a text script with only ssml breaks
+   * https://docs.aws.amazon.com/polly/latest/dg/supportedtags.html#break-tag
+   * for seamless results, use `config.fluent: true` and provide the same configuration as the streaming video
+   */
+
   if (!event.track) return;
 
   statsIntervalId = setInterval(async () => {
     if (peerConnection && event.track) {
       const stats = await peerConnection.getStats(event.track);
       stats.forEach((report) => {
-        if (report.type === 'inbound-rtp' && report.kind === 'video') {
+        if (report.type === 'inbound-rtp' && report.mediaType === 'video') {
           const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
 
           if (videoStatusChanged) {
@@ -215,26 +247,38 @@ function onTrack(event) {
 
 function setVideoElement(stream) {
   if (!stream) return;
+  // Add Animation Class
   videoElement.classList.add("animated")
+
+  // Removing browsers' autoplay's 'Mute' Requirement
   videoElement.muted = false;
+
   videoElement.srcObject = stream;
   videoElement.loop = false;
 
+  // Remove Animation Class after it's completed
   setTimeout(() => {
     videoElement.classList.remove("animated")
   }, 300);
 
+  // safari hotfix
   if (videoElement.paused) {
-    videoElement.play().then((_) => {}).catch((e) => {});
+    videoElement
+      .play()
+      .then((_) => { })
+      .catch((e) => { });
   }
 }
 
 function playIdleVideo() {
+  // Add Animation Class
   videoElement.classList.toggle("animated")
+
   videoElement.srcObject = undefined;
   videoElement.src = 'emma_idle.mp4';
   videoElement.loop = true;
 
+  // Remove Animation Class after it's completed
   setTimeout(() => {
     videoElement.classList.remove("animated")
   }, 300);
@@ -277,7 +321,9 @@ async function fetchWithRetries(url, options, retries = 1) {
   } catch (err) {
     if (retries <= maxRetryCount) {
       const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 500;
+
       await new Promise((resolve) => setTimeout(resolve, delay));
+
       console.log(`Request failed, retrying ${retries}/${maxRetryCount}. Error ${err}`);
       return fetchWithRetries(url, options, retries + 1);
     } else {
@@ -352,16 +398,6 @@ async function startStreaming(assistantReply) {
         session_id: sessionId,
       }),
     });
-
-    if (!playResponse.ok) {
-      const errorData = await playResponse.json();
-      console.error('Streaming error:', errorData);
-      throw new Error(`Streaming failed: ${errorData.description || playResponse.statusText}`);
-    }
-
-    const responseData = await playResponse.json();
-    console.log('Streaming response:', responseData);
-
   } catch (error) {
     console.error('Error during streaming:', error);
     if (isRecording) {
@@ -369,7 +405,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -389,6 +424,7 @@ async function startRecording() {
     });
     mediaRecorder.start(1000);
 
+    // Send KeepAlive message every 3 seconds
     setInterval(() => {
       if (deepgramSocket.readyState === 1) {
         const keepAliveMsg = JSON.stringify({ type: "KeepAlive" });
@@ -397,6 +433,7 @@ async function startRecording() {
       }
     }, 3000);
 
+    // Start transcription timer
     transcriptionTimer = setInterval(() => {
       if (transcript.trim() !== '') {
         document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User:</u> ${transcript}</span><br>`;
@@ -407,7 +444,7 @@ async function startRecording() {
         sendChatToGroq();
         transcript = '';
       }
-    }, 5000);
+    }, 5000); // Send transcription every 5 seconds
   };
 
   deepgramSocket.onmessage = (message) => {
@@ -427,12 +464,13 @@ async function startRecording() {
     }
   };
 
+  // Start inactivity timeout
   inactivityTimeout = setTimeout(() => {
     if (isRecording) {
       console.log('Inactivity timeout reached. Stopping recording.');
       startButton.click();
     }
-  }, 45000);
+  }, 45000); // 45 seconds
 }
 
 async function stopRecording() {
@@ -444,7 +482,10 @@ async function stopRecording() {
     mediaRecorder = null;
   }
 
+  // Clear transcription timer
   clearInterval(transcriptionTimer);
+
+  // Clear inactivity timeout
   clearTimeout(inactivityTimeout);
 }
 
@@ -498,21 +539,25 @@ async function sendChatToGroq() {
       }
     }
 
+    // Add assistant reply to chat history
     chatHistory.push({
       role: 'assistant',
       content: assistantReply,
     });
 
+    // Append the complete assistant reply to the chat history element
     document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${assistantReply}</span><br>`;
 
+    // Reset inactivity timeout
     clearTimeout(inactivityTimeout);
     inactivityTimeout = setTimeout(() => {
       if (isRecording) {
         console.log('Inactivity timeout reached. Stopping recording.');
         startButton.click();
       }
-    }, 45000);
+    }, 45000); // 45 seconds
 
+    // Initiate streaming
     await startStreaming(assistantReply);
   } catch (error) {
     console.error('Error:', error);
@@ -527,12 +572,17 @@ async function reinitializeConnection() {
   stopAllStreams();
   closePC();
 
+  // Clear transcription timer
   clearInterval(transcriptionTimer);
+
+  // Clear inactivity timeout
   clearTimeout(inactivityTimeout);
 
+  // Reset transcription state
   transcript = '';
-  chatHistory = chatHistory.slice(0, -1);
+  chatHistory = chatHistory.slice(0, -1); // Remove the last incomplete transcription from the chat history
 
+  // Update UI to remove the incomplete transcription
   const msgHistory = document.getElementById('msgHistory');
   msgHistory.innerHTML = msgHistory.innerHTML.slice(0, msgHistory.innerHTML.lastIndexOf('<span style=\'opacity:0.5\'><u>User:</u>'));
 
@@ -567,14 +617,4 @@ startButton.onclick = async () => {
     await stopRecording();
   }
   isRecording = !isRecording;
-};
-
-// Export any necessary functions or variables
-export {
-  connectButton,
-  destroyButton,
-  startButton,
-  createPeerConnection,
-  startStreaming,
-  reinitializeConnection,
 };
