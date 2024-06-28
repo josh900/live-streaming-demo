@@ -396,7 +396,7 @@ async function startRecording() {
         sendChatToGroq();
         transcript = '';
       }
-    }, 2000); // Send transcription every 2 seconds
+    }, 500); // Send transcription every 2 seconds
   };
 
   deepgramSocket.onmessage = (message) => {
