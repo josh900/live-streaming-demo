@@ -328,7 +328,8 @@ connectButton.onclick = async () => {
     console.error('Error sending SDP answer:', error);
   }
 };
-javascriptCopyasync function startStreaming(assistantReply) {
+
+async function startStreaming(assistantReply) {
   if (!sessionId) {
     console.error('No valid session ID available. Cannot start streaming.');
     return;
