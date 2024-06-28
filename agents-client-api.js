@@ -1,8 +1,4 @@
-Thank you for providing this additional information and the test results from the Python script. After carefully analyzing the situation, I believe I understand the root cause of the issue. The problem seems to be related to video codec compatibility between the D-ID API and our WebRTC implementation. Let's make the necessary changes to resolve this.
 
-We'll need to modify the `agents-client-api.js` file to address the video codec issue and ensure proper handling of the WebRTC connection. Here's the updated file:
-
-```javascript
 'use strict';
 import DID_API from './api.js';
 
