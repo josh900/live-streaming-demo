@@ -62,6 +62,11 @@ window.onload = async (event) => {
   }
 };
 
+function logSdp(sdp, prefix) {
+  console.log(`${prefix} SDP:`);
+  sdp.split('\r\n').forEach(line => console.log(line));
+}
+
 function showErrorMessage(message) {
   const errorMessage = document.createElement('div');
   errorMessage.innerHTML = message;
@@ -89,15 +94,16 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.addEventListener('track', onTrack, true);
   }
 
-  await peerConnection.setRemoteDescription(offer);
+  const remoteDesc = new RTCSessionDescription(offer);
+  await peerConnection.setRemoteDescription(remoteDesc);
   console.log('set remote sdp OK');
 
-  const sessionClientAnswer = await peerConnection.createAnswer();
+  const answer = await peerConnection.createAnswer();
   console.log('create local sdp OK');
 
   const modifiedAnswer = {
-    type: sessionClientAnswer.type,
-    sdp: modifySdp(sessionClientAnswer.sdp)
+    type: answer.type,
+    sdp: modifySdp(answer.sdp)
   };
 
   await peerConnection.setLocalDescription(modifiedAnswer);
@@ -114,6 +120,10 @@ function modifySdp(sdp) {
     }
     return line;
   });
+  
+  // Log the modified SDP for debugging
+  logSdp(modifiedLines.join('\r\n'), 'Modified');
+  
   return modifiedLines.join('\r\n');
 }
 
@@ -126,19 +136,22 @@ function onIceCandidate(event) {
   if (event.candidate) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
 
-    fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        candidate,
-        sdpMid,
-        sdpMLineIndex,
-        session_id: sessionId,
-      }),
-    });
+    // Only send the ICE candidate if it's complete
+    if (candidate.indexOf('candidate:') === 0) {
+      fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          candidate,
+          sdpMid,
+          sdpMLineIndex,
+          session_id: sessionId,
+        }),
+      }).catch(error => console.error('Error sending ICE candidate:', error));
+    }
   }
 }
 
@@ -258,15 +271,19 @@ const maxRetryCount = 2;
 const maxDelaySec = 2;
 async function fetchWithRetries(url, options, retries = 1) {
   try {
-    return await fetch(url, options);
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response;
   } catch (err) {
     if (retries <= maxRetryCount) {
       const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 500;
       await new Promise((resolve) => setTimeout(resolve, delay));
-      console.log(`Request failed, retrying ${retries}/${maxRetryCount}. Error ${err}`);
+      console.log(`Request failed, retrying ${retries}/${maxRetryCount}. Error: ${err.message}`);
       return fetchWithRetries(url, options, retries + 1);
     } else {
-      throw new Error(`Max retries exceeded. error: ${err}`);
+      throw new Error(`Max retries exceeded. Error: ${err.message}`);
     }
   }
 }
@@ -279,40 +296,47 @@ connectButton.onclick = async () => {
   stopAllStreams();
   closePC();
 
-  const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg'
-    }),
-  });
-
-  const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
-  streamId = newStreamId;
-  sessionId = newSessionId;
   try {
+    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg'
+      }),
+    });
+
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+    streamId = newStreamId;
+    sessionId = newSessionId;
+
     sessionClientAnswer = await createPeerConnection(offer, iceServers);
+
+    const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        answer: sessionClientAnswer,
+        session_id: sessionId,
+      }),
+    });
+
+    if (!sdpResponse.ok) {
+      throw new Error(`SDP response error: ${sdpResponse.status}`);
+    }
+
+    console.log('SDP answer sent successfully');
   } catch (e) {
-    console.log('error during streaming setup', e);
+    console.error('Error during streaming setup:', e);
     stopAllStreams();
     closePC();
-    return;
+    showErrorMessage('Failed to set up streaming. Please try again.');
   }
-
-  const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      answer: sessionClientAnswer,
-      session_id: sessionId,
-    }),
-  });
 };
 
 async function startStreaming(assistantReply) {
