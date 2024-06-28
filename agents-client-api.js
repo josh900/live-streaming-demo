@@ -290,6 +290,8 @@ async function fetchWithRetries(url, options, retries = 1) {
     }
   }
 }
+
+const connectButton = document.getElementById('connect-button');
 connectButton.onclick = async () => {
   if (peerConnection && peerConnection.connectionState === 'connected') {
     return;
