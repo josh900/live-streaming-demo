@@ -1,3 +1,4 @@
+
 'use strict';
 import DID_API from './api.js';
 
@@ -83,6 +84,7 @@ async function createPeerConnection(offer, iceServers) {
       iceServers: iceServers,
       sdpSemantics: 'unified-plan'
     };
+
     peerConnection = new RTCPeerConnection(config);
     peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
     peerConnection.addEventListener('icecandidate', onIceCandidate, true);
@@ -92,30 +94,41 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.addEventListener('track', onTrack, true);
   }
 
-  await peerConnection.setRemoteDescription(offer);
+  // Modify the SDP to ensure H.264 is the preferred codec
+  const modifiedOffer = {
+    type: offer.type,
+    sdp: preferH264(offer.sdp)
+  };
+
+  await peerConnection.setRemoteDescription(modifiedOffer);
   console.log('set remote sdp OK');
 
   const sessionClientAnswer = await peerConnection.createAnswer();
   console.log('create local sdp OK');
 
-  const modifiedAnswer = modifySdp(sessionClientAnswer.sdp);
-  sessionClientAnswer.sdp = modifiedAnswer;
+  const modifiedAnswer = {
+    type: sessionClientAnswer.type,
+    sdp: preferH264(sessionClientAnswer.sdp)
+  };
 
-  await peerConnection.setLocalDescription(sessionClientAnswer);
+  await peerConnection.setLocalDescription(modifiedAnswer);
   console.log('set local sdp OK');
 
-  return sessionClientAnswer;
+  return modifiedAnswer;
 }
 
-function modifySdp(sdp) {
-  const lines = sdp.split('\r\n');
-  const modifiedLines = lines.map(line => {
-    if (line.startsWith('a=fmtp:')) {
-      return line + ';x-google-start-bitrate=1000;x-google-max-bitrate=4000';
+function preferH264(sdp) {
+  return sdp.replace(
+    /m=video (\d+) [^\r\n]+/g,
+    (line) => {
+      const mLine = line.match(/m=video (\d+) [^\r\n]+/)[0];
+      const codecPayloads = sdp.match(/a=rtpmap:(\d+) H264\/\d+/g);
+      const h264Payloads = codecPayloads
+        ? codecPayloads.map(payload => payload.match(/a=rtpmap:(\d+)/)[1])
+        : [];
+      return `${mLine} ${h264Payloads.join(' ')}`;
     }
-    return line;
-  });
-  return modifiedLines.join('\r\n');
+  );
 }
 
 function onIceGatheringStateChange() {
@@ -202,27 +215,22 @@ function onTrack(event) {
 
 function setVideoElement(stream) {
   if (!stream) return;
+  videoElement.classList.add("animated")
+  videoElement.muted = false;
   videoElement.srcObject = stream;
   videoElement.loop = false;
-  videoElement.muted = false;
-  videoElement.classList.add("animated");
 
-  // Remove Animation Class after it's completed
   setTimeout(() => {
     videoElement.classList.remove("animated")
   }, 300);
 
-  // safari hotfix
   if (videoElement.paused) {
-    videoElement
-      .play()
-      .then((_) => { })
-      .catch((e) => { });
+    videoElement.play().then((_) => {}).catch((e) => {});
   }
 }
 
 function playIdleVideo() {
-  videoElement.classList.toggle("animated");
+  videoElement.classList.toggle("animated")
   videoElement.srcObject = undefined;
   videoElement.src = 'emma_idle.mp4';
   videoElement.loop = true;
@@ -269,9 +277,7 @@ async function fetchWithRetries(url, options, retries = 1) {
   } catch (err) {
     if (retries <= maxRetryCount) {
       const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 500;
-
       await new Promise((resolve) => setTimeout(resolve, delay));
-
       console.log(`Request failed, retrying ${retries}/${maxRetryCount}. Error ${err}`);
       return fetchWithRetries(url, options, retries + 1);
     } else {
@@ -324,18 +330,9 @@ connectButton.onclick = async () => {
       session_id: sessionId,
     }),
   });
-
-  // Log the response for debugging
-  const sdpResponseData = await sdpResponse.json();
-  console.log('SDP response:', sdpResponseData);
 };
 
 async function startStreaming(assistantReply) {
-  if (!streamId || !sessionId) {
-    console.error('No valid stream or session ID. Cannot start streaming.');
-    return;
-  }
-
   try {
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'POST',
@@ -351,22 +348,7 @@ async function startStreaming(assistantReply) {
         config: {
           fluent: true,
           pad_audio: 0,
-          driver_expressions: {
-            expressions: [
-              { expression: "neutral", start_frame: 0, intensity: 0 }
-            ]
-          },
-          align_driver: true,
-          align_expand_factor: 0,
-          auto_match: true,
-          motion_factor: 0,
-          normalization_factor: 0,
-          sharpen: true,
-          stitch: true,
-          result_format: 'mp4',
         },
-        driver_url: 'bank://lively/',
-        webhook: null,
         session_id: sessionId,
       }),
     });
@@ -387,6 +369,8 @@ async function startStreaming(assistantReply) {
     }
   }
 }
+
+
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   mediaRecorder = new MediaRecorder(stream);
@@ -405,7 +389,6 @@ async function startRecording() {
     });
     mediaRecorder.start(1000);
 
-    // Send KeepAlive message every 3 seconds
     setInterval(() => {
       if (deepgramSocket.readyState === 1) {
         const keepAliveMsg = JSON.stringify({ type: "KeepAlive" });
@@ -414,7 +397,6 @@ async function startRecording() {
       }
     }, 3000);
 
-    // Start transcription timer
     transcriptionTimer = setInterval(() => {
       if (transcript.trim() !== '') {
         document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User:</u> ${transcript}</span><br>`;
@@ -425,7 +407,7 @@ async function startRecording() {
         sendChatToGroq();
         transcript = '';
       }
-    }, 5000); // Send transcription every 5 seconds
+    }, 5000);
   };
 
   deepgramSocket.onmessage = (message) => {
@@ -445,13 +427,12 @@ async function startRecording() {
     }
   };
 
-  // Start inactivity timeout
   inactivityTimeout = setTimeout(() => {
     if (isRecording) {
       console.log('Inactivity timeout reached. Stopping recording.');
       startButton.click();
     }
-  }, 45000); // 45 seconds
+  }, 45000);
 }
 
 async function stopRecording() {
@@ -463,10 +444,7 @@ async function stopRecording() {
     mediaRecorder = null;
   }
 
-  // Clear transcription timer
   clearInterval(transcriptionTimer);
-
-  // Clear inactivity timeout
   clearTimeout(inactivityTimeout);
 }
 
@@ -520,25 +498,21 @@ async function sendChatToGroq() {
       }
     }
 
-    // Add assistant reply to chat history
     chatHistory.push({
       role: 'assistant',
       content: assistantReply,
     });
 
-    // Append the complete assistant reply to the chat history element
     document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${assistantReply}</span><br>`;
 
-    // Reset inactivity timeout
     clearTimeout(inactivityTimeout);
     inactivityTimeout = setTimeout(() => {
       if (isRecording) {
         console.log('Inactivity timeout reached. Stopping recording.');
         startButton.click();
       }
-    }, 45000); // 45 seconds
+    }, 45000);
 
-    // Initiate streaming
     await startStreaming(assistantReply);
   } catch (error) {
     console.error('Error:', error);
@@ -553,17 +527,12 @@ async function reinitializeConnection() {
   stopAllStreams();
   closePC();
 
-  // Clear transcription timer
   clearInterval(transcriptionTimer);
-
-  // Clear inactivity timeout
   clearTimeout(inactivityTimeout);
 
-  // Reset transcription state
   transcript = '';
-  chatHistory = chatHistory.slice(0, -1); // Remove the last incomplete transcription from the chat history
+  chatHistory = chatHistory.slice(0, -1);
 
-  // Update UI to remove the incomplete transcription
   const msgHistory = document.getElementById('msgHistory');
   msgHistory.innerHTML = msgHistory.innerHTML.slice(0, msgHistory.innerHTML.lastIndexOf('<span style=\'opacity:0.5\'><u>User:</u>'));
 
@@ -598,4 +567,14 @@ startButton.onclick = async () => {
     await stopRecording();
   }
   isRecording = !isRecording;
+};
+
+// Export any necessary functions or variables
+export {
+  connectButton,
+  destroyButton,
+  startButton,
+  createPeerConnection,
+  startStreaming,
+  reinitializeConnection,
 };
