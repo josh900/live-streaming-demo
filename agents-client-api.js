@@ -53,7 +53,11 @@ window.onload = async (event) => {
   document.body.appendChild(loadingSymbol);
 
   try {
-    await connectButton.onclick();
+    if (checkBrowserCompatibility()) {
+      await connectButton.onclick();
+    } else {
+      throw new Error('Browser not compatible');
+    }
     document.body.removeChild(loadingSymbol);
   } catch (error) {
     console.error('Error during auto-initialization:', error);
@@ -91,6 +95,28 @@ async function createPeerConnection(offer, iceServers) {
     // Add transceivers to ensure both audio and video are received
     peerConnection.addTransceiver('audio', { direction: 'recvonly' });
     peerConnection.addTransceiver('video', { direction: 'recvonly' });
+
+    // Error handling for WebRTC setup
+    peerConnection.onerror = (error) => {
+      console.error('PeerConnection error:', error);
+      showErrorMessage('WebRTC error occurred. Please try again.');
+    };
+
+    // Automatically retry connection on failure
+    peerConnection.oniceconnectionstatechange = () => {
+      if (peerConnection.iceConnectionState === 'failed') {
+        console.log('ICE connection failed. Attempting to restart...');
+        peerConnection.restartIce();
+      }
+    };
+
+    // Monitor and log the connection state
+    peerConnection.onconnectionstatechange = () => {
+      console.log('Connection state changed:', peerConnection.connectionState);
+      if (peerConnection.connectionState === 'failed') {
+        showErrorMessage('Connection failed. Please check your internet connection and try again.');
+      }
+    };
   }
 
   await peerConnection.setRemoteDescription(offer);
@@ -267,42 +293,54 @@ connectButton.onclick = async () => {
   stopAllStreams();
   closePC();
 
-  const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg',
-      compatibility_mode: 'auto'  // Use 'auto' to let the server decide the best codec
-    }),
-  });
-
-  const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
-  streamId = newStreamId;
-  sessionId = newSessionId;
   try {
+    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg',
+        compatibility_mode: 'auto'  // Use 'auto' to let the server decide the best codec
+      }),
+    });
+
+    if (!sessionResponse.ok) {
+      throw new Error(`HTTP error! status: ${sessionResponse.status}`);
+    }
+
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+    streamId = newStreamId;
+    sessionId = newSessionId;
+
     sessionClientAnswer = await createPeerConnection(offer, iceServers);
+
+    const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        answer: sessionClientAnswer,
+        session_id: sessionId,
+      }),
+    });
+
+    if (!sdpResponse.ok) {
+      throw new Error(`HTTP error! status: ${sdpResponse.status}`);
+    }
+
+    console.log('SDP exchange completed successfully');
   } catch (e) {
-    console.log('error during streaming setup', e);
+    console.error('Error during streaming setup:', e);
     stopAllStreams();
     closePC();
-    return;
+    showErrorMessage(`Failed to set up streaming: ${e.message}`);
   }
-
-  const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      answer: sessionClientAnswer,
-      session_id: sessionId,
-    }),
-  });
 };
+
 
 async function startStreaming(assistantReply) {
   try {
@@ -317,20 +355,27 @@ async function startStreaming(assistantReply) {
           type: 'text',
           input: assistantReply,
         },
+        driver_url: 'bank://lively/',
         config: {
-          fluent: true,
-          pad_audio: 0,
+          stitch: true,
         },
         session_id: sessionId,
       }),
     });
+
+    if (!playResponse.ok) {
+      throw new Error(`HTTP error! status: ${playResponse.status}`);
+    }
+
+    console.log('Streaming started successfully');
   } catch (error) {
     console.error('Error during streaming:', error);
+    showErrorMessage(`Streaming error: ${error.message}`);
     if (isRecording) {
-      await reinitializeConnection();
-    }
+      await rein    }
   }
 }
+
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -583,12 +628,18 @@ function checkBrowserCompatibility() {
   return true;
 }
 
-// Check compatibility before initializing
-if (checkBrowserCompatibility()) {
-  // Initialize your application here
-  console.log('Browser is compatible. Initializing application...');
-} else {
-  console.error('Browser is not compatible with WebRTC.');
+
+// Function to check browser compatibility
+function checkBrowserCompatibility() {
+  const isWebRTCSupported = navigator.mediaDevices &&
+    navigator.mediaDevices.getUserMedia &&
+    window.RTCPeerConnection;
+
+  if (!isWebRTCSupported) {
+    showErrorMessage('Your browser does not support WebRTC. Please use a modern browser like Chrome, Firefox, or Safari.');
+    return false;
+  }
+  return true;
 }
 
 // Add this line at the end of the file to expose the checkBrowserCompatibility function globally
