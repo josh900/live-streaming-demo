@@ -1,4 +1,3 @@
-
 'use strict';
 import DID_API from './api.js';
 
@@ -80,11 +79,11 @@ function showErrorMessage(message) {
 
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
-    const config = { 
-      iceServers,
+    const configuration = {
+      iceServers: iceServers,
       sdpSemantics: 'unified-plan'
     };
-    peerConnection = new RTCPeerConnection(config);
+    peerConnection = new RTCPeerConnection(configuration);
     peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
     peerConnection.addEventListener('icecandidate', onIceCandidate, true);
     peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
@@ -93,74 +92,40 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.addEventListener('track', onTrack, true);
   }
 
-  await peerConnection.setRemoteDescription(offer);
+  await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
   console.log('set remote sdp OK');
 
   const sessionClientAnswer = await peerConnection.createAnswer();
   console.log('create local sdp OK');
 
-  const modifiedAnswer = modifySdp(sessionClientAnswer.sdp);
-  console.log('Modified SDP:', modifiedAnswer);
-  sessionClientAnswer.sdp = modifiedAnswer;
+  const modifiedAnswer = modifySdp(sessionClientAnswer);
+  await peerConnection.setLocalDescription(modifiedAnswer);
+  console.log('set local sdp OK');
 
-  try {
-    await peerConnection.setLocalDescription(sessionClientAnswer);
-    console.log('set local sdp OK');
-  } catch (error) {
-    console.error('Error setting local description:', error);
-    console.log('Problematic SDP:', modifiedAnswer);
-    throw error;
-  }
-
-  return sessionClientAnswer;
+  return modifiedAnswer;
 }
 
-function modifySdp(sdp) {
-  const lines = sdp.split('\r\n');
-  const modifiedLines = lines.filter(line => {
-    // Keep only essential lines
-    return line.startsWith('v=') ||
-           line.startsWith('o=') ||
-           line.startsWith('s=') ||
-           line.startsWith('t=') ||
-           line.startsWith('c=') ||
-           line.startsWith('a=group:') ||
-           line.startsWith('a=msid-semantic:') ||
-           line.startsWith('m=audio') ||
-           line.startsWith('m=video') ||
-           (line.startsWith('a=') && (
-             line.includes('rtpmap') ||
-             line.includes('rtcp-fb') ||
-             line.includes('fmtp') ||
-             line.includes('mid:a') ||
-             line.includes('mid:v') ||
-             line.includes('sendrecv') ||
-             line.includes('recvonly') ||
-             line.includes('setup:') ||
-             line.includes('ice-ufrag:') ||
-             line.includes('ice-pwd:') ||
-             line.includes('fingerprint:')
-           ));
-  });
+function modifySdp(sessionDescription) {
+  let sdp = sessionDescription.sdp;
 
-  // Ensure we have only one audio and one video mid
-  let audioMidFound = false;
-  let videoMidFound = false;
-  
-  return modifiedLines.map(line => {
-    if (line.includes('a=mid:a') && !audioMidFound) {
-      audioMidFound = true;
-      return line;
-    }
-    if (line.includes('a=mid:v') && !videoMidFound) {
-      videoMidFound = true;
-      return line;
-    }
-    if ((line.includes('a=mid:a') && audioMidFound) || (line.includes('a=mid:v') && videoMidFound)) {
-      return null;
-    }
-    return line;
-  }).filter(Boolean).join('\r\n');
+  // Ensure the SDP includes both VP8 and H264 codecs
+  if (sdp.indexOf('VP8') === -1) {
+    sdp = sdp.replace(
+      /(m=video .*\r\n)/g,
+      '$1a=rtpmap:96 VP8/90000\r\na=rtcp-fb:96 goog-remb\r\na=rtcp-fb:96 transport-cc\r\na=rtcp-fb:96 ccm fir\r\na=rtcp-fb:96 nack\r\na=rtcp-fb:96 nack pli\r\n'
+    );
+  }
+
+  // Change sendonly to recvonly for both audio and video
+  sdp = sdp.replace(/a=sendonly/g, 'a=recvonly');
+
+  // Remove b=AS line if present (which might limit bandwidth)
+  sdp = sdp.replace(/b=AS:.*\r\n/g, '');
+
+  return new RTCSessionDescription({
+    type: sessionDescription.type,
+    sdp: sdp
+  });
 }
 
 function onIceGatheringStateChange() {
@@ -172,6 +137,7 @@ function onIceCandidate(event) {
   if (event.candidate) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
 
+    // WEBRTC API CALL 3 - Submit network information
     fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
       method: 'POST',
       headers: {
@@ -226,55 +192,36 @@ function onVideoStatusChange(videoIsPlaying, stream) {
 function onTrack(event) {
   console.log('Track received:', event.track.kind);
   if (event.track.kind === 'video') {
-    const remoteStream = event.streams[0];
-    videoElement.srcObject = remoteStream;
+    handleVideoTrack(event.track, event.streams[0]);
+  } else if (event.track.kind === 'audio') {
+    handleAudioTrack(event.track, event.streams[0]);
   }
+}
 
-  if (!event.track) return;
+function handleVideoTrack(track, stream) {
+  console.log('Video track received:', track);
+  videoElement.srcObject = stream;
+  videoElement.play().catch(e => console.error('Error playing video:', e));
+}
 
-  statsIntervalId = setInterval(async () => {
-    if (peerConnection && event.track) {
-      const stats = await peerConnection.getStats(event.track);
-      stats.forEach((report) => {
-        if (report.type === 'inbound-rtp' && report.kind === 'video') {
-          const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
-
-          if (videoStatusChanged) {
-            videoIsPlaying = report.bytesReceived > lastBytesReceived;
-            onVideoStatusChange(videoIsPlaying, event.streams[0]);
-          }
-          lastBytesReceived = report.bytesReceived;
-        }
-      });
-    }
-  }, 300);
+function handleAudioTrack(track, stream) {
+  console.log('Audio track received:', track);
+  const audioElement = new Audio();
+  audioElement.srcObject = stream;
+  audioElement.play().catch(e => console.error('Error playing audio:', e));
 }
 
 function setVideoElement(stream) {
   if (!stream) return;
-  videoElement.classList.add("animated")
-  videoElement.muted = false;
   videoElement.srcObject = stream;
   videoElement.loop = false;
-
-  setTimeout(() => {
-    videoElement.classList.remove("animated")
-  }, 300);
-
-  if (videoElement.paused) {
-    videoElement.play().then((_) => {}).catch((e) => {});
-  }
+  videoElement.muted = false;
+  videoElement.play().catch(e => console.error('Error playing video:', e));
 }
 
 function playIdleVideo() {
-  videoElement.classList.toggle("animated")
-  videoElement.srcObject = undefined;
   videoElement.src = 'emma_idle.mp4';
   videoElement.loop = true;
-
-  setTimeout(() => {
-    videoElement.classList.remove("animated")
-  }, 300);
 }
 
 function stopAllStreams() {
@@ -340,25 +287,18 @@ connectButton.onclick = async () => {
       },
       body: JSON.stringify({
         source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg',
-        driver_url: 'bank://lively/',
-        config: {
-          stitch: true,
-        }
+        compatibility_mode: 'auto'  // This allows the API to choose the best codec
       }),
     });
 
     const data = await sessionResponse.json();
     streamId = data.id;
     sessionId = data.session_id;
-    console.log('Stream created:', data);
+    console.log('Stream created:', { streamId, sessionId });
 
     sessionClientAnswer = await createPeerConnection(data.offer, data.ice_servers);
   } catch (e) {
     console.error('Error during streaming setup', e);
-    console.log('Error details:', e.message);
-    if (e.name === 'DOMException') {
-      console.log('DOMException details:', e.name, e.message);
-    }
     stopAllStreams();
     closePC();
     return;
@@ -383,15 +323,12 @@ connectButton.onclick = async () => {
       throw new Error(`SDP request failed: ${errorData.description || sdpResponse.statusText}`);
     }
 
-    const sdpResponseData = await sdpResponse.json();
-    console.log('SDP answer sent successfully:', sdpResponseData);
+    console.log('SDP answer sent successfully');
   } catch (error) {
     console.error('Error sending SDP answer:', error);
   }
 };
-
-
-async function startStreaming(assistantReply) {
+javascriptCopyasync function startStreaming(assistantReply) {
   if (!sessionId) {
     console.error('No valid session ID available. Cannot start streaming.');
     return;
