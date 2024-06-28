@@ -1,8 +1,4 @@
-Thank you for providing this detailed information. After carefully analyzing the Python script output, the error messages, and the additional information about WebRTC codec issues, I believe I understand the root cause of the problem. The main issue seems to be related to video codec compatibility between the client (your application) and the D-ID server.
 
-Let's modify the `agents-client-api.js` file to address this issue. We'll need to ensure that we're using the correct video codecs and properly handling the SDP negotiation. Here's the updated `agents-client-api.js` file:
-
-```javascript
 'use strict';
 import DID_API from './api.js';
 
