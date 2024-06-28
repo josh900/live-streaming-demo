@@ -119,6 +119,8 @@ async function createPeerConnection(offer, iceServers) {
 
 
 
+
+
 function filterCodecs(sessionDescription) {
   const codecsToKeep = ['H264'];
   let sdpLines = sessionDescription.sdp.split('\r\n');
@@ -143,7 +145,7 @@ function filterCodecs(sessionDescription) {
 
     let mLineParts = mLine.split(' ');
     let port = mLineParts[1];
-    mLineParts = [mLineParts[0], port, ...mLineParts.slice(2)].filter(part => 
+    mLineParts = [mLineParts[0], port, mLineParts[2], ...mLineParts.slice(3)].filter(part => 
       codecPayloads.includes(part) || rtxPayloads.includes(part) || !(/^\d+$/.test(part))
     );
     sdpLines[mLineIndex] = mLineParts.join(' ');
@@ -372,8 +374,8 @@ async function startStreaming(assistantReply) {
     return;
   }
 
-  if (peerConnection.connectionState !== 'connected') {
-    console.error('PeerConnection is not in "connected" state. Current state:', peerConnection.connectionState);
+  if (!peerConnection || peerConnection.connectionState !== 'connected') {
+    console.error('PeerConnection is not in "connected" state. Current state:', peerConnection ? peerConnection.connectionState : 'null');
     return;
   }
 
@@ -408,6 +410,7 @@ async function startStreaming(assistantReply) {
 
     const responseData = await playResponse.json();
     console.log('Streaming response:', responseData);
+
   } catch (error) {
     console.error('Error during streaming:', error);
     // Don't reinitialize here, as the connection seems to be fine
@@ -619,6 +622,9 @@ async function reinitializeConnection() {
   // Reset session variables
   sessionId = null;
   streamId = null;
+
+  // Add a delay before attempting to reconnect
+  await new Promise(resolve => setTimeout(resolve, 2000));
 
   // Attempt to re-establish connection
   await connectButton.onclick();
