@@ -1,8 +1,4 @@
-Thank you for providing the additional context and information about the issue you're facing. I understand that the problem is specifically related to the video generation of the D-ID avatar, while other aspects of the application are working correctly. Let's focus on resolving this issue by carefully implementing the necessary changes based on the documentation and the insights from the Python script test.
 
-Here's a revised version of the `agents-client-api.js` file that addresses the video streaming issues:
-
-```javascript
 'use strict';
 import DID_API from './api.js';
 
