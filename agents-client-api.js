@@ -1,10 +1,15 @@
+Thank you for providing this additional information and the test results from the Python script. After carefully analyzing the situation, I believe I understand the root cause of the issue. The problem seems to be related to video codec compatibility between the D-ID API and our WebRTC implementation. Let's make the necessary changes to resolve this.
+
+We'll need to modify the `agents-client-api.js` file to address the video codec issue and ensure proper handling of the WebRTC connection. Here's the updated file:
+
+```javascript
 'use strict';
 import DID_API from './api.js';
 
 const GROQ_API_KEY = DID_API.groqKey;
 const DEEPGRAM_API_KEY = DID_API.deepgramKey;
 
-if (DID_API.key == '🤫') alert('Please put your api key inside ./api.js and restart..');
+if (DID_API.key == '🤫') alert('Please put your api key inside ./api.json and restart..');
 
 const RTCPeerConnection = (
   window.RTCPeerConnection ||
@@ -39,6 +44,7 @@ const streamingStatusLabel = document.getElementById('streaming-status-label');
 window.onload = async (event) => {
   playIdleVideo();
 
+  // Show loading symbol
   const loadingSymbol = document.createElement('div');
   loadingSymbol.innerHTML = 'Connecting...';
   loadingSymbol.style.position = 'absolute';
@@ -54,9 +60,11 @@ window.onload = async (event) => {
 
   try {
     await connectButton.onclick();
+    // Remove loading symbol
     document.body.removeChild(loadingSymbol);
   } catch (error) {
     console.error('Error during auto-initialization:', error);
+    // Remove loading symbol and show error message
     document.body.removeChild(loadingSymbol);
     showErrorMessage('Failed to connect. Please try again.');
   }
@@ -69,69 +77,18 @@ function showErrorMessage(message) {
   errorMessage.style.marginBottom = '10px';
   document.body.appendChild(errorMessage);
 
+  // Show destroy and connect buttons
   destroyButton.style.display = 'inline-block';
   connectButton.style.display = 'inline-block';
 }
 
-function parseSdp(sdp) {
-  const sections = sdp.split('\r\nm=');
-  const parsed = { global: sections[0] };
-  for (let i = 1; i < sections.length; i++) {
-    const mediaType = sections[i].split(' ')[0];
-    parsed[mediaType] = 'm=' + sections[i];
-  }
-  return parsed;
-}
-
-function filterCodecs(sdp, preferredVideoCodec) {
-  const sections = sdp.split('\r\nm=');
-  let filteredSdp = sections[0];  // Keep the session-level attributes
-
-  for (let i = 1; i < sections.length; i++) {
-    const section = 'm=' + sections[i];
-    const lines = section.split('\r\n');
-    const mLine = lines[0];
-    const media = mLine.split(' ')[0];
-
-    if (media === 'video') {
-      const codecPayloads = [];
-      const rtxPayloads = [];
-      const filteredLines = lines.filter(line => {
-        if (line.startsWith('a=rtpmap:')) {
-          const [, payload, codec] = line.split(':')[1].split(' ');
-          if (codec.startsWith(preferredVideoCodec)) {
-            codecPayloads.push(payload);
-            return true;
-          } else if (codec.startsWith('rtx')) {
-            rtxPayloads.push(payload);
-            return true;
-          }
-          return false;
-        }
-        if (line.startsWith('a=fmtp:')) {
-          const payload = line.split(':')[1].split(' ')[0];
-          return codecPayloads.includes(payload) || rtxPayloads.includes(payload);
-        }
-        return !line.startsWith('a=rtpmap:') && !line.startsWith('a=fmtp:');
-      });
-
-      // Modify the m= line to include only the filtered payloads
-      const newMLine = mLine.split(' ').slice(0, 3).concat(codecPayloads, rtxPayloads).join(' ');
-      filteredLines[0] = newMLine;
-
-      filteredSdp += '\r\n' + filteredLines.join('\r\n');
-    } else {
-      // For non-video sections, just change sendonly to recvonly if present
-      filteredSdp += '\r\n' + section.replace('sendonly', 'recvonly');
-    }
-  }
-
-  return filteredSdp;
-}
-
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
-    peerConnection = new RTCPeerConnection({ iceServers });
+    const config = { 
+      iceServers,
+      sdpSemantics: 'unified-plan'
+    };
+    peerConnection = new RTCPeerConnection(config);
     peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
     peerConnection.addEventListener('icecandidate', onIceCandidate, true);
     peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
@@ -140,40 +97,40 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.addEventListener('track', onTrack, true);
   }
 
-  const preferredVideoCodec = 'H264';
-  console.log('Original offer SDP:', offer.sdp);
-  
-  try {
-    const modifiedOfferSdp = filterCodecs(offer.sdp, preferredVideoCodec);
-    console.log('Modified offer SDP:', modifiedOfferSdp);
-    
-    const modifiedOffer = new RTCSessionDescription({
-      type: offer.type,
-      sdp: modifiedOfferSdp
-    });
+  await peerConnection.setRemoteDescription(offer);
+  console.log('set remote sdp OK');
 
-    await peerConnection.setRemoteDescription(modifiedOffer);
-    console.log('set remote sdp OK');
+  const sessionClientAnswer = await peerConnection.createAnswer();
+  console.log('create local sdp OK');
 
-    const sessionClientAnswer = await peerConnection.createAnswer();
-    console.log('create local sdp OK');
+  const modifiedAnswer = modifySdp(sessionClientAnswer.sdp);
+  sessionClientAnswer.sdp = modifiedAnswer;
 
-    const modifiedAnswerSdp = filterCodecs(sessionClientAnswer.sdp, preferredVideoCodec);
-    console.log('Modified answer SDP:', modifiedAnswerSdp);
-    
-    const modifiedAnswer = new RTCSessionDescription({
-      type: sessionClientAnswer.type,
-      sdp: modifiedAnswerSdp
-    });
+  await peerConnection.setLocalDescription(sessionClientAnswer);
+  console.log('set local sdp OK');
 
-    await peerConnection.setLocalDescription(modifiedAnswer);
-    console.log('set local sdp OK');
+  return sessionClientAnswer;
+}
 
-    return modifiedAnswer;
-  } catch (error) {
-    console.error('Error in createPeerConnection:', error);
-    throw error;
-  }
+function modifySdp(sdp) {
+  const lines = sdp.split('\r\n');
+  const modifiedLines = lines.map(line => {
+    if (line.startsWith('a=rtpmap:') && line.includes('VP8')) {
+      return line.replace('VP8', 'H264');
+    }
+    if (line.startsWith('a=rtpmap:') && line.includes('VP9')) {
+      return null;
+    }
+    if (line.startsWith('a=fmtp:') && line.includes('apt=')) {
+      const aptValue = line.split('apt=')[1];
+      if (aptValue === '96' || aptValue === '98') {
+        return null;
+      }
+    }
+    return line;
+  }).filter(Boolean);
+
+  return modifiedLines.join('\r\n');
 }
 
 function onIceGatheringStateChange() {
@@ -237,6 +194,12 @@ function onVideoStatusChange(videoIsPlaying, stream) {
 }
 
 function onTrack(event) {
+  console.log('Track received:', event.track.kind);
+  if (event.track.kind === 'video') {
+    const remoteStream = event.streams[0];
+    videoElement.srcObject = remoteStream;
+  }
+
   if (!event.track) return;
 
   statsIntervalId = setInterval(async () => {
@@ -338,43 +301,63 @@ connectButton.onclick = async () => {
   stopAllStreams();
   closePC();
 
-  const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg'
-    }),
-  });
-
-  const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
-  streamId = newStreamId;
-  sessionId = newSessionId;
   try {
-    sessionClientAnswer = await createPeerConnection(offer, iceServers);
+    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg',
+        compatibility_mode: 'off'  // This will force H264 codec
+      }),
+    });
+
+    const data = await sessionResponse.json();
+    streamId = data.id;
+    sessionId = data.session_id;
+    console.log('Stream created:', { streamId, sessionId });
+
+    sessionClientAnswer = await createPeerConnection(data.offer, data.ice_servers);
   } catch (e) {
-    console.log('error during streaming setup', e);
+    console.error('Error during streaming setup', e);
     stopAllStreams();
     closePC();
     return;
   }
 
-  const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      answer: sessionClientAnswer,
-      session_id: sessionId,
-    }),
-  });
+  try {
+    const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        answer: sessionClientAnswer,
+        session_id: sessionId,
+      }),
+    });
+
+    if (!sdpResponse.ok) {
+      const errorData = await sdpResponse.json();
+      console.error('SDP error:', errorData);
+      throw new Error(`SDP request failed: ${errorData.description || sdpResponse.statusText}`);
+    }
+
+    console.log('SDP answer sent successfully');
+  } catch (error) {
+    console.error('Error sending SDP answer:', error);
+  }
 };
 
 async function startStreaming(assistantReply) {
+  if (!sessionId) {
+    console.error('No valid session ID available. Cannot start streaming.');
+    return;
+  }
+
   try {
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'POST',
@@ -412,7 +395,6 @@ async function startStreaming(assistantReply) {
   }
 }
 
-
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   mediaRecorder = new MediaRecorder(stream);
@@ -431,6 +413,7 @@ async function startRecording() {
     });
     mediaRecorder.start(1000);
 
+    // Send KeepAlive message every 3 seconds
     setInterval(() => {
       if (deepgramSocket.readyState === 1) {
         const keepAliveMsg = JSON.stringify({ type: "KeepAlive" });
@@ -439,6 +422,7 @@ async function startRecording() {
       }
     }, 3000);
 
+    // Start transcription timer
     transcriptionTimer = setInterval(() => {
       if (transcript.trim() !== '') {
         document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User:</u> ${transcript}</span><br>`;
@@ -449,7 +433,7 @@ async function startRecording() {
         sendChatToGroq();
         transcript = '';
       }
-    }, 5000);
+    }, 5000); // Send transcription every 5 seconds
   };
 
   deepgramSocket.onmessage = (message) => {
@@ -469,12 +453,13 @@ async function startRecording() {
     }
   };
 
+  // Start inactivity timeout
   inactivityTimeout = setTimeout(() => {
     if (isRecording) {
       console.log('Inactivity timeout reached. Stopping recording.');
       startButton.click();
     }
-  }, 45000);
+  }, 45000); // 45 seconds
 }
 
 async function stopRecording() {
@@ -486,7 +471,10 @@ async function stopRecording() {
     mediaRecorder = null;
   }
 
+  // Clear transcription timer
   clearInterval(transcriptionTimer);
+
+  // Clear inactivity timeout
   clearTimeout(inactivityTimeout);
 }
 
@@ -540,21 +528,25 @@ async function sendChatToGroq() {
       }
     }
 
+    // Add assistant reply to chat history
     chatHistory.push({
       role: 'assistant',
       content: assistantReply,
     });
 
+    // Append the complete assistant reply to the chat history element
     document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${assistantReply}</span><br>`;
 
+    // Reset inactivity timeout
     clearTimeout(inactivityTimeout);
     inactivityTimeout = setTimeout(() => {
       if (isRecording) {
         console.log('Inactivity timeout reached. Stopping recording.');
         startButton.click();
       }
-    }, 45000);
+    }, 45000); // 45 seconds
 
+    // Initiate streaming
     await startStreaming(assistantReply);
   } catch (error) {
     console.error('Error:', error);
@@ -569,12 +561,17 @@ async function reinitializeConnection() {
   stopAllStreams();
   closePC();
 
+  // Clear transcription timer
   clearInterval(transcriptionTimer);
+
+  // Clear inactivity timeout
   clearTimeout(inactivityTimeout);
 
+  // Reset transcription state
   transcript = '';
-  chatHistory = chatHistory.slice(0, -1);
+  chatHistory = chatHistory.slice(0, -1); // Remove the last incomplete transcription from the chat history
 
+  // Update UI to remove the incomplete transcription
   const msgHistory = document.getElementById('msgHistory');
   msgHistory.innerHTML = msgHistory.innerHTML.slice(0, msgHistory.innerHTML.lastIndexOf('<span style=\'opacity:0.5\'><u>User:</u>'));
 
@@ -609,14 +606,4 @@ startButton.onclick = async () => {
     await stopRecording();
   }
   isRecording = !isRecording;
-};
-
-// Export any necessary functions or variables
-export {
-  connectButton,
-  destroyButton,
-  startButton,
-  createPeerConnection,
-  startStreaming,
-  reinitializeConnection,
 };
