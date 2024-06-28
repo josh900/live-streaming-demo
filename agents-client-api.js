@@ -323,9 +323,6 @@ connectButton.onclick = async () => {
     });
 };
 
-
-document.addEventListener('DOMContentLoaded', function() {
-
 const startButton = document.getElementById('start-button');
 startButton.onclick = async () => {
     if (peerConnection?.signalingState === 'stable' || peerConnection?.iceConnectionState === 'connected') {
@@ -361,10 +358,6 @@ startButton.onclick = async () => {
         }
     }
 };
-});
-
-
-
 
 const destroyButton = document.getElementById('destroy-button');
 destroyButton.onclick = async () => {
