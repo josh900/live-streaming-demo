@@ -26,9 +26,6 @@ let transcript = '';
 let inactivityTimeout;
 let transcriptionTimer;
 
-
-
-
 const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentance unless absolutely needed.`;
 
 const videoElement = document.getElementById('video-element');
@@ -42,7 +39,6 @@ const streamingStatusLabel = document.getElementById('streaming-status-label');
 window.onload = async (event) => {
   playIdleVideo();
 
-  // Show loading symbol
   const loadingSymbol = document.createElement('div');
   loadingSymbol.innerHTML = 'Connecting...';
   loadingSymbol.style.position = 'absolute';
@@ -58,11 +54,9 @@ window.onload = async (event) => {
 
   try {
     await connectButton.onclick();
-    // Remove loading symbol
     document.body.removeChild(loadingSymbol);
   } catch (error) {
     console.error('Error during auto-initialization:', error);
-    // Remove loading symbol and show error message
     document.body.removeChild(loadingSymbol);
     showErrorMessage('Failed to connect. Please try again.');
   }
@@ -75,21 +69,28 @@ function showErrorMessage(message) {
   errorMessage.style.marginBottom = '10px';
   document.body.appendChild(errorMessage);
 
-  // Show destroy and connect buttons
   destroyButton.style.display = 'inline-block';
   connectButton.style.display = 'inline-block';
 }
 
-
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
-    peerConnection = new RTCPeerConnection({ iceServers });
+    const config = {
+      iceServers,
+      sdpSemantics: 'unified-plan'
+    };
+
+    peerConnection = new RTCPeerConnection(config);
     peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
     peerConnection.addEventListener('icecandidate', onIceCandidate, true);
     peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
     peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
     peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
     peerConnection.addEventListener('track', onTrack, true);
+
+    // Add transceivers to ensure both audio and video are received
+    peerConnection.addTransceiver('audio', { direction: 'recvonly' });
+    peerConnection.addTransceiver('video', { direction: 'recvonly' });
   }
 
   await peerConnection.setRemoteDescription(offer);
@@ -101,20 +102,18 @@ async function createPeerConnection(offer, iceServers) {
   await peerConnection.setLocalDescription(sessionClientAnswer);
   console.log('set local sdp OK');
 
-
-
-
   return sessionClientAnswer;
 }
+
 function onIceGatheringStateChange() {
   iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
   iceGatheringStatusLabel.className = 'iceGatheringState-' + peerConnection.iceGatheringState;
 }
+
 function onIceCandidate(event) {
   if (event.candidate) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
 
-    // WEBRTC API CALL 3 - Submit network information
     fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
       method: 'POST',
       headers: {
@@ -130,6 +129,7 @@ function onIceCandidate(event) {
     });
   }
 }
+
 function onIceConnectionStateChange() {
   iceStatusLabel.innerText = peerConnection.iceConnectionState;
   iceStatusLabel.className = 'iceConnectionState-' + peerConnection.iceConnectionState;
@@ -139,22 +139,22 @@ function onIceConnectionStateChange() {
     closePC();
     showErrorMessage('Connection lost. Please try again.');
   }
-
 }
+
 function onConnectionStateChange() {
-  // not supported in firefox
   peerStatusLabel.innerText = peerConnection.connectionState;
   peerStatusLabel.className = 'peerConnectionState-' + peerConnection.connectionState;
 }
+
 function onSignalingStateChange() {
   signalingStatusLabel.innerText = peerConnection.signalingState;
   signalingStatusLabel.className = 'signalingState-' + peerConnection.signalingState;
 }
+
 function onVideoStatusChange(videoIsPlaying, stream) {
   let status;
   if (videoIsPlaying) {
     status = 'streaming';
-
     const remoteStream = stream;
     setVideoElement(remoteStream);
   } else {
@@ -164,17 +164,8 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   streamingStatusLabel.innerText = status;
   streamingStatusLabel.className = 'streamingState-' + status;
 }
-function onTrack(event) {
-  /**
-   * The following code is designed to provide information about whether there is currently data
-   * that's being streamed - It does so by periodically looking for changes in total stream data size
-   *
-   * This information in our case is used in order to show idle video while no video is streaming.
-   * To create this idle video, use the POST https://api.d-id.com/talks (or clips) endpoint with a silent audio file or a text script with only ssml breaks
-   * https://docs.aws.amazon.com/polly/latest/dg/supportedtags.html#break-tag
-   * for seamless results, use `config.fluent: true` and provide the same configuration as the streaming video
-   */
 
+function onTrack(event) {
   if (!event.track) return;
 
   statsIntervalId = setInterval(async () => {
@@ -197,41 +188,31 @@ function onTrack(event) {
 
 function setVideoElement(stream) {
   if (!stream) return;
-  // Add Animation Class
-  videoElement.classList.add("animated")
-
-  // Removing browsers' autoplay's 'Mute' Requirement
+  videoElement.classList.add("animated");
   videoElement.muted = false;
-
   videoElement.srcObject = stream;
   videoElement.loop = false;
 
-  // Remove Animation Class after it's completed
   setTimeout(() => {
-    videoElement.classList.remove("animated")
+    videoElement.classList.remove("animated");
   }, 300);
 
-  // safari hotfix
   if (videoElement.paused) {
-    videoElement
-      .play()
-      .then((_) => { })
-      .catch((e) => { });
+    videoElement.play().catch(e => console.error("Error playing video:", e));
   }
 }
-function playIdleVideo() {
-  // Add Animation Class
-  videoElement.classList.toggle("animated")
 
+function playIdleVideo() {
+  videoElement.classList.toggle("animated");
   videoElement.srcObject = undefined;
   videoElement.src = 'emma_idle.mp4';
   videoElement.loop = true;
 
-  // Remove Animation Class after it's completed
   setTimeout(() => {
-    videoElement.classList.remove("animated")
+    videoElement.classList.remove("animated");
   }, 300);
 }
+
 function stopAllStreams() {
   if (videoElement.srcObject) {
     console.log('stopping video streams');
@@ -239,6 +220,7 @@ function stopAllStreams() {
     videoElement.srcObject = null;
   }
 }
+
 function closePC(pc = peerConnection) {
   if (!pc) return;
   console.log('stopping peer connection');
@@ -259,6 +241,7 @@ function closePC(pc = peerConnection) {
     peerConnection = null;
   }
 }
+
 const maxRetryCount = 2;
 const maxDelaySec = 2;
 async function fetchWithRetries(url, options, retries = 1) {
@@ -267,9 +250,7 @@ async function fetchWithRetries(url, options, retries = 1) {
   } catch (err) {
     if (retries <= maxRetryCount) {
       const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 500;
-
       await new Promise((resolve) => setTimeout(resolve, delay));
-
       console.log(`Request failed, retrying ${retries}/${maxRetryCount}. Error ${err}`);
       return fetchWithRetries(url, options, retries + 1);
     } else {
@@ -280,15 +261,12 @@ async function fetchWithRetries(url, options, retries = 1) {
 
 const connectButton = document.getElementById('connect-button');
 connectButton.onclick = async () => {
-
-
   if (peerConnection && peerConnection.connectionState === 'connected') {
     return;
   }
   stopAllStreams();
   closePC();
 
-  // WEBRTC API CALL 1 - Create a new stream
   const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
     method: 'POST',
     headers: {
@@ -296,10 +274,10 @@ connectButton.onclick = async () => {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg'
+      source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg',
+      compatibility_mode: 'auto'  // Use 'auto' to let the server decide the best codec
     }),
   });
-
 
   const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
   streamId = newStreamId;
@@ -313,7 +291,6 @@ connectButton.onclick = async () => {
     return;
   }
 
-  // WEBRTC API CALL 2 - Start a stream
   const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
     method: 'POST',
     headers: {
@@ -326,9 +303,6 @@ connectButton.onclick = async () => {
     }),
   });
 };
-
-
-
 
 async function startStreaming(assistantReply) {
   try {
@@ -358,7 +332,6 @@ async function startStreaming(assistantReply) {
   }
 }
 
-
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   mediaRecorder = new MediaRecorder(stream);
@@ -377,7 +350,6 @@ async function startRecording() {
     });
     mediaRecorder.start(1000);
 
-    // Send KeepAlive message every 3 seconds
     setInterval(() => {
       if (deepgramSocket.readyState === 1) {
         const keepAliveMsg = JSON.stringify({ type: "KeepAlive" });
@@ -386,7 +358,6 @@ async function startRecording() {
       }
     }, 3000);
 
-    // Start transcription timer
     transcriptionTimer = setInterval(() => {
       if (transcript.trim() !== '') {
         document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User:</u> ${transcript}</span><br>`;
@@ -397,7 +368,7 @@ async function startRecording() {
         sendChatToGroq();
         transcript = '';
       }
-    }, 5000); // Send transcription every 5 seconds
+    }, 5000);
   };
 
   deepgramSocket.onmessage = (message) => {
@@ -417,7 +388,6 @@ async function startRecording() {
     }
   };
 
-  // Start inactivity timeout
   inactivityTimeout = setTimeout(() => {
     if (isRecording) {
       console.log('Inactivity timeout reached. Stopping recording.');
@@ -461,7 +431,6 @@ async function sendChatToGroq() {
       }),
     });
 
-
     if (!response.ok) {
       throw new Error(`HTTP error ${response.status}`);
     }
@@ -502,7 +471,6 @@ async function sendChatToGroq() {
     // Append the complete assistant reply to the chat history element
     document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${assistantReply}</span><br>`;
 
-
     // Reset inactivity timeout
     clearTimeout(inactivityTimeout);
     inactivityTimeout = setTimeout(() => {
@@ -521,8 +489,6 @@ async function sendChatToGroq() {
     }
   }
 }
-
-
 
 async function reinitializeConnection() {
   console.log('Reinitializing connection...');
@@ -562,8 +528,6 @@ destroyButton.onclick = async () => {
   closePC();
 };
 
-
-
 const startButton = document.getElementById('start-button');
 let isRecording = false;
 
@@ -578,4 +542,54 @@ startButton.onclick = async () => {
   isRecording = !isRecording;
 };
 
+// Error handling for WebRTC setup
+peerConnection.onerror = (error) => {
+  console.error('PeerConnection error:', error);
+  showErrorMessage('WebRTC error occurred. Please try again.');
+};
 
+// Handle potential errors during media streaming
+videoElement.onerror = (error) => {
+  console.error('Video element error:', error);
+  showErrorMessage('Error playing video. Please refresh the page and try again.');
+};
+
+// Automatically retry connection on failure
+peerConnection.oniceconnectionstatechange = () => {
+  if (peerConnection.iceConnectionState === 'failed') {
+    console.log('ICE connection failed. Attempting to restart...');
+    peerConnection.restartIce();
+  }
+};
+
+// Monitor and log the connection state
+peerConnection.onconnectionstatechange = () => {
+  console.log('Connection state changed:', peerConnection.connectionState);
+  if (peerConnection.connectionState === 'failed') {
+    showErrorMessage('Connection failed. Please check your internet connection and try again.');
+  }
+};
+
+// Function to check browser compatibility
+function checkBrowserCompatibility() {
+  const isWebRTCSupported = navigator.mediaDevices &&
+    navigator.mediaDevices.getUserMedia &&
+    window.RTCPeerConnection;
+
+  if (!isWebRTCSupported) {
+    showErrorMessage('Your browser does not support WebRTC. Please use a modern browser like Chrome, Firefox, or Safari.');
+    return false;
+  }
+  return true;
+}
+
+// Check compatibility before initializing
+if (checkBrowserCompatibility()) {
+  // Initialize your application here
+  console.log('Browser is compatible. Initializing application...');
+} else {
+  console.error('Browser is not compatible with WebRTC.');
+}
+
+// Add this line at the end of the file to expose the checkBrowserCompatibility function globally
+window.checkBrowserCompatibility = checkBrowserCompatibility;
