@@ -77,7 +77,6 @@ function showErrorMessage(message) {
   destroyButton.style.display = 'inline-block';
   connectButton.style.display = 'inline-block';
 }
-
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
     const config = { 
@@ -102,8 +101,13 @@ async function createPeerConnection(offer, iceServers) {
   const modifiedAnswer = modifySdp(sessionClientAnswer.sdp);
   sessionClientAnswer.sdp = modifiedAnswer;
 
-  await peerConnection.setLocalDescription(sessionClientAnswer);
-  console.log('set local sdp OK');
+  try {
+    await peerConnection.setLocalDescription(sessionClientAnswer);
+    console.log('set local sdp OK');
+  } catch (error) {
+    console.error('Error setting local description:', error);
+    throw error;
+  }
 
   return sessionClientAnswer;
 }
@@ -123,11 +127,16 @@ function modifySdp(sdp) {
         return null;
       }
     }
+    // Remove the problematic SCTP port line
+    if (line.startsWith('a=sctp-port:')) {
+      return null;
+    }
     return line;
   }).filter(Boolean);
 
   return modifiedLines.join('\r\n');
 }
+
 
 function onIceGatheringStateChange() {
   iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
@@ -347,6 +356,7 @@ connectButton.onclick = async () => {
     console.error('Error sending SDP answer:', error);
   }
 };
+
 
 async function startStreaming(assistantReply) {
   if (!sessionId) {
