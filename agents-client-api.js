@@ -53,11 +53,7 @@ window.onload = async (event) => {
   document.body.appendChild(loadingSymbol);
 
   try {
-    if (checkBrowserCompatibility()) {
-      await connectButton.onclick();
-    } else {
-      throw new Error('Browser not compatible');
-    }
+    await connectButton.onclick();
     document.body.removeChild(loadingSymbol);
   } catch (error) {
     console.error('Error during auto-initialization:', error);
@@ -79,11 +75,10 @@ function showErrorMessage(message) {
 
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
-    const config = {
+    const config = { 
       iceServers,
       sdpSemantics: 'unified-plan'
     };
-
     peerConnection = new RTCPeerConnection(config);
     peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
     peerConnection.addEventListener('icecandidate', onIceCandidate, true);
@@ -91,32 +86,6 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
     peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
     peerConnection.addEventListener('track', onTrack, true);
-
-    // Add transceivers to ensure both audio and video are received
-    peerConnection.addTransceiver('audio', { direction: 'recvonly' });
-    peerConnection.addTransceiver('video', { direction: 'recvonly' });
-
-    // Error handling for WebRTC setup
-    peerConnection.onerror = (error) => {
-      console.error('PeerConnection error:', error);
-      showErrorMessage('WebRTC error occurred. Please try again.');
-    };
-
-    // Automatically retry connection on failure
-    peerConnection.oniceconnectionstatechange = () => {
-      if (peerConnection.iceConnectionState === 'failed') {
-        console.log('ICE connection failed. Attempting to restart...');
-        peerConnection.restartIce();
-      }
-    };
-
-    // Monitor and log the connection state
-    peerConnection.onconnectionstatechange = () => {
-      console.log('Connection state changed:', peerConnection.connectionState);
-      if (peerConnection.connectionState === 'failed') {
-        showErrorMessage('Connection failed. Please check your internet connection and try again.');
-      }
-    };
   }
 
   await peerConnection.setRemoteDescription(offer);
@@ -224,7 +193,7 @@ function setVideoElement(stream) {
   }, 300);
 
   if (videoElement.paused) {
-    videoElement.play().catch(e => console.error("Error playing video:", e));
+    videoElement.play().then((_) => {}).catch((e) => {});
   }
 }
 
@@ -275,7 +244,7 @@ async function fetchWithRetries(url, options, retries = 1) {
     return await fetch(url, options);
   } catch (err) {
     if (retries <= maxRetryCount) {
-      const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 500;
+      const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 1000;
       await new Promise((resolve) => setTimeout(resolve, delay));
       console.log(`Request failed, retrying ${retries}/${maxRetryCount}. Error ${err}`);
       return fetchWithRetries(url, options, retries + 1);
@@ -293,54 +262,42 @@ connectButton.onclick = async () => {
   stopAllStreams();
   closePC();
 
+  const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg',
+      compatibility_mode: 'auto'
+    }),
+  });
+
+  const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+  streamId = newStreamId;
+  sessionId = newSessionId;
   try {
-    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg',
-        compatibility_mode: 'auto'  // Use 'auto' to let the server decide the best codec
-      }),
-    });
-
-    if (!sessionResponse.ok) {
-      throw new Error(`HTTP error! status: ${sessionResponse.status}`);
-    }
-
-    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
-    streamId = newStreamId;
-    sessionId = newSessionId;
-
     sessionClientAnswer = await createPeerConnection(offer, iceServers);
-
-    const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        answer: sessionClientAnswer,
-        session_id: sessionId,
-      }),
-    });
-
-    if (!sdpResponse.ok) {
-      throw new Error(`HTTP error! status: ${sdpResponse.status}`);
-    }
-
-    console.log('SDP exchange completed successfully');
   } catch (e) {
-    console.error('Error during streaming setup:', e);
+    console.log('error during streaming setup', e);
     stopAllStreams();
     closePC();
-    showErrorMessage(`Failed to set up streaming: ${e.message}`);
+    return;
   }
-};
 
+  const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      answer: sessionClientAnswer,
+      session_id: sessionId,
+    }),
+  });
+};
 
 async function startStreaming(assistantReply) {
   try {
@@ -355,27 +312,22 @@ async function startStreaming(assistantReply) {
           type: 'text',
           input: assistantReply,
         },
-        driver_url: 'bank://lively/',
         config: {
+          fluent: true,
+          pad_audio: 0,
           stitch: true,
         },
+        driver_url: 'bank://lively/',
         session_id: sessionId,
       }),
     });
-
-    if (!playResponse.ok) {
-      throw new Error(`HTTP error! status: ${playResponse.status}`);
-    }
-
-    console.log('Streaming started successfully');
   } catch (error) {
     console.error('Error during streaming:', error);
-    showErrorMessage(`Streaming error: ${error.message}`);
     if (isRecording) {
-      await rein    }
+      await reinitializeConnection();
+    }
   }
 }
-
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -438,9 +390,8 @@ async function startRecording() {
       console.log('Inactivity timeout reached. Stopping recording.');
       startButton.click();
     }
-  }, 45000); // 45 seconds
+  }, 45000);
 }
-
 async function stopRecording() {
   if (mediaRecorder && mediaRecorder.state === 'recording') {
     mediaRecorder.stop();
@@ -450,10 +401,7 @@ async function stopRecording() {
     mediaRecorder = null;
   }
 
-  // Clear transcription timer
   clearInterval(transcriptionTimer);
-
-  // Clear inactivity timeout
   clearTimeout(inactivityTimeout);
 }
 
@@ -507,25 +455,21 @@ async function sendChatToGroq() {
       }
     }
 
-    // Add assistant reply to chat history
     chatHistory.push({
       role: 'assistant',
       content: assistantReply,
     });
 
-    // Append the complete assistant reply to the chat history element
     document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${assistantReply}</span><br>`;
 
-    // Reset inactivity timeout
     clearTimeout(inactivityTimeout);
     inactivityTimeout = setTimeout(() => {
       if (isRecording) {
         console.log('Inactivity timeout reached. Stopping recording.');
         startButton.click();
       }
-    }, 45000); // 45 seconds
+    }, 45000);
 
-    // Initiate streaming
     await startStreaming(assistantReply);
   } catch (error) {
     console.error('Error:', error);
@@ -540,17 +484,12 @@ async function reinitializeConnection() {
   stopAllStreams();
   closePC();
 
-  // Clear transcription timer
   clearInterval(transcriptionTimer);
-
-  // Clear inactivity timeout
   clearTimeout(inactivityTimeout);
 
-  // Reset transcription state
   transcript = '';
-  chatHistory = chatHistory.slice(0, -1); // Remove the last incomplete transcription from the chat history
+  chatHistory = chatHistory.slice(0, -1);
 
-  // Update UI to remove the incomplete transcription
   const msgHistory = document.getElementById('msgHistory');
   msgHistory.innerHTML = msgHistory.innerHTML.slice(0, msgHistory.innerHTML.lastIndexOf('<span style=\'opacity:0.5\'><u>User:</u>'));
 
@@ -586,47 +525,3 @@ startButton.onclick = async () => {
   }
   isRecording = !isRecording;
 };
-
-// Error handling for WebRTC setup
-peerConnection.onerror = (error) => {
-  console.error('PeerConnection error:', error);
-  showErrorMessage('WebRTC error occurred. Please try again.');
-};
-
-// Handle potential errors during media streaming
-videoElement.onerror = (error) => {
-  console.error('Video element error:', error);
-  showErrorMessage('Error playing video. Please refresh the page and try again.');
-};
-
-// Automatically retry connection on failure
-peerConnection.oniceconnectionstatechange = () => {
-  if (peerConnection.iceConnectionState === 'failed') {
-    console.log('ICE connection failed. Attempting to restart...');
-    peerConnection.restartIce();
-  }
-};
-
-// Monitor and log the connection state
-peerConnection.onconnectionstatechange = () => {
-  console.log('Connection state changed:', peerConnection.connectionState);
-  if (peerConnection.connectionState === 'failed') {
-    showErrorMessage('Connection failed. Please check your internet connection and try again.');
-  }
-};
-
-// Function to check browser compatibility
-function checkBrowserCompatibility() {
-  const isWebRTCSupported = navigator.mediaDevices &&
-    navigator.mediaDevices.getUserMedia &&
-    window.RTCPeerConnection;
-
-  if (!isWebRTCSupported) {
-    showErrorMessage('Your browser does not support WebRTC. Please use a modern browser like Chrome, Firefox, or Safari.');
-    return false;
-  }
-  return true;
-}
-
-// Add this line at the end of the file to expose the checkBrowserCompatibility function globally
-window.checkBrowserCompatibility = checkBrowserCompatibility;
