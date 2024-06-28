@@ -37,7 +37,7 @@ const signalingStatusLabel = document.getElementById('signaling-status-label');
 const streamingStatusLabel = document.getElementById('streaming-status-label');
 
 window.onload = async (event) => {
-  playIdleVideo();
+  initializeIdleVideo();
   showLoadingSymbol();
   try {
     await connectButton.onclick();
@@ -49,6 +49,70 @@ window.onload = async (event) => {
   }
 };
 
+
+function initializeIdleVideo() {
+  videoElement.src = 'emma_idle.mp4';
+  videoElement.loop = true;
+  videoElement.muted = true; // Mute the video to allow autoplay
+  videoElement.playsInline = true;
+  
+  // Attempt to play the video
+  videoElement.play().catch(error => {
+    console.warn("Autoplay was prevented for idle video:", error);
+    // If autoplay is prevented, we'll show a play button
+    showPlayButton();
+  });
+}
+
+function playIdleVideo() {
+  if (videoElement.src !== 'emma_idle.mp4') {
+    videoElement.src = 'emma_idle.mp4';
+  }
+  videoElement.loop = true;
+  videoElement.muted = true; // Ensure it's muted for autoplay
+  videoElement.currentTime = 0; // Reset to the beginning
+  
+  videoElement.play().catch(error => {
+    console.warn("Playback of idle video was prevented:", error);
+    // If play is prevented, we'll show a play button
+    showPlayButton();
+  });
+}
+
+function showPlayButton() {
+  const playButton = document.createElement('button');
+  playButton.textContent = 'Play Idle Video';
+  playButton.style.position = 'absolute';
+  playButton.style.zIndex = '1000';
+  playButton.style.top = '50%';
+  playButton.style.left = '50%';
+  playButton.style.transform = 'translate(-50%, -50%)';
+  playButton.onclick = () => {
+    videoElement.play();
+    playButton.remove();
+  };
+  videoElement.parentElement.appendChild(playButton);
+}
+
+function setVideoElement(stream) {
+  if (!stream) {
+    console.log('No stream available to set video element');
+    playIdleVideo();
+    return;
+  }
+
+  videoElement.srcObject = stream;
+  videoElement.muted = false; // Unmute for the actual conversation
+  videoElement.loop = false;
+
+  videoElement.play().then(() => {
+    console.log('Video playback started');
+  }).catch(e => {
+    console.error('Error playing video:', e);
+    // If autoplay is prevented for the stream, show a play button
+    showPlayButton();
+  });
+}
 
 
 function showLoadingSymbol() {
