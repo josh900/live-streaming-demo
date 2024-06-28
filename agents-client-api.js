@@ -98,11 +98,17 @@ function filterCodecs(sdp, preferredVideoCodec) {
 
     for (let line of videoLines) {
       if (line.startsWith('a=rtpmap:')) {
-        const [, payloadType, codecName] = line.split(' ');
-        if (codecName.startsWith(preferredVideoCodec)) {
+        const parts = line.split(' ');
+        if (parts.length >= 2) {
+          const [payloadType, codecInfo] = parts;
+          const codecName = codecInfo.split('/')[0];
+          if (codecName.toLowerCase() === preferredVideoCodec.toLowerCase()) {
+            modifiedVideoLines.push(line);
+          } else if (codecName.toLowerCase() === 'rtx') {
+            rtxPayloadType = payloadType.split(':')[1];
+          }
+        } else {
           modifiedVideoLines.push(line);
-        } else if (codecName.startsWith('rtx')) {
-          rtxPayloadType = payloadType.split(':')[1];
         }
       } else if (line.startsWith('a=fmtp:') && rtxPayloadType && line.includes(`apt=${preferredVideoCodec.split('/')[0]}`)) {
         modifiedVideoLines.push(line);
@@ -133,20 +139,33 @@ async function createPeerConnection(offer, iceServers) {
   }
 
   const preferredVideoCodec = 'H264';
-  const modifiedOffer = { type: offer.type, sdp: filterCodecs(offer.sdp, preferredVideoCodec) };
+  console.log('Original offer SDP:', offer.sdp);
+  
+  try {
+    const modifiedOfferSdp = filterCodecs(offer.sdp, preferredVideoCodec);
+    console.log('Modified offer SDP:', modifiedOfferSdp);
+    
+    const modifiedOffer = { type: offer.type, sdp: modifiedOfferSdp };
 
-  await peerConnection.setRemoteDescription(modifiedOffer);
-  console.log('set remote sdp OK');
+    await peerConnection.setRemoteDescription(modifiedOffer);
+    console.log('set remote sdp OK');
 
-  const sessionClientAnswer = await peerConnection.createAnswer();
-  console.log('create local sdp OK');
+    const sessionClientAnswer = await peerConnection.createAnswer();
+    console.log('create local sdp OK');
 
-  const modifiedAnswer = { type: sessionClientAnswer.type, sdp: filterCodecs(sessionClientAnswer.sdp, preferredVideoCodec) };
+    const modifiedAnswerSdp = filterCodecs(sessionClientAnswer.sdp, preferredVideoCodec);
+    console.log('Modified answer SDP:', modifiedAnswerSdp);
+    
+    const modifiedAnswer = { type: sessionClientAnswer.type, sdp: modifiedAnswerSdp };
 
-  await peerConnection.setLocalDescription(modifiedAnswer);
-  console.log('set local sdp OK');
+    await peerConnection.setLocalDescription(modifiedAnswer);
+    console.log('set local sdp OK');
 
-  return modifiedAnswer;
+    return modifiedAnswer;
+  } catch (error) {
+    console.error('Error in createPeerConnection:', error);
+    throw error;
+  }
 }
 
 function onIceGatheringStateChange() {
