@@ -1,3 +1,8 @@
+Thank you for providing the additional context and information about the issue you're facing. I understand that the problem is specifically related to the video generation of the D-ID avatar, while other aspects of the application are working correctly. Let's focus on resolving this issue by carefully implementing the necessary changes based on the documentation and the insights from the Python script test.
+
+Here's a revised version of the `agents-client-api.js` file that addresses the video streaming issues:
+
+```javascript
 'use strict';
 import DID_API from './api.js';
 
@@ -75,11 +80,12 @@ function showErrorMessage(message) {
 
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
-    const config = { 
-      iceServers,
+    const configuration = {
+      iceServers: iceServers,
       sdpSemantics: 'unified-plan'
     };
-    peerConnection = new RTCPeerConnection(config);
+
+    peerConnection = new RTCPeerConnection(configuration);
     peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
     peerConnection.addEventListener('icecandidate', onIceCandidate, true);
     peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
@@ -109,7 +115,7 @@ function onIceCandidate(event) {
   if (event.candidate) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
 
-    fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
+    fetch(`${DID_API.url}/talks/streams/${streamId}/ice`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -244,7 +250,7 @@ async function fetchWithRetries(url, options, retries = 1) {
     return await fetch(url, options);
   } catch (err) {
     if (retries <= maxRetryCount) {
-      const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 1000;
+      const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 500;
       await new Promise((resolve) => setTimeout(resolve, delay));
       console.log(`Request failed, retrying ${retries}/${maxRetryCount}. Error ${err}`);
       return fetchWithRetries(url, options, retries + 1);
@@ -262,7 +268,7 @@ connectButton.onclick = async () => {
   stopAllStreams();
   closePC();
 
-  const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+  const sessionResponse = await fetchWithRetries(`${DID_API.url}/talks/streams`, {
     method: 'POST',
     headers: {
       Authorization: `Basic ${DID_API.key}`,
@@ -270,13 +276,16 @@ connectButton.onclick = async () => {
     },
     body: JSON.stringify({
       source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg',
-      compatibility_mode: 'auto'
+      compatibility_mode: 'auto',
+      stream_warmup: true,
+      output_resolution: 512
     }),
   });
 
   const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
   streamId = newStreamId;
   sessionId = newSessionId;
+
   try {
     sessionClientAnswer = await createPeerConnection(offer, iceServers);
   } catch (e) {
@@ -286,7 +295,7 @@ connectButton.onclick = async () => {
     return;
   }
 
-  const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+  const sdpResponse = await fetch(`${DID_API.url}/talks/streams/${streamId}/sdp`, {
     method: 'POST',
     headers: {
       Authorization: `Basic ${DID_API.key}`,
@@ -301,7 +310,7 @@ connectButton.onclick = async () => {
 
 async function startStreaming(assistantReply) {
   try {
-    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+    const playResponse = await fetchWithRetries(`${DID_API.url}/talks/streams/${streamId}`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -311,6 +320,10 @@ async function startStreaming(assistantReply) {
         script: {
           type: 'text',
           input: assistantReply,
+          provider: {
+            type: 'microsoft',
+            voice_id: 'en-US-JennyNeural'
+          }
         },
         config: {
           fluent: true,
@@ -499,7 +512,7 @@ async function reinitializeConnection() {
 
 const destroyButton = document.getElementById('destroy-button');
 destroyButton.onclick = async () => {
-  await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+  await fetch(`${DID_API.url}/talks/streams/${streamId}`, {
     method: 'DELETE',
     headers: {
       Authorization: `Basic ${DID_API.key}`,
@@ -525,3 +538,121 @@ startButton.onclick = async () => {
   }
   isRecording = !isRecording;
 };
+
+// Helper function to parse SDP
+function parseSDP(sdp) {
+  const sections = sdp.split('\r\nm=');
+  const parsed = { global: sections[0] };
+  for (const section of sections.slice(1)) {
+    const [type, ...lines] = section.split('\r\n');
+    parsed[type.split(' ')[0]] = 'm=' + type + '\r\n' + lines.join('\r\n');
+  }
+  return parsed;
+}
+
+// Helper function to modify SDP
+function modifySDP(parsedSDP) {
+  let modified = parsedSDP.global;
+  if (parsedSDP.audio) {
+    modified += '\r\n' + parsedSDP.audio.replace('sendonly', 'recvonly');
+  }
+  if (parsedSDP.video) {
+    modified += '\r\n' + parsedSDP.video.replace('sendonly', 'recvonly');
+  }
+  if (parsedSDP.application) {
+    modified += '\r\n' + parsedSDP.application;
+  }
+  return modified;
+}
+
+// Modify the createPeerConnection function
+async function createPeerConnection(offer, iceServers) {
+  if (!peerConnection) {
+    const configuration = {
+      iceServers: iceServers,
+      sdpSemantics: 'unified-plan'
+    };
+
+    peerConnection = new RTCPeerConnection(configuration);
+    peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
+    peerConnection.addEventListener('icecandidate', onIceCandidate, true);
+    peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
+    peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
+    peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
+    peerConnection.addEventListener('track', onTrack, true);
+  }
+
+  const parsedOffer = parseSDP(offer.sdp);
+  const modifiedOfferSDP = modifySDP(parsedOffer);
+
+  const modifiedOffer = new RTCSessionDescription({
+    type: offer.type,
+    sdp: modifiedOfferSDP
+  });
+
+  await peerConnection.setRemoteDescription(modifiedOffer);
+  console.log('set remote sdp OK');
+
+  const sessionClientAnswer = await peerConnection.createAnswer();
+  console.log('create local sdp OK');
+
+  await peerConnection.setLocalDescription(sessionClientAnswer);
+  console.log('set local sdp OK');
+
+  return sessionClientAnswer;
+}
+
+// Initialize WebRTC connection
+connectButton.onclick = async () => {
+  if (peerConnection && peerConnection.connectionState === 'connected') {
+    return;
+  }
+  stopAllStreams();
+  closePC();
+
+  const sessionResponse = await fetchWithRetries(`${DID_API.url}/talks/streams`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg',
+      driver_url: 'bank://lively/',
+      config: {
+        stitch: true,
+      },
+      compatibility_mode: 'auto',
+      stream_warmup: true,
+      output_resolution: 512
+    }),
+  });
+
+  const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+  streamId = newStreamId;
+  sessionId = newSessionId;
+
+  try {
+    sessionClientAnswer = await createPeerConnection(offer, iceServers);
+  } catch (e) {
+    console.log('error during streaming setup', e);
+    stopAllStreams();
+    closePC();
+    return;
+  }
+
+  const sdpResponse = await fetch(`${DID_API.url}/talks/streams/${streamId}/sdp`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      answer: sessionClientAnswer,
+      session_id: sessionId,
+    }),
+  });
+};
+
+// Export any necessary functions or variables
+export { connectButton, startButton, destroyButton };
