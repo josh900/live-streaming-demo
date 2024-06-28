@@ -628,19 +628,5 @@ function checkBrowserCompatibility() {
   return true;
 }
 
-
-// Function to check browser compatibility
-function checkBrowserCompatibility() {
-  const isWebRTCSupported = navigator.mediaDevices &&
-    navigator.mediaDevices.getUserMedia &&
-    window.RTCPeerConnection;
-
-  if (!isWebRTCSupported) {
-    showErrorMessage('Your browser does not support WebRTC. Please use a modern browser like Chrome, Firefox, or Safari.');
-    return false;
-  }
-  return true;
-}
-
 // Add this line at the end of the file to expose the checkBrowserCompatibility function globally
 window.checkBrowserCompatibility = checkBrowserCompatibility;
