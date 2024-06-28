@@ -77,39 +77,13 @@ function showErrorMessage(message) {
   connectButton.style.display = 'inline-block';
 }
 
-function parseSdp(sdp) {
-  const sections = sdp.split('\r\nm=');
-  return {
-    global: sections[0],
-    audio: sections.find(s => s.startsWith('audio')),
-    video: sections.find(s => s.startsWith('video')),
-    application: sections.find(s => s.startsWith('application'))
-  };
-}
-
-function createModifiedSdp(parsedSdp) {
-  let modified = parsedSdp.global;
-  if (parsedSdp.audio) {
-    modified += '\r\nm=' + parsedSdp.audio.replace('sendonly', 'recvonly');
-  }
-  if (parsedSdp.video) {
-    modified += '\r\nm=' + parsedSdp.video.replace('sendonly', 'recvonly');
-  }
-  if (parsedSdp.application) {
-    modified += '\r\nm=' + parsedSdp.application;
-  }
-  return modified;
-}
-
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
     const config = {
       iceServers: iceServers,
-      iceTransportPolicy: 'all',
-      bundlePolicy: 'max-bundle',
-      rtcpMuxPolicy: 'require',
       sdpSemantics: 'unified-plan'
     };
+
     peerConnection = new RTCPeerConnection(config);
     peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
     peerConnection.addEventListener('icecandidate', onIceCandidate, true);
@@ -118,25 +92,63 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
     peerConnection.addEventListener('track', onTrack, true);
 
-    // Add a data channel
-    const dataChannel = peerConnection.createDataChannel('JanusDataChannel');
-    dataChannel.onmessage = onDataChannelMessage;
+    // Add transceivers to ensure we'll receive audio and video
+    peerConnection.addTransceiver('audio', {direction: 'recvonly'});
+    peerConnection.addTransceiver('video', {direction: 'recvonly'});
   }
 
-  // Parse and modify the SDP
-  const parsedSdp = parseSdp(offer.sdp);
-  const modifiedSdp = createModifiedSdp(parsedSdp);
-  
-  await peerConnection.setRemoteDescription({type: offer.type, sdp: modifiedSdp});
+  await peerConnection.setRemoteDescription(offer);
   console.log('set remote sdp OK');
 
-  const answer = await peerConnection.createAnswer();
+  const sessionClientAnswer = await peerConnection.createAnswer();
   console.log('create local sdp OK');
 
-  await peerConnection.setLocalDescription(answer);
+  const modifiedAnswer = filterCodecs(sessionClientAnswer);
+  await peerConnection.setLocalDescription(modifiedAnswer);
   console.log('set local sdp OK');
 
-  return peerConnection.localDescription;
+  return modifiedAnswer;
+}
+
+function filterCodecs(sessionDescription) {
+  const codecsToKeep = ['H264'];
+  let sdpLines = sessionDescription.sdp.split('\r\n');
+  let mLineIndex = sdpLines.findIndex(line => line.startsWith('m=video'));
+  
+  if (mLineIndex !== -1) {
+    let mLine = sdpLines[mLineIndex];
+    let codecPayloads = [];
+    let rtxPayloads = [];
+
+    sdpLines.forEach((line, index) => {
+      if (line.startsWith('a=rtpmap:') || line.startsWith('a=rtcp-fb:') || line.startsWith('a=fmtp:')) {
+        let parts = line.split(' ');
+        let payload = parts[0].split(':')[1];
+        if (codecsToKeep.some(codec => line.includes(codec))) {
+          codecPayloads.push(payload);
+        } else if (line.includes('rtx')) {
+          rtxPayloads.push(payload);
+        }
+      }
+    });
+
+    let mLineParts = mLine.split(' ');
+    mLineParts = mLineParts.filter(part => 
+      codecPayloads.includes(part) || rtxPayloads.includes(part) || !(/^\d+$/.test(part))
+    );
+    sdpLines[mLineIndex] = mLineParts.join(' ');
+
+    sdpLines = sdpLines.filter(line => {
+      if (line.startsWith('a=rtpmap:') || line.startsWith('a=rtcp-fb:') || line.startsWith('a=fmtp:')) {
+        let payload = line.split(':')[1].split(' ')[0];
+        return codecPayloads.includes(payload) || rtxPayloads.includes(payload);
+      }
+      return true;
+    });
+  }
+
+  sessionDescription.sdp = sdpLines.join('\r\n');
+  return sessionDescription;
 }
 
 function onIceGatheringStateChange() {
@@ -146,8 +158,9 @@ function onIceGatheringStateChange() {
 
 function onIceCandidate(event) {
   if (event.candidate) {
-    console.log('New ICE candidate:', event.candidate);
-    
+    const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
+
+    // WEBRTC API CALL 3 - Submit network information
     fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
       method: 'POST',
       headers: {
@@ -155,17 +168,11 @@ function onIceCandidate(event) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        candidate: event.candidate.candidate,
-        sdpMid: event.candidate.sdpMid,
-        sdpMLineIndex: event.candidate.sdpMLineIndex,
+        candidate,
+        sdpMid,
+        sdpMLineIndex,
         session_id: sessionId,
       }),
-    }).then(response => {
-      if (!response.ok) {
-        console.error('Failed to send ICE candidate:', response.statusText);
-      }
-    }).catch(error => {
-      console.error('Error sending ICE candidate:', error);
     });
   }
 }
@@ -173,7 +180,6 @@ function onIceCandidate(event) {
 function onIceConnectionStateChange() {
   iceStatusLabel.innerText = peerConnection.iceConnectionState;
   iceStatusLabel.className = 'iceConnectionState-' + peerConnection.iceConnectionState;
-  console.log('ICE connection state is ' + peerConnection.iceConnectionState);
   if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'closed') {
     stopAllStreams();
     closePC();
@@ -183,7 +189,6 @@ function onIceConnectionStateChange() {
 function onConnectionStateChange() {
   peerStatusLabel.innerText = peerConnection.connectionState;
   peerStatusLabel.className = 'peerConnectionState-' + peerConnection.connectionState;
-  console.log('Connection state change: ' + peerConnection.connectionState);
 }
 
 function onSignalingStateChange() {
@@ -191,47 +196,47 @@ function onSignalingStateChange() {
   signalingStatusLabel.className = 'signalingState-' + peerConnection.signalingState;
 }
 
+function onVideoStatusChange(videoIsPlaying, stream) {
+  let status;
+  if (videoIsPlaying) {
+    status = 'streaming';
+    const remoteStream = stream;
+    setVideoElement(remoteStream);
+  } else {
+    status = 'empty';
+    playIdleVideo();
+  }
+  streamingStatusLabel.innerText = status;
+  streamingStatusLabel.className = 'streamingState-' + status;
+}
+
 function onTrack(event) {
   console.log('Track event:', event);
   if (event.track.kind === 'video') {
-    console.log('Video track received:', event.track);
-    videoElement.srcObject = event.streams[0];
-  } else if (event.track.kind === 'audio') {
-    console.log('Audio track received:', event.track);
-    // Handle audio track if needed
+    console.log('Received video track');
+    const remoteStream = new MediaStream([event.track]);
+    setVideoElement(remoteStream);
   }
-}
-
-function onDataChannelMessage(event) {
-  console.log('Data channel message received:', event.data);
-  // Handle any messages received on the data channel
 }
 
 function setVideoElement(stream) {
   if (!stream) return;
-  videoElement.classList.add("animated");
-  videoElement.muted = false;
   videoElement.srcObject = stream;
   videoElement.loop = false;
 
-  setTimeout(() => {
-    videoElement.classList.remove("animated");
-  }, 300);
-
+  // safari hotfix
   if (videoElement.paused) {
-    videoElement.play().then(() => {}).catch(e => console.error('Error playing video:', e));
+    videoElement
+      .play()
+      .then((_) => {})
+      .catch((e) => {});
   }
 }
 
 function playIdleVideo() {
-  videoElement.classList.toggle("animated");
   videoElement.srcObject = undefined;
   videoElement.src = 'emma_idle.mp4';
   videoElement.loop = true;
-
-  setTimeout(() => {
-    videoElement.classList.remove("animated");
-  }, 300);
 }
 
 function stopAllStreams() {
@@ -263,15 +268,22 @@ function closePC(pc = peerConnection) {
   }
 }
 
-async function fetchWithRetries(url, options, retries = 3) {
+const maxRetryCount = 2;
+const maxDelaySec = 2;
+async function fetchWithRetries(url, options, retries = 1) {
   try {
     return await fetch(url, options);
   } catch (err) {
-    if (retries > 0) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      return fetchWithRetries(url, options, retries - 1);
+    if (retries <= maxRetryCount) {
+      const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 500;
+
+      await new Promise((resolve) => setTimeout(resolve, delay));
+
+      console.log(`Request failed, retrying ${retries}/${maxRetryCount}. Error ${err}`);
+      return fetchWithRetries(url, options, retries + 1);
+    } else {
+      throw new Error(`Max retries exceeded. error: ${err}`);
     }
-    throw err;
   }
 }
 
@@ -283,73 +295,59 @@ connectButton.onclick = async () => {
   stopAllStreams();
   closePC();
 
+  // WEBRTC API CALL 1 - Create a new stream
+  const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg'
+    }),
+  });
+
+  const data = await sessionResponse.json();
+  streamId = data.id;
+  sessionId = data.session_id;
+  console.log('Stream created:', { streamId, sessionId });
+
   try {
-    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg'
-      }),
-    });
-
-    if (!sessionResponse.ok) {
-      const errorData = await sessionResponse.json();
-      console.error('Session creation error:', errorData);
-      throw new Error(`Session creation failed: ${errorData.description || sessionResponse.statusText}`);
-    }
-
-    const data = await sessionResponse.json();
-    console.log('Full stream creation response:', data);
-    streamId = data.id;
-    sessionId = data.session_id;
-    console.log('Stream created:', { streamId, sessionId });
-
-    if (!sessionId) {
-      throw new Error('No session ID received from the server');
-    }
-
     sessionClientAnswer = await createPeerConnection(data.offer, data.ice_servers);
-
-    // Wait for ICE gathering to complete
-    await new Promise((resolve) => {
-      if (peerConnection.iceGatheringState === 'complete') {
-        resolve();
-      } else {
-        peerConnection.addEventListener('icegatheringstatechange', () => {
-          if (peerConnection.iceGatheringState === 'complete') {
-            resolve();
-          }
-        });
-      }
-    });
-
-    const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        answer: sessionClientAnswer,
-        session_id: sessionId,
-      }),
-    });
-
-    if (!sdpResponse.ok) {
-      const errorData = await sdpResponse.json();
-      console.error('SDP error:', errorData);
-      throw new Error(`SDP request failed: ${errorData.description || sdpResponse.statusText}`);
-    }
-
-    console.log('SDP answer sent successfully');
-    console.log('Connection setup completed. Session ID:', sessionId);
-  } catch (error) {
-    console.error('Error during connection setup:', error);
-    sessionId = null; // Reset sessionId if there's an error
+  } catch (e) {
+    console.log('error during streaming setup', e);
+    stopAllStreams();
+    closePC();
+    return;
   }
+
+  // WEBRTC API CALL 2 - Start a stream
+  const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      answer: sessionClientAnswer,
+      session_id: sessionId,
+    }),
+  });
+
+  // Wait for ICE gathering to complete
+  await new Promise((resolve) => {
+    if (peerConnection.iceGatheringState === 'complete') {
+      resolve();
+    } else {
+      peerConnection.addEventListener('icegatheringstatechange', () => {
+        if (peerConnection.iceGatheringState === 'complete') {
+          resolve();
+        }
+      });
+    }
+  });
+
+  console.log('ICE gathering completed');
 };
 
 async function startStreaming(assistantReply) {
@@ -359,6 +357,11 @@ async function startStreaming(assistantReply) {
 
   if (!sessionId || !streamId) {
     console.error('Missing session ID or stream ID. Cannot start streaming.');
+    return;
+  }
+
+  if (peerConnection.connectionState !== 'connected') {
+    console.error('PeerConnection is not in "connected" state. Current state:', peerConnection.connectionState);
     return;
   }
 
@@ -375,9 +378,9 @@ async function startStreaming(assistantReply) {
           type: 'text',
           input: assistantReply,
         },
-        driver_url: 'bank://lively/',
         config: {
-          stitch: true,
+          fluent: true,
+          pad_audio: 0,
         },
         session_id: sessionId,
       }),
@@ -393,9 +396,9 @@ async function startStreaming(assistantReply) {
 
     const responseData = await playResponse.json();
     console.log('Streaming response:', responseData);
-
   } catch (error) {
     console.error('Error during streaming:', error);
+    // Don't reinitialize here, as the connection seems to be fine
   }
 }
 
@@ -483,11 +486,6 @@ async function stopRecording() {
 }
 
 async function sendChatToGroq() {
-  if (!sessionId) {
-    console.error('No valid session. Please connect first.');
-    return;
-  }
-
   try {
     const response = await fetch('https://avatar.skoop.digital/chat', {
       method: 'POST',
