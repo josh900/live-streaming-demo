@@ -383,7 +383,7 @@ async function startRecording() {
         deepgramSocket.send(keepAliveMsg);
         console.log("Sent KeepAlive message");
       }
-    }, 2000);
+    }, 3000);
 
     // Start transcription timer
     transcriptionTimer = setInterval(() => {
@@ -396,7 +396,7 @@ async function startRecording() {
         sendChatToGroq();
         transcript = '';
       }
-    }, 1000); // Send transcription every 5 seconds
+    }, 2000); // Send transcription every 2 seconds
   };
 
   deepgramSocket.onmessage = (message) => {
