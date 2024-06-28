@@ -77,6 +77,7 @@ function showErrorMessage(message) {
   destroyButton.style.display = 'inline-block';
   connectButton.style.display = 'inline-block';
 }
+
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
     const config = { 
@@ -101,33 +102,26 @@ async function createPeerConnection(offer, iceServers) {
   const modifiedAnswer = modifySdp(sessionClientAnswer.sdp);
   sessionClientAnswer.sdp = modifiedAnswer;
 
-  try {
-    await peerConnection.setLocalDescription(sessionClientAnswer);
-    console.log('set local sdp OK');
-  } catch (error) {
-    console.error('Error setting local description:', error);
-    throw error;
-  }
+  await peerConnection.setLocalDescription(sessionClientAnswer);
+  console.log('set local sdp OK');
 
   return sessionClientAnswer;
 }
 
+
 function modifySdp(sdp) {
   const lines = sdp.split('\r\n');
   const modifiedLines = lines.map(line => {
-    if (line.startsWith('a=rtpmap:') && line.includes('VP8')) {
-      return line.replace('VP8', 'H264');
-    }
-    if (line.startsWith('a=rtpmap:') && line.includes('VP9')) {
-      return null;
-    }
-    if (line.startsWith('a=fmtp:') && line.includes('apt=')) {
-      const aptValue = line.split('apt=')[1];
-      if (aptValue === '96' || aptValue === '98') {
-        return null;
+    // Prefer H.264 codec
+    if (line.startsWith('m=video')) {
+      const parts = line.split(' ');
+      const h264Index = parts.findIndex(part => part === '96'); // Assuming 96 is H.264 payload type
+      if (h264Index !== -1) {
+        parts.splice(3, h264Index - 3);
+        return parts.join(' ');
       }
     }
-    // Remove the problematic SCTP port line
+    // Remove SCTP port line if present
     if (line.startsWith('a=sctp-port:')) {
       return null;
     }
@@ -136,7 +130,6 @@ function modifySdp(sdp) {
 
   return modifiedLines.join('\r\n');
 }
-
 
 function onIceGatheringStateChange() {
   iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
@@ -315,7 +308,10 @@ connectButton.onclick = async () => {
       },
       body: JSON.stringify({
         source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg',
-        compatibility_mode: 'off'  // This will force H264 codec
+        driver_url: 'bank://lively/',
+        config: {
+          stitch: true,
+        }
       }),
     });
 
@@ -327,6 +323,10 @@ connectButton.onclick = async () => {
     sessionClientAnswer = await createPeerConnection(data.offer, data.ice_servers);
   } catch (e) {
     console.error('Error during streaming setup', e);
+    console.log('Error details:', e.message);
+    if (e.name === 'DOMException') {
+      console.log('DOMException details:', e.name, e.message);
+    }
     stopAllStreams();
     closePC();
     return;
