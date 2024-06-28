@@ -92,56 +92,77 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.addEventListener('track', onTrack, true);
   }
 
+  await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+  console.log('set remote sdp OK');
+
+  const sessionClientAnswer = await peerConnection.createAnswer();
+  console.log('create local sdp OK');
+
+  const modifiedAnswer = modifySdp(sessionClientAnswer);
+  
   try {
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-    console.log('set remote sdp OK');
-
-    const sessionClientAnswer = await peerConnection.createAnswer();
-    console.log('create local sdp OK');
-
-    const modifiedAnswer = modifySdp(sessionClientAnswer);
     await peerConnection.setLocalDescription(modifiedAnswer);
     console.log('set local sdp OK');
-
-    return modifiedAnswer;
   } catch (error) {
-    console.error('Error in createPeerConnection:', error);
-    throw error;
+    console.error('Error setting local description:', error);
+    // If setting the modified description fails, try setting the original answer
+    await peerConnection.setLocalDescription(sessionClientAnswer);
+    console.log('set original local sdp OK');
+    return sessionClientAnswer;
   }
+
+  return modifiedAnswer;
 }
 
 
 function modifySdp(sessionDescription) {
   let sdp = sessionDescription.sdp;
 
-  // Remove any lines that might cause parsing issues
-  sdp = sdp.split('\n').filter(line => {
-    return !line.startsWith('a=extmap-allow-mixed') &&
-           !line.startsWith('a=msid-semantic');
-  }).join('\n');
+  // Split the SDP into lines
+  const sdpLines = sdp.split('\r\n');
+  let videoSection = false;
+  const modifiedLines = [];
 
-  // Ensure the SDP includes both VP8 and H264 codecs
-  if (sdp.indexOf('VP8') === -1) {
-    sdp = sdp.replace(
-      /(m=video .*\r\n)/g,
-      '$1a=rtpmap:96 VP8/90000\r\na=rtcp-fb:96 goog-remb\r\na=rtcp-fb:96 transport-cc\r\na=rtcp-fb:96 ccm fir\r\na=rtcp-fb:96 nack\r\na=rtcp-fb:96 nack pli\r\n'
-    );
+  for (let line of sdpLines) {
+    // Check if we're entering the video section
+    if (line.startsWith('m=video')) {
+      videoSection = true;
+    }
+
+    // If we're in the video section, ensure we have both VP8 and H264
+    if (videoSection) {
+      if (line.startsWith('a=rtpmap:') || line.startsWith('a=rtcp-fb:') || line.startsWith('a=fmtp:')) {
+        // Keep existing video codec lines
+        modifiedLines.push(line);
+      } else if (line.startsWith('a=sendonly')) {
+        // Change sendonly to recvonly
+        modifiedLines.push('a=recvonly');
+      } else {
+        modifiedLines.push(line);
+      }
+    } else {
+      // For non-video sections, just change sendonly to recvonly if present
+      if (line.startsWith('a=sendonly')) {
+        modifiedLines.push('a=recvonly');
+      } else {
+        modifiedLines.push(line);
+      }
+    }
+
+    // If we're leaving the video section, reset the flag
+    if (videoSection && line === '') {
+      videoSection = false;
+    }
   }
 
-  // Change sendonly to recvonly for both audio and video
-  sdp = sdp.replace(/a=sendonly/g, 'a=recvonly');
-
-  // Remove b=AS line if present (which might limit bandwidth)
-  sdp = sdp.replace(/b=AS:.*\r\n/g, '');
-
-  console.log('Modified SDP:', sdp);  // Log the modified SDP for debugging
+  // Join the modified lines back into a single SDP string
+  const modifiedSdp = modifiedLines.join('\r\n');
 
   return new RTCSessionDescription({
     type: sessionDescription.type,
-    sdp: sdp
+    sdp: modifiedSdp
   });
 }
-
 
 
 function onIceGatheringStateChange() {
@@ -232,12 +253,7 @@ function setVideoElement(stream) {
   videoElement.srcObject = stream;
   videoElement.loop = false;
   videoElement.muted = false;
-  videoElement.play().catch(e => {
-    console.error('Error playing video:', e);
-    // Attempt to play without audio if there's an error
-    videoElement.muted = true;
-    videoElement.play().catch(e => console.error('Error playing muted video:', e));
-  });
+  videoElement.play().catch(e => console.error('Error playing video:', e));
 }
 
 function playIdleVideo() {
@@ -318,7 +334,14 @@ connectButton.onclick = async () => {
     console.log('Stream created:', { streamId, sessionId });
 
     sessionClientAnswer = await createPeerConnection(data.offer, data.ice_servers);
+  } catch (e) {
+    console.error('Error during streaming setup', e);
+    stopAllStreams();
+    closePC();
+    return;
+  }
 
+  try {
     const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
       method: 'POST',
       headers: {
@@ -339,12 +362,53 @@ connectButton.onclick = async () => {
 
     console.log('SDP answer sent successfully');
   } catch (error) {
-    console.error('Error during connection setup:', error);
-    stopAllStreams();
-    closePC();
-    showErrorMessage('Failed to establish connection. Please try again.');
+    console.error('Error sending SDP answer:', error);
   }
 };
+
+
+async function startStreaming(assistantReply) {
+  if (!sessionId) {
+    console.error('No valid session ID available. Cannot start streaming.');
+    return;
+  }
+
+  try {
+    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: assistantReply,
+        },
+        config: {
+          fluent: true,
+          pad_audio: 0,
+        },
+        session_id: sessionId,
+      }),
+    });
+
+    if (!playResponse.ok) {
+      const errorData = await playResponse.json();
+      console.error('Streaming error:', errorData);
+      throw new Error(`Streaming failed: ${errorData.description || playResponse.statusText}`);
+    }
+
+    const responseData = await playResponse.json();
+    console.log('Streaming response:', responseData);
+
+  } catch (error) {
+    console.error('Error during streaming:', error);
+    if (isRecording) {
+      await reinitializeConnection();
+    }
+  }
+}
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
