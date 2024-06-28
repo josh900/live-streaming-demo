@@ -269,15 +269,13 @@ async function fetchWithRetries(url, options, retries = 1) {
   try {
     const response = await fetch(url, options);
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`HTTP error ${response.status}: ${errorText}`);
+      throw new Error(`HTTP error ${response.status}: ${await response.text()}`);
     }
     return response;
   } catch (err) {
     if (retries <= maxRetryCount) {
       const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 1000;
       console.log(`Request failed, retrying ${retries}/${maxRetryCount} in ${delay}ms. Error: ${err.message}`);
-      console.log('Failed request details:', { url, method: options.method, headers: options.headers });
       await new Promise((resolve) => setTimeout(resolve, delay));
       return fetchWithRetries(url, options, retries + 1);
     } else {
@@ -286,30 +284,7 @@ async function fetchWithRetries(url, options, retries = 1) {
   }
 }
 
-
-async function validateApiKey() {
-  try {
-    const response = await fetch(`${DID_API.url}/status`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`API key validation failed: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    console.log('API key validation successful:', data);
-  } catch (error) {
-    console.error('API key validation error:', error);
-    alert('There was an error validating your D-ID API key. Please check your key and try again.');
-  }
-}
-
 async function initializeConnection() {
-  await validateApiKey();
   stopAllStreams();
   closePC();
 
@@ -325,15 +300,13 @@ async function initializeConnection() {
     }),
   });
 
-  const responseData = await sessionResponse.json();
-  console.log('Stream creation response:', responseData);
-
-  streamId = responseData.id;
-  sessionId = responseData.session_id;
+  const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+  streamId = newStreamId;
+  sessionId = newSessionId;
   console.log('Stream created:', { streamId, sessionId });
 
   try {
-    sessionClientAnswer = await createPeerConnection(responseData.offer, responseData.ice_servers);
+    sessionClientAnswer = await createPeerConnection(offer, iceServers);
   } catch (e) {
     console.error('Error during streaming setup:', e);
     stopAllStreams();
@@ -354,20 +327,15 @@ async function initializeConnection() {
   });
 
   if (!sdpResponse.ok) {
-    const errorText = await sdpResponse.text();
-    throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}. ${errorText}`);
+    throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
   }
 
   console.log('Connection initialized successfully');
 }
 
-
 async function startStreaming(assistantReply) {
   try {
     console.log('Starting streaming with reply:', assistantReply);
-    console.log('Using streamId:', streamId);
-    console.log('Using sessionId:', sessionId);
-
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'POST',
       headers: {
@@ -408,8 +376,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
-
 
 
 
