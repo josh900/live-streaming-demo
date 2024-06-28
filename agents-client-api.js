@@ -84,54 +84,54 @@ function parseSdp(sdp) {
 }
 
 function filterCodecs(sdp, preferredVideoCodec) {
-  const lines = sdp.split('\r\n');
-  const filteredLines = [];
-  let videoSection = false;
-  let h264PT, rtxPT;
+  const sections = sdp.split('\r\nm=');
+  let filteredSdp = sections[0];  // Keep the session-level attributes
 
-  for (const line of lines) {
-    if (line.startsWith('m=video')) {
-      videoSection = true;
-      const parts = line.split(' ');
-      filteredLines.push(`${parts[0]} ${parts[1]} ${parts[2]} ${parts[3]}`);
-      continue;
-    }
+  for (let i = 1; i < sections.length; i++) {
+    const section = 'm=' + sections[i];
+    const lines = section.split('\r\n');
+    const mLine = lines[0];
+    const media = mLine.split(' ')[0];
 
-    if (videoSection) {
-      if (line.startsWith('a=rtpmap:')) {
-        if (line.includes('H264')) {
-          h264PT = line.split(':')[1].split(' ')[0];
-          filteredLines.push(line);
-        } else if (line.includes('rtx')) {
-          rtxPT = line.split(':')[1].split(' ')[0];
-          filteredLines.push(line);
+    if (media === 'video') {
+      const codecPayloads = [];
+      const rtxPayloads = [];
+      const filteredLines = lines.filter(line => {
+        if (line.startsWith('a=rtpmap:')) {
+          const [, payload, codec] = line.split(':')[1].split(' ');
+          if (codec.startsWith(preferredVideoCodec)) {
+            codecPayloads.push(payload);
+            return true;
+          } else if (codec.startsWith('rtx')) {
+            rtxPayloads.push(payload);
+            return true;
+          }
+          return false;
         }
-      } else if (line.startsWith('a=fmtp:')) {
-        if (h264PT && line.startsWith(`a=fmtp:${h264PT}`)) {
-          filteredLines.push(line);
-        } else if (rtxPT && line.startsWith(`a=fmtp:${rtxPT}`)) {
-          filteredLines.push(line);
+        if (line.startsWith('a=fmtp:')) {
+          const payload = line.split(':')[1].split(' ')[0];
+          return codecPayloads.includes(payload) || rtxPayloads.includes(payload);
         }
-      } else if (!line.startsWith('a=rtpmap:') && !line.startsWith('a=rtcp-fb:')) {
-        filteredLines.push(line);
-      }
+        return !line.startsWith('a=rtpmap:') && !line.startsWith('a=fmtp:');
+      });
+
+      // Modify the m= line to include only the filtered payloads
+      const newMLine = mLine.split(' ').slice(0, 3).concat(codecPayloads, rtxPayloads).join(' ');
+      filteredLines[0] = newMLine;
+
+      filteredSdp += '\r\n' + filteredLines.join('\r\n');
     } else {
-      filteredLines.push(line);
+      // For non-video sections, just change sendonly to recvonly if present
+      filteredSdp += '\r\n' + section.replace('sendonly', 'recvonly');
     }
   }
 
-  return filteredLines.join('\r\n');
+  return filteredSdp;
 }
 
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
-    const configuration = {
-      iceServers: iceServers,
-      sdpSemantics: 'unified-plan'
-    };
-
-    // Create RTCPeerConnection with default video codec factories
-    peerConnection = new RTCPeerConnection(configuration);
+    peerConnection = new RTCPeerConnection({ iceServers });
     peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
     peerConnection.addEventListener('icecandidate', onIceCandidate, true);
     peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
@@ -140,13 +140,17 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.addEventListener('track', onTrack, true);
   }
 
+  const preferredVideoCodec = 'H264';
   console.log('Original offer SDP:', offer.sdp);
   
   try {
-    const modifiedOfferSdp = filterCodecs(offer.sdp, 'H264');
+    const modifiedOfferSdp = filterCodecs(offer.sdp, preferredVideoCodec);
     console.log('Modified offer SDP:', modifiedOfferSdp);
     
-    const modifiedOffer = new RTCSessionDescription({ type: offer.type, sdp: modifiedOfferSdp });
+    const modifiedOffer = new RTCSessionDescription({
+      type: offer.type,
+      sdp: modifiedOfferSdp
+    });
 
     await peerConnection.setRemoteDescription(modifiedOffer);
     console.log('set remote sdp OK');
@@ -154,10 +158,13 @@ async function createPeerConnection(offer, iceServers) {
     const sessionClientAnswer = await peerConnection.createAnswer();
     console.log('create local sdp OK');
 
-    const modifiedAnswerSdp = filterCodecs(sessionClientAnswer.sdp, 'H264');
+    const modifiedAnswerSdp = filterCodecs(sessionClientAnswer.sdp, preferredVideoCodec);
     console.log('Modified answer SDP:', modifiedAnswerSdp);
     
-    const modifiedAnswer = new RTCSessionDescription({ type: sessionClientAnswer.type, sdp: modifiedAnswerSdp });
+    const modifiedAnswer = new RTCSessionDescription({
+      type: sessionClientAnswer.type,
+      sdp: modifiedAnswerSdp
+    });
 
     await peerConnection.setLocalDescription(modifiedAnswer);
     console.log('set local sdp OK');
