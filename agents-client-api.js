@@ -92,7 +92,6 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
     peerConnection.addEventListener('track', onTrack, true);
 
-    // Add transceivers to ensure we'll receive audio and video
     peerConnection.addTransceiver('audio', {direction: 'recvonly'});
     peerConnection.addTransceiver('video', {direction: 'recvonly'});
   }
@@ -103,12 +102,22 @@ async function createPeerConnection(offer, iceServers) {
   const sessionClientAnswer = await peerConnection.createAnswer();
   console.log('create local sdp OK');
 
+  console.log('Original SDP:', sessionClientAnswer.sdp);
   const modifiedAnswer = filterCodecs(sessionClientAnswer);
-  await peerConnection.setLocalDescription(modifiedAnswer);
-  console.log('set local sdp OK');
+  console.log('Modified SDP:', modifiedAnswer.sdp);
+
+  try {
+    await peerConnection.setLocalDescription(modifiedAnswer);
+    console.log('set local sdp OK');
+  } catch (error) {
+    console.error('Error setting local description:', error);
+    throw error;
+  }
 
   return modifiedAnswer;
 }
+
+
 
 function filterCodecs(sessionDescription) {
   const codecsToKeep = ['H264'];
@@ -133,7 +142,8 @@ function filterCodecs(sessionDescription) {
     });
 
     let mLineParts = mLine.split(' ');
-    mLineParts = mLineParts.filter(part => 
+    let port = mLineParts[1];
+    mLineParts = [mLineParts[0], port, ...mLineParts.slice(2)].filter(part => 
       codecPayloads.includes(part) || rtxPayloads.includes(part) || !(/^\d+$/.test(part))
     );
     sdpLines[mLineIndex] = mLineParts.join(' ');
@@ -150,6 +160,8 @@ function filterCodecs(sessionDescription) {
   sessionDescription.sdp = sdpLines.join('\r\n');
   return sessionDescription;
 }
+
+
 
 function onIceGatheringStateChange() {
   iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
@@ -403,6 +415,11 @@ async function startStreaming(assistantReply) {
 }
 
 async function startRecording() {
+  if (deepgramSocket && deepgramSocket.readyState === WebSocket.OPEN) {
+    console.log('WebSocket is already open');
+    return;
+  }
+
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   mediaRecorder = new MediaRecorder(stream);
 
@@ -444,19 +461,33 @@ async function startRecording() {
   };
 
   deepgramSocket.onmessage = (message) => {
-    const received = JSON.parse(message.data);
-    const partialTranscript = received.channel.alternatives[0].transcript;
-
-    if (partialTranscript) {
-      transcript += partialTranscript;
-      document.getElementById('msgHistory').innerHTML = document.getElementById('msgHistory').innerHTML.replace(/<span style='opacity:0.5'><u>User \(interim\):<\/u>.*<\/span><br>/, `<span style='opacity:0.5'><u>User (interim):</u> ${transcript}</span><br>`);
+    try {
+      const received = JSON.parse(message.data);
+      if (received.channel && received.channel.alternatives && received.channel.alternatives.length > 0) {
+        const partialTranscript = received.channel.alternatives[0].transcript;
+  
+        if (partialTranscript) {
+          transcript += partialTranscript;
+          document.getElementById('msgHistory').innerHTML = document.getElementById('msgHistory').innerHTML.replace(/<span style='opacity:0.5'><u>User \(interim\):<\/u>.*<\/span><br>/, `<span style='opacity:0.5'><u>User (interim):</u> ${transcript}</span><br>`);
+        }
+      } else {
+        console.warn('Unexpected message structure from Deepgram:', received);
+      }
+    } catch (error) {
+      console.error('Error parsing Deepgram message:', error);
     }
   };
+  
+  
 
-  deepgramSocket.onclose = async () => {
-    console.log('WebSocket connection closed');
+  deepgramSocket.onclose = async (event) => {
+    console.log('WebSocket connection closed', event);
     if (isRecording) {
-      await reinitializeConnection();
+      try {
+        await reinitializeConnection();
+      } catch (error) {
+        console.error('Error reinitializing connection:', error);
+      }
     }
   };
 
