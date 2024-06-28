@@ -1,3 +1,6 @@
+Certainly! Here's the complete `agents-client-api.js` file with all the modifications:
+
+```javascript
 'use strict';
 import DID_API from './api.js';
 
@@ -39,7 +42,6 @@ const streamingStatusLabel = document.getElementById('streaming-status-label');
 window.onload = async (event) => {
   playIdleVideo();
 
-  // Show loading symbol
   const loadingSymbol = document.createElement('div');
   loadingSymbol.innerHTML = 'Connecting...';
   loadingSymbol.style.position = 'absolute';
@@ -55,11 +57,9 @@ window.onload = async (event) => {
 
   try {
     await connectButton.onclick();
-    // Remove loading symbol
     document.body.removeChild(loadingSymbol);
   } catch (error) {
     console.error('Error during auto-initialization:', error);
-    // Remove loading symbol and show error message
     document.body.removeChild(loadingSymbol);
     showErrorMessage('Failed to connect. Please try again.');
   }
@@ -72,7 +72,6 @@ function showErrorMessage(message) {
   errorMessage.style.marginBottom = '10px';
   document.body.appendChild(errorMessage);
 
-  // Show destroy and connect buttons
   destroyButton.style.display = 'inline-block';
   connectButton.style.display = 'inline-block';
 }
@@ -98,8 +97,8 @@ function filterCodecs(sdp, preferredVideoCodec) {
   if (parsed.video) {
     const videoLines = parsed.video.split('\r\n');
     let modifiedVideoLines = [];
-
     let rtxPayloadType;
+
     for (let line of videoLines) {
       if (line.startsWith('a=rtpmap:')) {
         const [, payloadType, codecName] = line.split(' ');
@@ -145,10 +144,12 @@ async function createPeerConnection(offer, iceServers) {
   const sessionClientAnswer = await peerConnection.createAnswer();
   console.log('create local sdp OK');
 
-  await peerConnection.setLocalDescription(sessionClientAnswer);
+  const modifiedAnswer = { type: sessionClientAnswer.type, sdp: filterCodecs(sessionClientAnswer.sdp, preferredVideoCodec) };
+
+  await peerConnection.setLocalDescription(modifiedAnswer);
   console.log('set local sdp OK');
 
-  return sessionClientAnswer;
+  return modifiedAnswer;
 }
 
 function onIceGatheringStateChange() {
@@ -160,7 +161,6 @@ function onIceCandidate(event) {
   if (event.candidate) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
 
-    // WEBRTC API CALL 3 - Submit network information
     fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
       method: 'POST',
       headers: {
@@ -189,7 +189,6 @@ function onIceConnectionStateChange() {
 }
 
 function onConnectionStateChange() {
-  // not supported in firefox
   peerStatusLabel.innerText = peerConnection.connectionState;
   peerStatusLabel.className = 'peerConnectionState-' + peerConnection.connectionState;
 }
@@ -203,7 +202,6 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   let status;
   if (videoIsPlaying) {
     status = 'streaming';
-
     const remoteStream = stream;
     setVideoElement(remoteStream);
   } else {
@@ -215,23 +213,13 @@ function onVideoStatusChange(videoIsPlaying, stream) {
 }
 
 function onTrack(event) {
-  /**
-   * The following code is designed to provide information about whether there is currently data
-   * that's being streamed - It does so by periodically looking for changes in total stream data size
-   *
-   * This information in our case is used in order to show idle video while no video is streaming.
-   * To create this idle video, use the POST https://api.d-id.com/talks (or clips) endpoint with a silent audio file or a text script with only ssml breaks
-   * https://docs.aws.amazon.com/polly/latest/dg/supportedtags.html#break-tag
-   * for seamless results, use `config.fluent: true` and provide the same configuration as the streaming video
-   */
-
   if (!event.track) return;
 
   statsIntervalId = setInterval(async () => {
     if (peerConnection && event.track) {
       const stats = await peerConnection.getStats(event.track);
       stats.forEach((report) => {
-        if (report.type === 'inbound-rtp' && report.mediaType === 'video') {
+        if (report.type === 'inbound-rtp' && report.kind === 'video') {
           const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
 
           if (videoStatusChanged) {
@@ -247,38 +235,26 @@ function onTrack(event) {
 
 function setVideoElement(stream) {
   if (!stream) return;
-  // Add Animation Class
   videoElement.classList.add("animated")
-
-  // Removing browsers' autoplay's 'Mute' Requirement
   videoElement.muted = false;
-
   videoElement.srcObject = stream;
   videoElement.loop = false;
 
-  // Remove Animation Class after it's completed
   setTimeout(() => {
     videoElement.classList.remove("animated")
   }, 300);
 
-  // safari hotfix
   if (videoElement.paused) {
-    videoElement
-      .play()
-      .then((_) => { })
-      .catch((e) => { });
+    videoElement.play().then((_) => {}).catch((e) => {});
   }
 }
 
 function playIdleVideo() {
-  // Add Animation Class
   videoElement.classList.toggle("animated")
-
   videoElement.srcObject = undefined;
   videoElement.src = 'emma_idle.mp4';
   videoElement.loop = true;
 
-  // Remove Animation Class after it's completed
   setTimeout(() => {
     videoElement.classList.remove("animated")
   }, 300);
@@ -321,9 +297,7 @@ async function fetchWithRetries(url, options, retries = 1) {
   } catch (err) {
     if (retries <= maxRetryCount) {
       const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 500;
-
       await new Promise((resolve) => setTimeout(resolve, delay));
-
       console.log(`Request failed, retrying ${retries}/${maxRetryCount}. Error ${err}`);
       return fetchWithRetries(url, options, retries + 1);
     } else {
@@ -340,7 +314,6 @@ connectButton.onclick = async () => {
   stopAllStreams();
   closePC();
 
-  // WEBRTC API CALL 1 - Create a new stream
   const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
     method: 'POST',
     headers: {
@@ -364,7 +337,6 @@ connectButton.onclick = async () => {
     return;
   }
 
-  // WEBRTC API CALL 2 - Start a stream
   const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
     method: 'POST',
     headers: {
@@ -398,6 +370,16 @@ async function startStreaming(assistantReply) {
         session_id: sessionId,
       }),
     });
+
+    if (!playResponse.ok) {
+      const errorData = await playResponse.json();
+      console.error('Streaming error:', errorData);
+      throw new Error(`Streaming failed: ${errorData.description || playResponse.statusText}`);
+    }
+
+    const responseData = await playResponse.json();
+    console.log('Streaming response:', responseData);
+
   } catch (error) {
     console.error('Error during streaming:', error);
     if (isRecording) {
@@ -405,6 +387,7 @@ async function startStreaming(assistantReply) {
     }
   }
 }
+
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -424,7 +407,6 @@ async function startRecording() {
     });
     mediaRecorder.start(1000);
 
-    // Send KeepAlive message every 3 seconds
     setInterval(() => {
       if (deepgramSocket.readyState === 1) {
         const keepAliveMsg = JSON.stringify({ type: "KeepAlive" });
@@ -433,7 +415,6 @@ async function startRecording() {
       }
     }, 3000);
 
-    // Start transcription timer
     transcriptionTimer = setInterval(() => {
       if (transcript.trim() !== '') {
         document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User:</u> ${transcript}</span><br>`;
@@ -444,7 +425,7 @@ async function startRecording() {
         sendChatToGroq();
         transcript = '';
       }
-    }, 5000); // Send transcription every 5 seconds
+    }, 5000);
   };
 
   deepgramSocket.onmessage = (message) => {
@@ -464,13 +445,12 @@ async function startRecording() {
     }
   };
 
-  // Start inactivity timeout
   inactivityTimeout = setTimeout(() => {
     if (isRecording) {
       console.log('Inactivity timeout reached. Stopping recording.');
       startButton.click();
     }
-  }, 45000); // 45 seconds
+  }, 45000);
 }
 
 async function stopRecording() {
@@ -482,10 +462,7 @@ async function stopRecording() {
     mediaRecorder = null;
   }
 
-  // Clear transcription timer
   clearInterval(transcriptionTimer);
-
-  // Clear inactivity timeout
   clearTimeout(inactivityTimeout);
 }
 
@@ -539,25 +516,21 @@ async function sendChatToGroq() {
       }
     }
 
-    // Add assistant reply to chat history
     chatHistory.push({
       role: 'assistant',
       content: assistantReply,
     });
 
-    // Append the complete assistant reply to the chat history element
     document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${assistantReply}</span><br>`;
 
-    // Reset inactivity timeout
     clearTimeout(inactivityTimeout);
     inactivityTimeout = setTimeout(() => {
       if (isRecording) {
         console.log('Inactivity timeout reached. Stopping recording.');
         startButton.click();
       }
-    }, 45000); // 45 seconds
+    }, 45000);
 
-    // Initiate streaming
     await startStreaming(assistantReply);
   } catch (error) {
     console.error('Error:', error);
@@ -572,17 +545,12 @@ async function reinitializeConnection() {
   stopAllStreams();
   closePC();
 
-  // Clear transcription timer
   clearInterval(transcriptionTimer);
-
-  // Clear inactivity timeout
   clearTimeout(inactivityTimeout);
 
-  // Reset transcription state
   transcript = '';
-  chatHistory = chatHistory.slice(0, -1); // Remove the last incomplete transcription from the chat history
+  chatHistory = chatHistory.slice(0, -1);
 
-  // Update UI to remove the incomplete transcription
   const msgHistory = document.getElementById('msgHistory');
   msgHistory.innerHTML = msgHistory.innerHTML.slice(0, msgHistory.innerHTML.lastIndexOf('<span style=\'opacity:0.5\'><u>User:</u>'));
 
@@ -617,4 +585,14 @@ startButton.onclick = async () => {
     await stopRecording();
   }
   isRecording = !isRecording;
+};
+
+// Export any necessary functions or variables
+export {
+  connectButton,
+  destroyButton,
+  startButton,
+  createPeerConnection,
+  startStreaming,
+  reinitializeConnection,
 };
