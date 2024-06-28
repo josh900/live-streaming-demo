@@ -100,35 +100,67 @@ async function createPeerConnection(offer, iceServers) {
   console.log('create local sdp OK');
 
   const modifiedAnswer = modifySdp(sessionClientAnswer.sdp);
+  console.log('Modified SDP:', modifiedAnswer);
   sessionClientAnswer.sdp = modifiedAnswer;
 
-  await peerConnection.setLocalDescription(sessionClientAnswer);
-  console.log('set local sdp OK');
+  try {
+    await peerConnection.setLocalDescription(sessionClientAnswer);
+    console.log('set local sdp OK');
+  } catch (error) {
+    console.error('Error setting local description:', error);
+    console.log('Problematic SDP:', modifiedAnswer);
+    throw error;
+  }
 
   return sessionClientAnswer;
 }
 
-
 function modifySdp(sdp) {
   const lines = sdp.split('\r\n');
-  const modifiedLines = lines.map(line => {
-    // Prefer H.264 codec
-    if (line.startsWith('m=video')) {
-      const parts = line.split(' ');
-      const h264Index = parts.findIndex(part => part === '96'); // Assuming 96 is H.264 payload type
-      if (h264Index !== -1) {
-        parts.splice(3, h264Index - 3);
-        return parts.join(' ');
-      }
+  const modifiedLines = lines.filter(line => {
+    // Keep only essential lines
+    return line.startsWith('v=') ||
+           line.startsWith('o=') ||
+           line.startsWith('s=') ||
+           line.startsWith('t=') ||
+           line.startsWith('c=') ||
+           line.startsWith('a=group:') ||
+           line.startsWith('a=msid-semantic:') ||
+           line.startsWith('m=audio') ||
+           line.startsWith('m=video') ||
+           (line.startsWith('a=') && (
+             line.includes('rtpmap') ||
+             line.includes('rtcp-fb') ||
+             line.includes('fmtp') ||
+             line.includes('mid:a') ||
+             line.includes('mid:v') ||
+             line.includes('sendrecv') ||
+             line.includes('recvonly') ||
+             line.includes('setup:') ||
+             line.includes('ice-ufrag:') ||
+             line.includes('ice-pwd:') ||
+             line.includes('fingerprint:')
+           ));
+  });
+
+  // Ensure we have only one audio and one video mid
+  let audioMidFound = false;
+  let videoMidFound = false;
+  
+  return modifiedLines.map(line => {
+    if (line.includes('a=mid:a') && !audioMidFound) {
+      audioMidFound = true;
+      return line;
     }
-    // Remove SCTP port line if present
-    if (line.startsWith('a=sctp-port:')) {
+    if (line.includes('a=mid:v') && !videoMidFound) {
+      videoMidFound = true;
+      return line;
+    }
+    if ((line.includes('a=mid:a') && audioMidFound) || (line.includes('a=mid:v') && videoMidFound)) {
       return null;
     }
     return line;
-  }).filter(Boolean);
-
-  return modifiedLines.join('\r\n');
+  }).filter(Boolean).join('\r\n');
 }
 
 function onIceGatheringStateChange() {
@@ -318,7 +350,7 @@ connectButton.onclick = async () => {
     const data = await sessionResponse.json();
     streamId = data.id;
     sessionId = data.session_id;
-    console.log('Stream created:', { streamId, sessionId });
+    console.log('Stream created:', data);
 
     sessionClientAnswer = await createPeerConnection(data.offer, data.ice_servers);
   } catch (e) {
@@ -351,7 +383,8 @@ connectButton.onclick = async () => {
       throw new Error(`SDP request failed: ${errorData.description || sdpResponse.statusText}`);
     }
 
-    console.log('SDP answer sent successfully');
+    const sdpResponseData = await sdpResponse.json();
+    console.log('SDP answer sent successfully:', sdpResponseData);
   } catch (error) {
     console.error('Error sending SDP answer:', error);
   }
