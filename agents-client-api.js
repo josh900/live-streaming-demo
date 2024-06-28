@@ -472,20 +472,22 @@ async function agentsAPIworkflow() {
   return { agentId: agentId, chatId: chatId };
 }
 
-const agentsButton = document.getElementById("agents-button");
-agentsButton.onclick = async () => {
-  try {
-      const agentsIds = {} = await agentsAPIworkflow();
-      console.log(agentsIds);
-      agentId = agentsIds.agentId;
-      chatId = agentsIds.chatId;
-      return;
-  } catch (err) {
-      agentIdLabel.innerHTML = `<span style='color:red'>Failed</span>`;
-      chatIdLabel.innerHTML = `<span style='color:red'>Failed</span>`;
-      throw new Error(err);
-  }
-};
+document.addEventListener('DOMContentLoaded', function() {
+  const agentsButton = document.getElementById("agents-button");
+  agentsButton.onclick = async () => {
+      try {
+          const agentsIds = {} = await agentsAPIworkflow();
+          console.log(agentsIds);
+          agentId = agentsIds.agentId;
+          chatId = agentsIds.chatId;
+          return;
+      } catch (err) {
+          agentIdLabel.innerHTML = `<span style='color:red'>Failed</span>`;
+          chatIdLabel.innerHTML = `<span style='color:red'>Failed</span>`;
+          throw new Error(err);
+      }
+  };
+});
 
 agentId = "";
 chatId = "";
