@@ -92,21 +92,33 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.addEventListener('track', onTrack, true);
   }
 
-  await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-  console.log('set remote sdp OK');
+  try {
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    console.log('set remote sdp OK');
 
-  const sessionClientAnswer = await peerConnection.createAnswer();
-  console.log('create local sdp OK');
+    const sessionClientAnswer = await peerConnection.createAnswer();
+    console.log('create local sdp OK');
 
-  const modifiedAnswer = modifySdp(sessionClientAnswer);
-  await peerConnection.setLocalDescription(modifiedAnswer);
-  console.log('set local sdp OK');
+    const modifiedAnswer = modifySdp(sessionClientAnswer);
+    await peerConnection.setLocalDescription(modifiedAnswer);
+    console.log('set local sdp OK');
 
-  return modifiedAnswer;
+    return modifiedAnswer;
+  } catch (error) {
+    console.error('Error in createPeerConnection:', error);
+    throw error;
+  }
 }
+
 
 function modifySdp(sessionDescription) {
   let sdp = sessionDescription.sdp;
+
+  // Remove any lines that might cause parsing issues
+  sdp = sdp.split('\n').filter(line => {
+    return !line.startsWith('a=extmap-allow-mixed') &&
+           !line.startsWith('a=msid-semantic');
+  }).join('\n');
 
   // Ensure the SDP includes both VP8 and H264 codecs
   if (sdp.indexOf('VP8') === -1) {
@@ -122,11 +134,15 @@ function modifySdp(sessionDescription) {
   // Remove b=AS line if present (which might limit bandwidth)
   sdp = sdp.replace(/b=AS:.*\r\n/g, '');
 
+  console.log('Modified SDP:', sdp);  // Log the modified SDP for debugging
+
   return new RTCSessionDescription({
     type: sessionDescription.type,
     sdp: sdp
   });
 }
+
+
 
 function onIceGatheringStateChange() {
   iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
@@ -216,7 +232,12 @@ function setVideoElement(stream) {
   videoElement.srcObject = stream;
   videoElement.loop = false;
   videoElement.muted = false;
-  videoElement.play().catch(e => console.error('Error playing video:', e));
+  videoElement.play().catch(e => {
+    console.error('Error playing video:', e);
+    // Attempt to play without audio if there's an error
+    videoElement.muted = true;
+    videoElement.play().catch(e => console.error('Error playing muted video:', e));
+  });
 }
 
 function playIdleVideo() {
@@ -269,8 +290,6 @@ async function fetchWithRetries(url, options, retries = 1) {
     }
   }
 }
-
-const connectButton = document.getElementById('connect-button');
 connectButton.onclick = async () => {
   if (peerConnection && peerConnection.connectionState === 'connected') {
     return;
@@ -297,14 +316,7 @@ connectButton.onclick = async () => {
     console.log('Stream created:', { streamId, sessionId });
 
     sessionClientAnswer = await createPeerConnection(data.offer, data.ice_servers);
-  } catch (e) {
-    console.error('Error during streaming setup', e);
-    stopAllStreams();
-    closePC();
-    return;
-  }
 
-  try {
     const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
       method: 'POST',
       headers: {
@@ -325,52 +337,12 @@ connectButton.onclick = async () => {
 
     console.log('SDP answer sent successfully');
   } catch (error) {
-    console.error('Error sending SDP answer:', error);
+    console.error('Error during connection setup:', error);
+    stopAllStreams();
+    closePC();
+    showErrorMessage('Failed to establish connection. Please try again.');
   }
 };
-
-async function startStreaming(assistantReply) {
-  if (!sessionId) {
-    console.error('No valid session ID available. Cannot start streaming.');
-    return;
-  }
-
-  try {
-    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: assistantReply,
-        },
-        config: {
-          fluent: true,
-          pad_audio: 0,
-        },
-        session_id: sessionId,
-      }),
-    });
-
-    if (!playResponse.ok) {
-      const errorData = await playResponse.json();
-      console.error('Streaming error:', errorData);
-      throw new Error(`Streaming failed: ${errorData.description || playResponse.statusText}`);
-    }
-
-    const responseData = await playResponse.json();
-    console.log('Streaming response:', responseData);
-
-  } catch (error) {
-    console.error('Error during streaming:', error);
-    if (isRecording) {
-      await reinitializeConnection();
-    }
-  }
-}
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
