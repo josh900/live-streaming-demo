@@ -5,11 +5,7 @@ const DEEPGRAM_API_KEY = DID_API.deepgramKey;
 
 if (DID_API.key == '🤫') alert('Please put your api key inside ./api.js and restart..');
 
-const RTCPeerConnection = (
-  window.RTCPeerConnection ||
-  window.webkitRTCPeerConnection ||
-  window.mozRTCPeerConnection
-).bind(window);
+const RTCPeerConnection = (window.RTCPeerConnection || window.webkitRTCPeerConnection || window.mozRTCPeerConnection).bind(window);
 
 let peerConnection;
 let streamId;
@@ -35,14 +31,9 @@ const iceGatheringStatusLabel = document.getElementById('ice-gathering-status-la
 const signalingStatusLabel = document.getElementById('signaling-status-label');
 const streamingStatusLabel = document.getElementById('streaming-status-label');
 
-window.onload = async (event) => {
-  playIdleVideo();
-  await initializeConnection();
-};
-
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
-    const config = {
+    const config = { 
       iceServers,
       sdpSemantics: 'unified-plan'
     };
@@ -58,13 +49,13 @@ async function createPeerConnection(offer, iceServers) {
   }
 
   await peerConnection.setRemoteDescription(offer);
-  console.log('Set remote description');
+  console.log('set remote sdp OK');
 
   const sessionClientAnswer = await peerConnection.createAnswer();
-  console.log('Created answer');
+  console.log('create local sdp OK');
 
   await peerConnection.setLocalDescription(sessionClientAnswer);
-  console.log('Set local description');
+  console.log('set local sdp OK');
 
   return sessionClientAnswer;
 }
@@ -80,11 +71,8 @@ function onIceCandidate(event) {
     
     fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
       method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ candidate, sdpMid, sdpMLineIndex, session_id: sessionId })
+      headers: {Authorization: `Basic ${DID_API.key}`, 'Content-Type': 'application/json'},
+      body: JSON.stringify({ candidate, sdpMid, sdpMLineIndex, session_id: sessionId})
     });
   }
 }
@@ -165,84 +153,10 @@ function setVideoElement(stream) {
 }
 
 function playIdleVideo() {
+  videoElement.srcObject = null;
   videoElement.src = 'emma_idle.mp4';
   videoElement.loop = true;
   videoElement.play().catch(e => console.error('Error playing idle video:', e));
-}
-
-function stopAllStreams() {
-  if (videoElement.srcObject) {
-    console.log('Stopping video streams');
-    videoElement.srcObject.getTracks().forEach((track) => track.stop());
-    videoElement.srcObject = null;
-  }
-}
-
-function closePC(pc = peerConnection) {
-  if (!pc) return;
-  console.log('Stopping peer connection');
-  pc.close();
-  pc.removeEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
-  pc.removeEventListener('icecandidate', onIceCandidate, true);
-  pc.removeEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
-  pc.removeEventListener('connectionstatechange', onConnectionStateChange, true);
-  pc.removeEventListener('signalingstatechange', onSignalingStateChange, true);
-  pc.removeEventListener('track', onTrack, true);
-  clearInterval(statsIntervalId);
-  iceGatheringStatusLabel.innerText = '';
-  signalingStatusLabel.innerText = '';
-  iceStatusLabel.innerText = '';
-  peerStatusLabel.innerText = '';
-  console.log('Stopped peer connection');
-  if (pc === peerConnection) {
-    peerConnection = null;
-  }
-}
-
-async function initializeConnection() {
-  stopAllStreams();
-  closePC();
-
-  const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg',
-      compatibility_mode: 'auto',
-      output_resolution: 720,
-      stream_warmup: true
-    }),
-  });
-
-  const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
-  streamId = newStreamId;
-  sessionId = newSessionId;
-
-  try {
-    sessionClientAnswer = await createPeerConnection(offer, iceServers);
-  } catch (e) {
-    console.error('Error during streaming setup:', e);
-    stopAllStreams();
-    closePC();
-    return;
-  }
-
-  const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      answer: sessionClientAnswer,
-      session_id: sessionId,
-    }),
-  });
-
-  return sdpResponse.ok;
 }
 
 async function startStreaming(assistantReply) {
@@ -277,40 +191,65 @@ async function startStreaming(assistantReply) {
     console.log('Streaming started successfully');
   } catch (error) {
     console.error('Error during streaming:', error);
-    await reinitializeConnection();
+    if (isRecording) {
+      await reinitializeConnection();
+    }
   }
 }
 
-// ... (rest of the code remains the same)
+const connectButton = document.getElementById('connect-button');
+connectButton.onclick = async () => {
+  if (peerConnection && peerConnection.connectionState === 'connected') {
+    return;
+  }
+  stopAllStreams();
+  closePC();
 
-const destroyButton = document.getElementById('destroy-button');
-destroyButton.onclick = async () => {
-  await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
-    method: 'DELETE',
+  const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+    method: 'POST',
     headers: {
       Authorization: `Basic ${DID_API.key}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ session_id: sessionId }),
+    body: JSON.stringify({
+      source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg',
+      compatibility_mode: 'auto',
+      output_resolution: 720,
+      stream_warmup: true
+    }),
   });
 
-  stopAllStreams();
-  closePC();
-};
+  const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+  streamId = newStreamId;
+  sessionId = newSessionId;
 
-const startButton = document.getElementById('start-button');
-let isRecording = false;
-
-startButton.onclick = async () => {
-  if (!isRecording) {
-    startButton.textContent = 'Stop';
-    await startRecording();
-  } else {
-    startButton.textContent = 'Speak';
-    await stopRecording();
+  try {
+    sessionClientAnswer = await createPeerConnection(offer, iceServers);
+  } catch (e) {
+    console.log('error during streaming setup', e);
+    stopAllStreams();
+    closePC();
+    return;
   }
-  isRecording = !isRecording;
+
+  const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      answer: sessionClientAnswer,
+      session_id: sessionId,
+    }),
+  });
+
+  if (!sdpResponse.ok) {
+    throw new Error(`HTTP error! status: ${sdpResponse.status}`);
+  }
 };
+
+// ... (previous code remains the same)
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -322,7 +261,7 @@ async function startRecording() {
   ]);
 
   deepgramSocket.onopen = () => {
-    console.log('Deepgram WebSocket connection opened');
+    console.log('Deepgram WebSocket Connection opened');
     mediaRecorder.addEventListener('dataavailable', async (event) => {
       if (event.data.size > 0 && deepgramSocket.readyState === 1) {
         deepgramSocket.send(event.data);
@@ -335,7 +274,7 @@ async function startRecording() {
       if (deepgramSocket.readyState === 1) {
         const keepAliveMsg = JSON.stringify({ type: "KeepAlive" });
         deepgramSocket.send(keepAliveMsg);
-        console.log("Sent KeepAlive message");
+        console.log("Sent KeepAlive message to Deepgram");
       }
     }, 3000);
 
@@ -492,9 +431,67 @@ async function reinitializeConnection() {
   const msgHistory = document.getElementById('msgHistory');
   msgHistory.innerHTML = msgHistory.innerHTML.slice(0, msgHistory.innerHTML.lastIndexOf('<span style=\'opacity:0.5\'><u>User:</u>'));
 
-  await initializeConnection();
+  await connectButton.onclick();
   await startRecording();
 }
+
+function stopAllStreams() {
+  if (videoElement.srcObject) {
+    console.log('stopping video streams');
+    videoElement.srcObject.getTracks().forEach((track) => track.stop());
+    videoElement.srcObject = null;
+  }
+}
+
+function closePC(pc = peerConnection) {
+  if (!pc) return;
+  console.log('stopping peer connection');
+  pc.close();
+  pc.removeEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
+  pc.removeEventListener('icecandidate', onIceCandidate, true);
+  pc.removeEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
+  pc.removeEventListener('connectionstatechange', onConnectionStateChange, true);
+  pc.removeEventListener('signalingstatechange', onSignalingStateChange, true);
+  pc.removeEventListener('track', onTrack, true);
+  clearInterval(statsIntervalId);
+  iceGatheringStatusLabel.innerText = '';
+  signalingStatusLabel.innerText = '';
+  iceStatusLabel.innerText = '';
+  peerStatusLabel.innerText = '';
+  console.log('stopped peer connection');
+  if (pc === peerConnection) {
+    peerConnection = null;
+  }
+}
+
+const destroyButton = document.getElementById('destroy-button');
+destroyButton.onclick = async () => {
+  await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ session_id: sessionId }),
+  });
+
+  stopAllStreams();
+  closePC();
+};
+
+const startButton = document.getElementById('start-button');
+let isRecording = false;
+
+startButton.onclick = async () => {
+  if (!isRecording) {
+    startButton.textContent = 'Stop';
+    await startRecording();
+  } else {
+    startButton.textContent = 'Speak';
+    await stopRecording();
+  }
+  isRecording = !isRecording;
+};
 
 // Utility function for retrying fetch requests
 const maxRetryCount = 2;
@@ -504,7 +501,7 @@ async function fetchWithRetries(url, options, retries = 1) {
     return await fetch(url, options);
   } catch (err) {
     if (retries <= maxRetryCount) {
-      const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 500;
+      const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 1000;
       await new Promise((resolve) => setTimeout(resolve, delay));
       console.log(`Request failed, retrying ${retries}/${maxRetryCount}. Error ${err}`);
       return fetchWithRetries(url, options, retries + 1);
@@ -533,7 +530,7 @@ window.onload = async (event) => {
   document.body.appendChild(loadingSymbol);
 
   try {
-    await initializeConnection();
+    await connectButton.onclick();
     // Remove loading symbol
     document.body.removeChild(loadingSymbol);
   } catch (error) {
