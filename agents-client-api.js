@@ -49,6 +49,8 @@ window.onload = async (event) => {
   }
 };
 
+
+
 function showLoadingSymbol() {
   const loadingSymbol = document.createElement('div');
   loadingSymbol.id = 'loading-symbol';
@@ -173,6 +175,8 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   streamingStatusLabel.className = 'streamingState-' + status;
 }
 
+
+
 function onTrack(event) {
   console.log('onTrack event:', event);
   if (!event.track) return;
@@ -214,18 +218,36 @@ function setVideoElement(stream) {
   }
 
   videoElement.srcObject = stream;
-  videoElement.muted = false;
+  videoElement.muted = false; // Unmute for response videos
+  videoElement.classList.add("animated");
 
   videoElement.play().then(() => {
     console.log('Video playback started');
-  }).catch(e => console.error('Error playing video:', e));
+  }).catch(e => {
+    console.error('Error playing video:', e);
+    // Fallback to idle video if there's an error
+    playIdleVideo();
+  });
+
+  // Remove Animation Class after it's completed
+  setTimeout(() => {
+    videoElement.classList.remove("animated");
+  }, 300);
 }
+
+
 
 function playIdleVideo() {
   videoElement.srcObject = undefined;
   videoElement.src = 'emma_idle.mp4';
   videoElement.loop = true;
+  videoElement.muted = true; // Mute the idle video
+  videoElement.play().then(() => {
+    console.log('Idle video playback started');
+  }).catch(e => console.error('Error playing idle video:', e));
 }
+
+
 
 function stopAllStreams() {
   if (videoElement.srcObject) {
@@ -345,6 +367,9 @@ async function startStreaming(assistantReply) {
         session_id: sessionId,
       }),
     });
+
+    // Ensure video is unmuted when streaming starts
+    videoElement.muted = false;
   } catch (error) {
     console.error('Error during streaming:', error);
     if (isRecording) {
@@ -352,6 +377,7 @@ async function startStreaming(assistantReply) {
     }
   }
 }
+
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
