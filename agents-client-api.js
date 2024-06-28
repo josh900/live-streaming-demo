@@ -271,8 +271,7 @@ async function fetchWithRetries(url, options, retries = 1) {
   try {
     const response = await fetch(url, options);
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`HTTP error ${response.status}: ${errorText}`);
+      throw new Error(`HTTP error ${response.status}: ${await response.text()}`);
     }
     return response;
   } catch (err) {
@@ -302,15 +301,13 @@ async function initializeConnection() {
     }),
   });
 
-  const responseData = await sessionResponse.json();
-  console.log('Stream creation response:', responseData);
-
-  streamId = responseData.id;
-  sessionId = responseData.session_id;
+  const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+  streamId = newStreamId;
+  sessionId = newSessionId;
   console.log('Stream created:', { streamId, sessionId });
 
   try {
-    sessionClientAnswer = await createPeerConnection(responseData.offer, responseData.ice_servers);
+    sessionClientAnswer = await createPeerConnection(offer, iceServers);
   } catch (e) {
     console.error('Error during streaming setup:', e);
     stopAllStreams();
@@ -330,8 +327,7 @@ async function initializeConnection() {
   });
 
   if (!sdpResponse.ok) {
-    const errorText = await sdpResponse.text();
-throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}. ${errorText}`);
+    throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
   }
 
   console.log('Connection initialized successfully');
@@ -382,6 +378,8 @@ async function startStreaming(assistantReply) {
     }
   }
 }
+
+
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
