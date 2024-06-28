@@ -39,6 +39,7 @@ const streamingStatusLabel = document.getElementById('streaming-status-label');
 window.onload = async (event) => {
   playIdleVideo();
 
+  // Show loading symbol
   const loadingSymbol = document.createElement('div');
   loadingSymbol.innerHTML = 'Connecting...';
   loadingSymbol.style.position = 'absolute';
@@ -54,18 +55,15 @@ window.onload = async (event) => {
 
   try {
     await connectButton.onclick();
+    // Remove loading symbol
     document.body.removeChild(loadingSymbol);
   } catch (error) {
     console.error('Error during auto-initialization:', error);
+    // Remove loading symbol and show error message
     document.body.removeChild(loadingSymbol);
     showErrorMessage('Failed to connect. Please try again.');
   }
 };
-
-function logSdp(sdp, prefix) {
-  console.log(`${prefix} SDP:`);
-  sdp.split('\r\n').forEach(line => console.log(line));
-}
 
 function showErrorMessage(message) {
   const errorMessage = document.createElement('div');
@@ -74,57 +72,31 @@ function showErrorMessage(message) {
   errorMessage.style.marginBottom = '10px';
   document.body.appendChild(errorMessage);
 
+  // Show destroy and connect buttons
   destroyButton.style.display = 'inline-block';
   connectButton.style.display = 'inline-block';
 }
 
-async function createPeerConnection(offer, iceServers) {
-  if (!peerConnection) {
-    const config = {
-      iceServers: iceServers,
-      sdpSemantics: 'unified-plan'
-    };
-
-    peerConnection = new RTCPeerConnection(config);
-    peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
-    peerConnection.addEventListener('icecandidate', onIceCandidate, true);
-    peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
-    peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
-    peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
-    peerConnection.addEventListener('track', onTrack, true);
-  }
-
-  const remoteDesc = new RTCSessionDescription(offer);
-  await peerConnection.setRemoteDescription(remoteDesc);
-  console.log('set remote sdp OK');
-
-  const answer = await peerConnection.createAnswer();
-  console.log('create local sdp OK');
-
-  const modifiedAnswer = {
-    type: answer.type,
-    sdp: modifySdp(answer.sdp)
+function createPeerConnection(iceServers) {
+  const config = {
+    iceServers: iceServers,
+    sdpSemantics: 'unified-plan'
   };
 
-  await peerConnection.setLocalDescription(modifiedAnswer);
-  console.log('set local sdp OK');
+  const pc = new RTCPeerConnection(config);
 
-  return modifiedAnswer;
-}
+  pc.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
+  pc.addEventListener('icecandidate', onIceCandidate, true);
+  pc.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
+  pc.addEventListener('connectionstatechange', onConnectionStateChange, true);
+  pc.addEventListener('signalingstatechange', onSignalingStateChange, true);
+  pc.addEventListener('track', onTrack, true);
 
-function modifySdp(sdp) {
-  const lines = sdp.split('\r\n');
-  const modifiedLines = lines.map(line => {
-    if (line.startsWith('a=rtpmap:') && line.includes('H264')) {
-      return line + '\r\na=fmtp:' + line.split(':')[1].split(' ')[0] + ' level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f';
-    }
-    return line;
-  });
-  
-  // Log the modified SDP for debugging
-  logSdp(modifiedLines.join('\r\n'), 'Modified');
-  
-  return modifiedLines.join('\r\n');
+  // Add transceivers to ensure we'll be able to receive audio and video
+  pc.addTransceiver('audio', {direction: 'recvonly'});
+  pc.addTransceiver('video', {direction: 'recvonly'});
+
+  return pc;
 }
 
 function onIceGatheringStateChange() {
@@ -134,35 +106,36 @@ function onIceGatheringStateChange() {
 
 function onIceCandidate(event) {
   if (event.candidate) {
-    const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
-
-    // Only send the ICE candidate if it's complete
-    if (candidate.indexOf('candidate:') === 0) {
-      fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${DID_API.key}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          candidate,
-          sdpMid,
-          sdpMLineIndex,
-          session_id: sessionId,
-        }),
-      }).catch(error => console.error('Error sending ICE candidate:', error));
-    }
+    console.log('New ICE candidate:', event.candidate);
+    
+    fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        candidate: event.candidate.candidate,
+        sdpMid: event.candidate.sdpMid,
+        sdpMLineIndex: event.candidate.sdpMLineIndex,
+        session_id: sessionId,
+      }),
+    }).then(response => {
+      if (!response.ok) {
+        console.error('Failed to send ICE candidate:', response.statusText);
+      }
+    }).catch(error => {
+      console.error('Error sending ICE candidate:', error);
+    });
   }
 }
 
 function onIceConnectionStateChange() {
   iceStatusLabel.innerText = peerConnection.iceConnectionState;
   iceStatusLabel.className = 'iceConnectionState-' + peerConnection.iceConnectionState;
-
   if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'closed') {
     stopAllStreams();
     closePC();
-    showErrorMessage('Connection lost. Please try again.');
   }
 }
 
@@ -176,66 +149,25 @@ function onSignalingStateChange() {
   signalingStatusLabel.className = 'signalingState-' + peerConnection.signalingState;
 }
 
-function onVideoStatusChange(videoIsPlaying, stream) {
-  let status;
-  if (videoIsPlaying) {
-    status = 'streaming';
-    const remoteStream = stream;
-    setVideoElement(remoteStream);
-  } else {
-    status = 'empty';
-    playIdleVideo();
-  }
-  streamingStatusLabel.innerText = status;
-  streamingStatusLabel.className = 'streamingState-' + status;
-}
-
 function onTrack(event) {
-  if (!event.track) return;
-
-  statsIntervalId = setInterval(async () => {
-    if (peerConnection && event.track) {
-      const stats = await peerConnection.getStats(event.track);
-      stats.forEach((report) => {
-        if (report.type === 'inbound-rtp' && report.kind === 'video') {
-          const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
-
-          if (videoStatusChanged) {
-            videoIsPlaying = report.bytesReceived > lastBytesReceived;
-            onVideoStatusChange(videoIsPlaying, event.streams[0]);
-          }
-          lastBytesReceived = report.bytesReceived;
-        }
-      });
-    }
-  }, 300);
+  console.log('Track event:', event);
+  if (event.track.kind === 'video') {
+    videoElement.srcObject = event.streams[0];
+  }
 }
 
 function setVideoElement(stream) {
   if (!stream) return;
-  videoElement.classList.add("animated");
-  videoElement.muted = false;
   videoElement.srcObject = stream;
   videoElement.loop = false;
-
-  setTimeout(() => {
-    videoElement.classList.remove("animated");
-  }, 300);
-
-  if (videoElement.paused) {
-    videoElement.play().then(_ => {}).catch(e => {});
-  }
+  videoElement.muted = false;
+  videoElement.play().catch(e => console.error('Error playing video:', e));
 }
 
 function playIdleVideo() {
-  videoElement.classList.toggle("animated");
   videoElement.srcObject = undefined;
   videoElement.src = 'emma_idle.mp4';
   videoElement.loop = true;
-
-  setTimeout(() => {
-    videoElement.classList.remove("animated");
-  }, 300);
 }
 
 function stopAllStreams() {
@@ -257,34 +189,21 @@ function closePC(pc = peerConnection) {
   pc.removeEventListener('signalingstatechange', onSignalingStateChange, true);
   pc.removeEventListener('track', onTrack, true);
   clearInterval(statsIntervalId);
-  iceGatheringStatusLabel.innerText = '';
-  signalingStatusLabel.innerText = '';
-  iceStatusLabel.innerText = '';
-  peerStatusLabel.innerText = '';
   console.log('stopped peer connection');
   if (pc === peerConnection) {
     peerConnection = null;
   }
 }
 
-const maxRetryCount = 2;
-const maxDelaySec = 2;
-async function fetchWithRetries(url, options, retries = 1) {
+async function fetchWithRetries(url, options, retries = 3) {
   try {
-    const response = await fetch(url, options);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    return response;
+    return await fetch(url, options);
   } catch (err) {
-    if (retries <= maxRetryCount) {
-      const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 500;
-      await new Promise((resolve) => setTimeout(resolve, delay));
-      console.log(`Request failed, retrying ${retries}/${maxRetryCount}. Error: ${err.message}`);
-      return fetchWithRetries(url, options, retries + 1);
-    } else {
-      throw new Error(`Max retries exceeded. Error: ${err.message}`);
+    if (retries > 0) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return fetchWithRetries(url, options, retries - 1);
     }
+    throw err;
   }
 }
 
@@ -308,11 +227,26 @@ connectButton.onclick = async () => {
       }),
     });
 
-    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
-    streamId = newStreamId;
-    sessionId = newSessionId;
+    if (!sessionResponse.ok) {
+      const errorData = await sessionResponse.json();
+      console.error('Session creation error:', errorData);
+      throw new Error(`Session creation failed: ${errorData.description || sessionResponse.statusText}`);
+    }
 
-    sessionClientAnswer = await createPeerConnection(offer, iceServers);
+    const data = await sessionResponse.json();
+    console.log('Full stream creation response:', data);
+    streamId = data.id;
+    sessionId = data.session_id;
+    console.log('Stream created:', { streamId, sessionId });
+
+    if (!sessionId) {
+      throw new Error('No session ID received from the server');
+    }
+
+    peerConnection = createPeerConnection(data.ice_servers);
+    
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
 
     const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
       method: 'POST',
@@ -321,26 +255,47 @@ connectButton.onclick = async () => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        answer: sessionClientAnswer,
+        answer: peerConnection.localDescription,
         session_id: sessionId,
       }),
     });
 
     if (!sdpResponse.ok) {
-      throw new Error(`SDP response error: ${sdpResponse.status}`);
+      const errorData = await sdpResponse.json();
+      console.error('SDP error:', errorData);
+      throw new Error(`SDP request failed: ${errorData.description || sdpResponse.statusText}`);
     }
 
-    console.log('SDP answer sent successfully');
-  } catch (e) {
-    console.error('Error during streaming setup:', e);
-    stopAllStreams();
-    closePC();
-    showErrorMessage('Failed to set up streaming. Please try again.');
+    const answerData = await sdpResponse.json();
+    const remoteDescription = new RTCSessionDescription(answerData.sdp);
+    await peerConnection.setRemoteDescription(remoteDescription);
+
+    console.log('SDP exchange completed successfully');
+    console.log('Connection setup completed. Session ID:', sessionId);
+  } catch (error) {
+    console.error('Error during connection setup:', error);
+    sessionId = null;
+    streamId = null;
   }
 };
 
 async function startStreaming(assistantReply) {
+  console.log('Starting streaming. Current session ID:', sessionId);
+  console.log('Current stream ID:', streamId);
+  console.log('Assistant reply:', assistantReply);
+
+  if (!sessionId || !streamId) {
+    console.error('Missing session ID or stream ID. Cannot start streaming.');
+    return;
+  }
+
+  if (peerConnection.connectionState !== 'connected') {
+    console.error('PeerConnection is not in "connected" state. Current state:', peerConnection.connectionState);
+    return;
+  }
+
   try {
+    console.log(`Sending streaming request to: ${DID_API.url}/${DID_API.service}/streams/${streamId}`);
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'POST',
       headers: {
@@ -352,20 +307,31 @@ async function startStreaming(assistantReply) {
           type: 'text',
           input: assistantReply,
         },
+        driver_url: 'bank://lively/',
         config: {
-          fluent: true,
-          pad_audio: 0,
+          stitch: true,
         },
         session_id: sessionId,
       }),
     });
+
+    if (!playResponse.ok) {
+      const errorData = await playResponse.json();
+      console.error('Streaming error response:', errorData);
+      console.error('Response status:', playResponse.status);
+      console.error('Response headers:', Object.fromEntries(playResponse.headers.entries()));
+      throw new Error(`Streaming failed: ${errorData.description || playResponse.statusText}`);
+    }
+
+    const responseData = await playResponse.json();
+    console.log('Streaming response:', responseData);
+
   } catch (error) {
     console.error('Error during streaming:', error);
-    if (isRecording) {
-      await reinitializeConnection();
-    }
   }
 }
+
+
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   mediaRecorder = new MediaRecorder(stream);
@@ -535,6 +501,7 @@ async function reinitializeConnection() {
   await startRecording();
 }
 
+
 const destroyButton = document.getElementById('destroy-button');
 destroyButton.onclick = async () => {
   await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
@@ -563,13 +530,3 @@ startButton.onclick = async () => {
   }
   isRecording = !isRecording;
 };
-
-// Initialize the connection when the page loads
-window.addEventListener('load', async () => {
-  try {
-    await connectButton.onclick();
-  } catch (error) {
-    console.error('Error initializing connection:', error);
-    showErrorMessage('Failed to initialize connection. Please try again.');
-  }
-});
