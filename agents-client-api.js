@@ -73,7 +73,6 @@ function showErrorMessage(message) {
   destroyButton.style.display = 'inline-block';
   connectButton.style.display = 'inline-block';
 }
-
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
     const configuration = {
@@ -90,7 +89,15 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.addEventListener('track', onTrack, true);
   }
 
-  await peerConnection.setRemoteDescription(offer);
+  const parsedOffer = parseSDP(offer.sdp);
+  const modifiedOfferSDP = modifySDP(parsedOffer);
+
+  const modifiedOffer = new RTCSessionDescription({
+    type: offer.type,
+    sdp: modifiedOfferSDP
+  });
+
+  await peerConnection.setRemoteDescription(modifiedOffer);
   console.log('set remote sdp OK');
 
   const sessionClientAnswer = await peerConnection.createAnswer();
@@ -561,42 +568,6 @@ function modifySDP(parsedSDP) {
   return modified;
 }
 
-// Modify the createPeerConnection function
-async function createPeerConnection(offer, iceServers) {
-  if (!peerConnection) {
-    const configuration = {
-      iceServers: iceServers,
-      sdpSemantics: 'unified-plan'
-    };
-
-    peerConnection = new RTCPeerConnection(configuration);
-    peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
-    peerConnection.addEventListener('icecandidate', onIceCandidate, true);
-    peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
-    peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
-    peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
-    peerConnection.addEventListener('track', onTrack, true);
-  }
-
-  const parsedOffer = parseSDP(offer.sdp);
-  const modifiedOfferSDP = modifySDP(parsedOffer);
-
-  const modifiedOffer = new RTCSessionDescription({
-    type: offer.type,
-    sdp: modifiedOfferSDP
-  });
-
-  await peerConnection.setRemoteDescription(modifiedOffer);
-  console.log('set remote sdp OK');
-
-  const sessionClientAnswer = await peerConnection.createAnswer();
-  console.log('create local sdp OK');
-
-  await peerConnection.setLocalDescription(sessionClientAnswer);
-  console.log('set local sdp OK');
-
-  return sessionClientAnswer;
-}
 
 // Initialize WebRTC connection
 connectButton.onclick = async () => {
