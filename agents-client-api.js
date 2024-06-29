@@ -405,11 +405,21 @@ function setupVideoElements() {
   videoElement.style.height = '100%';
   videoElement.style.objectFit = 'cover';
 
-  // We'll create the idle video in playIdleVideo function when needed
-}
+  const idleVideo = document.createElement('video');
+  idleVideo.id = 'idle-video';
+  idleVideo.style.position = 'absolute';
+  idleVideo.style.top = '0';
+  idleVideo.style.left = '0';
+  idleVideo.style.width = '100%';
+  idleVideo.style.height = '100%';
+  idleVideo.style.objectFit = 'cover';
+  idleVideo.muted = true;
+  idleVideo.loop = true;
+  idleVideo.src = config.idleVideoUrl;
 
-// Call setupVideoElements when the page loads
-window.addEventListener('load', setupVideoElements);
+  videoWrapper.appendChild(idleVideo);
+  videoWrapper.appendChild(videoElement);
+}
 
 function crossFade(fromElement, toElement, duration = 500) {
   fromElement.style.transition = `opacity ${duration}ms ease-in-out`;
@@ -442,23 +452,9 @@ function initializeIdleVideo() {
   });
 }
 
+// Update the playIdleVideo function:
 function playIdleVideo() {
-  let idleVideo = document.getElementById('idle-video');
-  if (!idleVideo) {
-    idleVideo = document.createElement('video');
-    idleVideo.id = 'idle-video';
-    idleVideo.style.position = 'absolute';
-    idleVideo.style.top = '0';
-    idleVideo.style.left = '0';
-    idleVideo.style.width = '100%';
-    idleVideo.style.height = '100%';
-    idleVideo.style.objectFit = 'cover';
-    idleVideo.muted = true;
-    idleVideo.loop = true;
-    idleVideo.src = config.idleVideoUrl;
-    document.getElementById('video-wrapper').appendChild(idleVideo);
-  }
-
+  const idleVideo = document.getElementById('idle-video');
   idleVideo.play().then(() => {
     log('Idle video playback started');
     crossFade(videoElement, idleVideo);
@@ -648,8 +644,7 @@ function onTrack(event) {
     }
   }, 1000);
 
-  // Instead of setVideoElement, use onVideoStatusChange
-  onVideoStatusChange(true, event.streams[0]);
+  setVideoElement(event.streams[0]);
 }
 
 
@@ -763,12 +758,7 @@ connectButton.onclick = async () => {
     if (sdpResponse.ok) {
       log('SDP answer sent successfully', LOG_LEVELS.ADVANCED);
       startKeepAlive();
-      // Wait for the connection to be established before playing the idle video
-      peerConnection.addEventListener('connectionstatechange', () => {
-        if (peerConnection.connectionState === 'connected') {
-          playIdleVideo();
-        }
-      });
+      playIdleVideo();
     } else {
       throw new Error(`Error sending SDP answer: ${await sdpResponse.text()}`);
     }
@@ -777,7 +767,6 @@ connectButton.onclick = async () => {
     stopAllStreams();
     closePC();
     showErrorMessage('Failed to connect. Please try again.');
-
   }
 };
 
