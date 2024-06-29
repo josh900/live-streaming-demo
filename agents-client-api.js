@@ -115,7 +115,6 @@ async function createPeerConnection(offer, iceServers) {
   return sessionClientAnswer;
 }
 
-
 function onIceGatheringStateChange() {
   iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
   iceGatheringStatusLabel.className = 'iceGatheringState-' + peerConnection.iceGatheringState;
@@ -186,61 +185,39 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   streamingStatusLabel.className = 'streamingState-' + status;
   console.log('Video status changed:', status);
 }
+
 function onTrack(event) {
   console.log('onTrack event:', event);
   if (!event.track) return;
 
-  // Clear any existing interval
-  if (statsIntervalId) {
-    clearInterval(statsIntervalId);
-  }
-
-  // Set up a new interval for this track
   statsIntervalId = setInterval(async () => {
-    if (peerConnection && peerConnection.connectionState === 'connected') {
-      try {
-        const stats = await peerConnection.getStats(event.track);
-        let videoStatsFound = false;
-        stats.forEach((report) => {
-          if (report.type === 'inbound-rtp' && report.kind === 'video') {
-            videoStatsFound = true;
-            const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
+    if (peerConnection && event.track) {
+      const stats = await peerConnection.getStats(event.track);
+      stats.forEach((report) => {
+        if (report.type === 'inbound-rtp' && report.kind === 'video') {
+          const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
 
-            console.log('Video stats:', {
-              bytesReceived: report.bytesReceived,
-              lastBytesReceived,
-              videoIsPlaying,
-              videoStatusChanged
-            });
+          console.log('Video stats:', {
+            bytesReceived: report.bytesReceived,
+            lastBytesReceived,
+            videoIsPlaying,
+            videoStatusChanged
+          });
 
-            if (videoStatusChanged) {
-              videoIsPlaying = report.bytesReceived > lastBytesReceived;
-              console.log('Video status changed:', videoIsPlaying);
-              onVideoStatusChange(videoIsPlaying, event.streams[0]);
-            }
-            lastBytesReceived = report.bytesReceived;
+          if (videoStatusChanged) {
+            videoIsPlaying = report.bytesReceived > lastBytesReceived;
+            console.log('Video status changed:', videoIsPlaying);
+            onVideoStatusChange(videoIsPlaying, event.streams[0]);
           }
-        });
-        if (!videoStatsFound) {
-          console.log('No video stats found yet.');
+          lastBytesReceived = report.bytesReceived;
         }
-      } catch (error) {
-        console.error('Error getting stats:', error);
-      }
-    } else {
-      console.log('Peer connection not ready for stats.');
+      });
     }
   }, 1000);
-
-  // Immediately set up the video element
-  setVideoElement(event.streams[0]);
 }
 
 function setVideoElement(stream) {
-  if (!stream) {
-    console.log('No stream available to set video element');
-    return;
-  }
+  if (!stream) return;
   videoElement.classList.add("animated");
   videoElement.srcObject = stream;
   videoElement.loop = false;
@@ -251,9 +228,7 @@ function setVideoElement(stream) {
   }, 300);
 
   if (videoElement.paused) {
-    videoElement.play().then(() => {
-      console.log('Video playback started');
-    }).catch(e => console.error('Error playing video:', e));
+    videoElement.play().catch(e => console.error('Error playing video:', e));
   }
 }
 
