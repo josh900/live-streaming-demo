@@ -371,7 +371,6 @@ You are a helpful, harmless, and honest assistant. Please answer the users quest
 `;
 
 const videoElement = document.getElementById('video-element');
-const idleVideoElement = document.getElementById('idle-video');
 videoElement.setAttribute('playsinline', '');
 const peerStatusLabel = document.getElementById('peer-status-label');
 const iceStatusLabel = document.getElementById('ice-status-label');
@@ -392,8 +391,8 @@ window.onload = async (event) => {
   }
 };
 
-
 function setupVideoElements() {
+  const videoWrapper = document.getElementById('video-wrapper');
   videoWrapper.style.width = `${config.avatarConfig.size.width}px`;
   videoWrapper.style.height = `${config.avatarConfig.size.height}px`;
 
@@ -401,18 +400,11 @@ function setupVideoElements() {
   videoElement.style.height = '100%';
   videoElement.style.objectFit = 'cover';
 
-  idleVideoElement.style.width = '100%';
-  idleVideoElement.style.height = '100%';
-  idleVideoElement.style.objectFit = 'cover';
+  // We'll create the idle video in playIdleVideo function when needed
 }
 
-
 // Call setupVideoElements when the page loads
-window.addEventListener('load', () => {
-  setupVideoElements();
-  playIdleVideo();
-});
-
+window.addEventListener('load', setupVideoElements);
 
 function crossFade(fromElement, toElement, duration = 500) {
   fromElement.style.transition = `opacity ${duration}ms ease-in-out`;
@@ -446,18 +438,31 @@ function initializeIdleVideo() {
 }
 
 function playIdleVideo() {
-  if (idleVideoElement.paused) {
-    idleVideoElement.play().then(() => {
-      log('Idle video playback started');
-      fadeIn(idleVideoElement);
-      fadeOut(videoElement);
-    }).catch(error => {
-      console.error('Error playing idle video:', error);
-      log("Playback of idle video was prevented:", error);
-    });
+  let idleVideo = document.getElementById('idle-video');
+  if (!idleVideo) {
+    idleVideo = document.createElement('video');
+    idleVideo.id = 'idle-video';
+    idleVideo.style.position = 'absolute';
+    idleVideo.style.top = '0';
+    idleVideo.style.left = '0';
+    idleVideo.style.width = '100%';
+    idleVideo.style.height = '100%';
+    idleVideo.style.objectFit = 'cover';
+    idleVideo.muted = true;
+    idleVideo.loop = true;
+    idleVideo.src = config.idleVideoUrl;
+    document.getElementById('video-wrapper').appendChild(idleVideo);
   }
-}
 
+  idleVideo.play().then(() => {
+    log('Idle video playback started');
+    crossFade(videoElement, idleVideo);
+  }).catch(error => {
+    console.error('Error playing idle video:', error);
+    log("Playback of idle video was prevented:", error);
+    showPlayButton();
+  });
+}
 
 function showPlayButton() {
   const playButton = document.createElement('button');
@@ -594,14 +599,11 @@ function onSignalingStateChange() {
 
 function onVideoStatusChange(videoIsPlaying, stream) {
   let status;
-  if (videoIsPlaying && stream) {
+  if (videoIsPlaying) {
     status = 'streaming';
-    if (videoElement.srcObject !== stream) {
+    if (stream) {
       videoElement.srcObject = stream;
-      videoElement.play().then(() => {
-        fadeIn(videoElement);
-        fadeOut(idleVideoElement);
-      }).catch(e => console.error('Error playing video:', e));
+      videoElement.play().catch(e => console.error('Error playing video:', e));
     }
   } else {
     status = 'empty';
@@ -611,20 +613,6 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   streamingStatusLabel.className = 'streamingState-' + status;
   log(`Video status changed to: ${status}`);
 }
-
-
-function fadeIn(element) {
-  element.style.transition = 'opacity 0.5s';
-  element.style.opacity = '1';
-}
-
-function fadeOut(element) {
-  element.style.transition = 'opacity 0.5s';
-  element.style.opacity = '0';
-}
-
-
-
 
 function onTrack(event) {
   log('onTrack event:', event);
@@ -657,8 +645,10 @@ function onTrack(event) {
     }
   }, 1000);
 
+  // Instead of setVideoElement, use onVideoStatusChange
   onVideoStatusChange(true, event.streams[0]);
 }
+
 
 
 function stopAllStreams() {
@@ -729,6 +719,9 @@ connectButton.onclick = async () => {
       body: JSON.stringify({
         source_url: config.avatarImageUrl,
         driver_url: 'bank://lively/',
+        output_format: 'h264',
+        stream_width: config.avatarConfig.size.width,
+        stream_height: config.avatarConfig.size.height,
         config: {
           stitch: true,
           fluent: true,
@@ -741,9 +734,6 @@ connectButton.onclick = async () => {
           motion_factor: 0.8,
           normalization_factor: 0.8,
           sharpen: true,
-          stream_width: config.avatarConfig.size.width,
-          stream_height: config.avatarConfig.size.height,
-          crop: config.avatarConfig.crop
         },
       }),
     });
@@ -770,7 +760,12 @@ connectButton.onclick = async () => {
     if (sdpResponse.ok) {
       log('SDP answer sent successfully', LOG_LEVELS.ADVANCED);
       startKeepAlive();
-      playIdleVideo();
+      // Wait for the connection to be established before playing the idle video
+      peerConnection.addEventListener('connectionstatechange', () => {
+        if (peerConnection.connectionState === 'connected') {
+          playIdleVideo();
+        }
+      });
     } else {
       throw new Error(`Error sending SDP answer: ${await sdpResponse.text()}`);
     }
@@ -779,8 +774,10 @@ connectButton.onclick = async () => {
     stopAllStreams();
     closePC();
     showErrorMessage('Failed to connect. Please try again.');
+
   }
 };
+
 
 
 function startKeepAlive() {

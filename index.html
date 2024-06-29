@@ -123,20 +123,23 @@
       }
 
       #video-wrapper {
-            width: 512px;
-            height: 512px;
-            border-radius: 50%;
-            overflow: hidden;
-            position: relative;
-            margin: 0 auto;
-        }
-        #video-element, #idle-video {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
+    width: 512px; /* or whatever size you want */
+    height: 512px;
+    border-radius: 50%;
+    overflow: hidden;
+    position: relative;
+    margin: 0 auto;
+  }
+
+  #video-element, #idle-video {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
 
       #video-wrapper div {
         width: 400px;
@@ -157,9 +160,10 @@
     <div id="content">
       <!-- added "id=video-wrapper" -->
       <div id="video-wrapper">
-        <video id="idle-video" src="emma_idle.mp4" loop muted></video>
-        <video id="video-element"></video>
-    </div>
+        <div>
+          <video id="video-element" width="400" height="400" autoplay></video>
+        </div>
+      </div>
       <br />
 
       <!-- added div#buttons -->
@@ -187,9 +191,14 @@
           DID_API_KEY: 'YWRtaW4xQHNrb29wLmRpZ2l0YWw:1FItMzMiqjms0QwfA9g8p',
           GROQ_API_KEY: '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',
           DEEPGRAM_API_KEY: 'ab184815a3899aea7e3add69b9d5b7bc6894dc74',
-         
+          CONTEXT: `You are Emma, an AI assistant created by Skoop Digital. You are helpful, honest, and concise. 
+            Your responses should be brief, typically 1-2 sentences, unless more detail is necessary. 
+            If you're unsure about something, it's okay to say you don't know.`
+
       };
   </script>
   <script type="module" src="agents-client-api.js"></script>
+
+    <script type="module" src="./index.js"></script>
   </body>
 </html>
