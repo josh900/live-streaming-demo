@@ -391,6 +391,55 @@ window.onload = async (event) => {
   }
 };
 
+function setupVideoElements() {
+  const videoWrapper = document.getElementById('video-wrapper');
+  videoWrapper.style.width = `${config.avatarConfig.size.width}px`;
+  videoWrapper.style.height = `${config.avatarConfig.size.height}px`;
+  videoWrapper.style.position = 'relative';
+  videoWrapper.style.overflow = 'hidden';
+
+  videoElement.style.position = 'absolute';
+  videoElement.style.top = '0';
+  videoElement.style.left = '0';
+  videoElement.style.width = '100%';
+  videoElement.style.height = '100%';
+  videoElement.style.objectFit = 'cover';
+
+  const idleVideo = document.createElement('video');
+  idleVideo.id = 'idle-video';
+  idleVideo.style.position = 'absolute';
+  idleVideo.style.top = '0';
+  idleVideo.style.left = '0';
+  idleVideo.style.width = '100%';
+  idleVideo.style.height = '100%';
+  idleVideo.style.objectFit = 'cover';
+  idleVideo.muted = true;
+  idleVideo.loop = true;
+  idleVideo.src = config.idleVideoUrl;
+
+  videoWrapper.appendChild(idleVideo);
+  videoWrapper.appendChild(videoElement);
+}
+
+function crossFade(fromElement, toElement, duration = 500) {
+  fromElement.style.transition = `opacity ${duration}ms ease-in-out`;
+  toElement.style.transition = `opacity ${duration}ms ease-in-out`;
+
+  fromElement.style.opacity = '1';
+  toElement.style.opacity = '0';
+
+  setTimeout(() => {
+    fromElement.style.opacity = '0';
+    toElement.style.opacity = '1';
+  }, 0);
+
+  return new Promise(resolve => {
+    setTimeout(resolve, duration);
+  });
+}
+
+
+
 function initializeIdleVideo() {
   videoElement.src = config.idleVideoUrl;
   videoElement.loop = true;
@@ -403,24 +452,18 @@ function initializeIdleVideo() {
   });
 }
 
+// Update the playIdleVideo function:
 function playIdleVideo() {
-  if (videoElement.src !== config.idleVideoUrl) {
-    videoElement.src = config.idleVideoUrl;
-  }
-  videoElement.srcObject = undefined;
-  videoElement.loop = true;
-  videoElement.muted = true;
-  videoElement.currentTime = 0;
-  
-  videoElement.play().then(() => {
+  const idleVideo = document.getElementById('idle-video');
+  idleVideo.play().then(() => {
     log('Idle video playback started');
+    crossFade(videoElement, idleVideo);
   }).catch(error => {
     console.error('Error playing idle video:', error);
     log("Playback of idle video was prevented:", error);
     showPlayButton();
   });
 }
-
 
 function showPlayButton() {
   const playButton = document.createElement('button');
@@ -437,30 +480,6 @@ function showPlayButton() {
   videoElement.parentElement.appendChild(playButton);
 }
 
-function setVideoElement(stream) {
-  if (!stream) {
-    log('No stream available to set video element');
-    playIdleVideo();
-    return;
-  }
-
-  videoElement.srcObject = stream;
-  videoElement.muted = false;
-  videoElement.loop = false;
-  videoElement.classList.add("animated");
-
-  videoElement.play().then(() => {
-    log('Video playback started');
-  }).catch(e => {
-    console.error('Error playing video:', e);
-    playIdleVideo();
-    showPlayButton();
-  });
-
-  setTimeout(() => {
-    videoElement.classList.remove("animated");
-  }, 300);
-}
 
 // Update the onVideoStatusChange function to use setVideoElement
 
@@ -697,7 +716,8 @@ connectButton.onclick = async () => {
     body: JSON.stringify({
       source_url: config.avatarImageUrl,
       driver_url: 'bank://lively/',
-      output_resolution: 720,
+      output_resolution: config.avatarConfig.size,
+      crop: config.avatarConfig.crop,
       stream_warmup: true,
       config: {
         stitch: true,
@@ -747,6 +767,9 @@ connectButton.onclick = async () => {
   } else {
     console.error('Error sending SDP answer:', await sdpResponse.text());
   }
+
+  // Start playing the idle video once the connection is established
+  playIdleVideo();
 };
 
 function startKeepAlive() {
