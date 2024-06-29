@@ -1,3 +1,4 @@
+
 'use strict';
 import DID_API from './api.js';
 
@@ -85,11 +86,10 @@ function showErrorMessage(message) {
 
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
-    const config = { 
-      iceServers,
+    const config = {
+      iceServers: iceServers,
       sdpSemantics: 'unified-plan'
     };
-
     peerConnection = new RTCPeerConnection(config);
     peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
     peerConnection.addEventListener('icecandidate', onIceCandidate, true);
@@ -97,10 +97,6 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
     peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
     peerConnection.addEventListener('track', onTrack, true);
-
-    // Add transceivers to ensure we receive audio and video
-    peerConnection.addTransceiver('audio', {direction: 'recvonly'});
-    peerConnection.addTransceiver('video', {direction: 'recvonly'});
   }
 
   await peerConnection.setRemoteDescription(offer);
@@ -126,7 +122,7 @@ function onIceCandidate(event) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
     console.log('New ICE candidate:', candidate);
 
-    fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
+    fetch(`${DID_API.url}/talks/streams/${streamId}/ice`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -194,7 +190,7 @@ function onTrack(event) {
     if (peerConnection && event.track) {
       const stats = await peerConnection.getStats(event.track);
       stats.forEach((report) => {
-        if (report.type === 'inbound-rtp' && report.kind === 'video') {
+        if (report.type === 'inbound-rtp' && report.mediaType === 'video') {
           const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
 
           console.log('Video stats:', {
@@ -213,7 +209,7 @@ function onTrack(event) {
         }
       });
     }
-  }, 1000);
+  }, 2000);
 }
 
 function setVideoElement(stream) {
@@ -298,7 +294,7 @@ async function initializeConnection() {
   closePC();
 
   console.log('Initializing connection...');
-  const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+  const sessionResponse = await fetchWithRetries(`${DID_API.url}/talks/streams`, {
     method: 'POST',
     headers: {
       Authorization: `Basic ${DID_API.key}`,
@@ -326,7 +322,7 @@ async function initializeConnection() {
     throw e;
   }
 
-  const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+  const sdpResponse = await fetch(`${DID_API.url}/talks/streams/${streamId}/sdp`, {
     method: 'POST',
     headers: {
       Authorization: `Basic ${DID_API.key}`,
@@ -348,7 +344,7 @@ async function initializeConnection() {
 async function startStreaming(assistantReply) {
   try {
     console.log('Starting streaming with reply:', assistantReply);
-    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+    const playResponse = await fetchWithRetries(`${DID_API.url}/talks/streams/${streamId}`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -358,16 +354,13 @@ async function startStreaming(assistantReply) {
         script: {
           type: 'text',
           input: assistantReply,
-          provider: {
-            type: 'microsoft',
-            voice_id: 'en-US-JennyMultilingualV2Neural'
-          }
         },
         config: {
           fluent: true,
           pad_audio: 0,
-          stitch: true
+          stitch: true,
         },
+        driver_url: 'bank://lively/',
         session_id: sessionId,
       }),
     });
@@ -406,7 +399,7 @@ async function startRecording() {
     });
     mediaRecorder.start(1000);
 
-    // Send KeepAlive message every 3 seconds
+// Send KeepAlive message every 3 seconds
     setInterval(() => {
       if (deepgramSocket.readyState === WebSocket.OPEN) {
         const keepAliveMsg = JSON.stringify({ type: "KeepAlive" });
@@ -568,7 +561,7 @@ connectButton.onclick = initializeConnection;
 const destroyButton = document.getElementById('destroy-button');
 destroyButton.onclick = async () => {
   try {
-    await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+    await fetch(`${DID_API.url}/talks/streams/${streamId}`, {
       method: 'DELETE',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
