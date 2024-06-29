@@ -78,15 +78,20 @@ function playIdleVideo() {
   if (videoElement.src !== config.idleVideoUrl) {
     videoElement.src = config.idleVideoUrl;
   }
+  videoElement.srcObject = undefined;
   videoElement.loop = true;
   videoElement.muted = true;
   videoElement.currentTime = 0;
   
-  videoElement.play().catch(error => {
+  videoElement.play().then(() => {
+    log('Idle video playback started');
+  }).catch(error => {
+    console.error('Error playing idle video:', error);
     log("Playback of idle video was prevented:", error);
     showPlayButton();
   });
 }
+
 
 function showPlayButton() {
   const playButton = document.createElement('button');
@@ -295,15 +300,6 @@ function onTrack(event) {
 }
 
 
-function playIdleVideo() {
-  videoElement.srcObject = undefined;
-  videoElement.src = config.idleVideoUrl;
-  videoElement.loop = true;
-  videoElement.muted = true;
-  videoElement.play().then(() => {
-    log('Idle video playback started');
-  }).catch(e => console.error('Error playing idle video:', e));
-}
 
 function stopAllStreams() {
   if (videoElement.srcObject) {
