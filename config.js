@@ -18,9 +18,5 @@ export default {
   DEEPGRAM_API_KEY: globalConfig.DEEPGRAM_API_KEY || 'ab184815a3899aea7e3add69b9d5b7bc6894dc74',
   idleVideoUrl: 'emma_idle.mp4',
   avatarImageUrl: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg',
-  voiceId: 'en-US-JennyMultilingualV2Neural',
-  context: globalConfig.CONTEXT || `You are a helpful, harmless, and honest assistant named Emma. 
-  You are an AI created by Skoop Digital. Please answer the user's questions briefly and be concise, 
-  not more than 1-2 sentences unless absolutely needed. If you're not sure about an answer, it's okay to say you don't know.`
-
+  voiceId: 'en-US-JennyMultilingualV2Neural'
 };
