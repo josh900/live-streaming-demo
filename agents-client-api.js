@@ -734,6 +734,7 @@ connectButton.onclick = async () => {
       },
     }),
   });
+  
 
   const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
   streamId = newStreamId;
