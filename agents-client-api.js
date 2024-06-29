@@ -395,7 +395,12 @@ function setupVideoElements() {
   const videoWrapper = document.getElementById('video-wrapper');
   videoWrapper.style.width = `${config.avatarConfig.size.width}px`;
   videoWrapper.style.height = `${config.avatarConfig.size.height}px`;
+  videoWrapper.style.position = 'relative';
+  videoWrapper.style.overflow = 'hidden';
 
+  videoElement.style.position = 'absolute';
+  videoElement.style.top = '0';
+  videoElement.style.left = '0';
   videoElement.style.width = '100%';
   videoElement.style.height = '100%';
   videoElement.style.objectFit = 'cover';
@@ -601,10 +606,7 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   let status;
   if (videoIsPlaying) {
     status = 'streaming';
-    if (stream) {
-      videoElement.srcObject = stream;
-      videoElement.play().catch(e => console.error('Error playing video:', e));
-    }
+    setVideoElement(stream);
   } else {
     status = 'empty';
     playIdleVideo();
@@ -613,6 +615,7 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   streamingStatusLabel.className = 'streamingState-' + status;
   log(`Video status changed to: ${status}`);
 }
+
 
 function onTrack(event) {
   log('onTrack event:', event);
