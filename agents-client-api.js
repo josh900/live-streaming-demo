@@ -707,70 +707,71 @@ connectButton.onclick = async () => {
   stopAllStreams();
   closePC();
 
-  try {
-    const sessionResponse = await fetchWithRetries(`${config.DID_API.url}/${config.DID_API.service}/streams`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${config.DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        source_url: config.avatarImageUrl,
-        driver_url: 'bank://lively/',
-        output_format: 'h264',
-        stream_width: config.avatarConfig.size.width,
-        stream_height: config.avatarConfig.size.height,
-        config: {
-          stitch: true,
-          fluent: true,
-          pad_audio: 0,
-          auto_match: true,
-          driver_expressions: {
-            attention: 0.3,
-            surprise: 0.3,
-          },
-          motion_factor: 0.8,
-          normalization_factor: 0.8,
-          sharpen: true,
+  const sessionResponse = await fetchWithRetries(`${config.DID_API.url}/${config.DID_API.service}/streams`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${config.DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      source_url: config.avatarImageUrl,
+      driver_url: 'bank://lively/',
+      output_resolution: config.avatarConfig.size,
+      crop: config.avatarConfig.crop,
+      stream_warmup: true,
+      config: {
+        stitch: true,
+        fluent: true,
+        pad_audio: 0,
+        auto_match: true,
+        driver_expressions: {
+          attention: 0.3,
+          surprise: 0.3,
         },
-      }),
-    });
-
-    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
-    streamId = newStreamId;
-    sessionId = newSessionId;
-    log(`Stream created with ID: ${streamId}`, LOG_LEVELS.ADVANCED);
-
-    sessionClientAnswer = await createPeerConnection(offer, iceServers);
-
-    const sdpResponse = await fetch(`${config.DID_API.url}/${config.DID_API.service}/streams/${streamId}/sdp`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${config.DID_API.key}`,
-        'Content-Type': 'application/json',
+        motion_factor: 0.8,
+        normalization_factor: 0.8,
+        sharpen: true,
       },
-      body: JSON.stringify({
-        answer: sessionClientAnswer,
-        session_id: sessionId,
-      }),
-    });
+    }),
+  });
+  
 
-    if (sdpResponse.ok) {
-      log('SDP answer sent successfully', LOG_LEVELS.ADVANCED);
-      startKeepAlive();
-      playIdleVideo();
-    } else {
-      throw new Error(`Error sending SDP answer: ${await sdpResponse.text()}`);
-    }
-  } catch (error) {
-    console.error('Error during streaming setup:', error);
+  const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+  streamId = newStreamId;
+  sessionId = newSessionId;
+  log(`Stream created with ID: ${streamId}`, LOG_LEVELS.ADVANCED);
+
+  try {
+    sessionClientAnswer = await createPeerConnection(offer, iceServers);
+  } catch (e) {
+    console.error('Error during streaming setup', e);
     stopAllStreams();
     closePC();
-    showErrorMessage('Failed to connect. Please try again.');
+    return;
   }
+
+  const sdpResponse = await fetch(`${config.DID_API.url}/${config.DID_API.service}/streams/${streamId}/sdp`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${config.DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      answer: sessionClientAnswer,
+      session_id: sessionId,
+    }),
+  });
+
+  if (sdpResponse.ok) {
+    log('SDP answer sent successfully', LOG_LEVELS.ADVANCED);
+    startKeepAlive();
+  } else {
+    console.error('Error sending SDP answer:', await sdpResponse.text());
+  }
+
+  // Start playing the idle video once the connection is established
+  playIdleVideo();
 };
-
-
 
 function startKeepAlive() {
   if (keepAliveInterval) {
