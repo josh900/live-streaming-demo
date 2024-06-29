@@ -113,14 +113,22 @@ function setVideoElement(stream) {
   videoElement.srcObject = stream;
   videoElement.muted = false;
   videoElement.loop = false;
+  videoElement.classList.add("animated");
 
   videoElement.play().then(() => {
     log('Video playback started');
   }).catch(e => {
     console.error('Error playing video:', e);
+    playIdleVideo();
     showPlayButton();
   });
+
+  setTimeout(() => {
+    videoElement.classList.remove("animated");
+  }, 300);
 }
+
+// Update the onVideoStatusChange function to use setVideoElement
 
 function showLoadingSymbol() {
   const loadingSymbol = document.createElement('div');
@@ -251,6 +259,7 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   log(`Video status changed to: ${status}`);
 }
 
+
 function onTrack(event) {
   log('onTrack event:', event);
   if (!event.track) return;
@@ -285,27 +294,6 @@ function onTrack(event) {
   setVideoElement(event.streams[0]);
 }
 
-function setVideoElement(stream) {
-  if (!stream) {
-    log('No stream available to set video element');
-    return;
-  }
-
-  videoElement.srcObject = stream;
-  videoElement.muted = false;
-  videoElement.classList.add("animated");
-
-  videoElement.play().then(() => {
-    log('Video playback started');
-  }).catch(e => {
-    console.error('Error playing video:', e);
-    playIdleVideo();
-  });
-
-  setTimeout(() => {
-    videoElement.classList.remove("animated");
-  }, 300);
-}
 
 function playIdleVideo() {
   videoElement.srcObject = undefined;
