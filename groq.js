@@ -1,7 +1,7 @@
 import Logger from './logger.js';
 import DID_API from './api.js';
 
-const logger = new Logger('INFO');
+const logger = new Logger('DEBUG');
 
 const GROQ_API_KEY = DID_API.groqKey;
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';

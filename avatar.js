@@ -1,6 +1,6 @@
 import Logger from './logger.js';
 
-const logger = new Logger('INFO');
+const logger = new Logger('DEBUG');
 
 export function initializeAvatar() {
   logger.log('Initializing avatar');
