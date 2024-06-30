@@ -47,9 +47,16 @@ wss.on('connection', (ws) => {
 
             switch (data.type) {
                 case 'transcription':
-                    // Process transcription with Groq
-                    const response = await processChat(data.text);
-                    ws.send(JSON.stringify({ type: 'groq_response', response }));
+                    try {
+                        // For non-streaming response:
+                        // const response = await processChat(data.text);
+                        // Or for streaming response:
+                        const response = await sendStreamingRequest(data.text);
+                        ws.send(JSON.stringify({ type: 'groq_response', response }));
+                    } catch (error) {
+                        console.error('Error processing chat:', error);
+                        ws.send(JSON.stringify({ type: 'error', message: 'Failed to process chat' }));
+                    }
                     break;
 
                 case 'avatar_update':
