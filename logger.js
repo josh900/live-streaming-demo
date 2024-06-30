@@ -1,23 +1,47 @@
+
 class Logger {
   constructor(level = 'INFO') {
     this.level = level;
+    this.levels = {
+      ERROR: 0,
+      WARN: 1,
+      INFO: 2,
+      DEBUG: 3
+    };
   }
-
+  
+  shouldLog(messageLevel) {
+    return this.levels[messageLevel] <= this.levels[this.level];
+  }
+  
+  formatMessage(level, ...args) {
+    const timestamp = new Date().toISOString();
+    return `[${timestamp}] [${level}] ${args.join(' ')}`;
+  }
+  
   log(...args) {
-    if (this.level === 'INFO' || this.level === 'DEBUG') {
-      console.log(...args);
+    if (this.shouldLog('INFO')) {
+      console.log(this.formatMessage('INFO', ...args));
     }
   }
-
+  
   error(...args) {
-    console.error(...args);
-  }
-
-  debug(...args) {
-    if (this.level === 'DEBUG') {
-      console.debug(...args);
+    if (this.shouldLog('ERROR')) {
+      console.error(this.formatMessage('ERROR', ...args));
     }
   }
-}
-
-export default Logger;
+  
+  warn(...args) {
+    if (this.shouldLog('WARN')) {
+      console.warn(this.formatMessage('WARN', ...args));
+    }
+  }
+  
+  debug(...args) {
+    if (this.shouldLog('DEBUG')) {
+      console.debug(this.formatMessage('DEBUG', ...args));
+    }
+  }
+  }
+  
+  export default Logger;
