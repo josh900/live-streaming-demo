@@ -12,12 +12,12 @@ if (!GROQ_API_KEY) {
     process.exit(1);
 }
 
-async function initializeGroq() {
-    logger.log('Groq API initialized');
-    return true;
+export async function initializeGroq() {
+  logger.log('Groq API initialized');
+  return true;
 }
 
-async function sendChatToGroq(message) {
+export async function sendChatToGroq(message) {
     logger.log('Sending chat to Groq:', message);
     try {
         const response = await fetch(GROQ_API_URL, {
@@ -46,37 +46,31 @@ async function sendChatToGroq(message) {
     }
 }
 
-async function processChat(message) {
-    try {
-        const stream = await sendChatToGroq(message);
-        let fullResponse = '';
+export async function processChat(message) {
+  try {
+    const stream = await sendChatToGroq(message);
+    let fullResponse = '';
 
-        for await (const chunk of stream) {
-            const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
-            for (const line of lines) {
-                const trimmedLine = line.replace(/^data: /, '');
-                if (trimmedLine === '[DONE]') {
-                    return fullResponse.trim();
-                }
-                try {
-                    const parsed = JSON.parse(trimmedLine);
-                    const content = parsed.choices[0]?.delta?.content || '';
-                    fullResponse += content;
-                } catch (error) {
-                    console.error('Error parsing JSON:', error);
-                }
-            }
+    for await (const chunk of stream) {
+      const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
+      for (const line of lines) {
+        const trimmedLine = line.replace(/^data: /, '');
+        if (trimmedLine === '[DONE]') {
+          return fullResponse.trim();
         }
-
-        return fullResponse.trim();
-    } catch (error) {
-        logger.error('Error processing chat with Groq:', error);
-        throw error;
+        try {
+          const parsed = JSON.parse(trimmedLine);
+          const content = parsed.choices[0]?.delta?.content || '';
+          fullResponse += content;
+        } catch (error) {
+          console.error('Error parsing JSON:', error);
+        }
+      }
     }
-}
 
-module.exports = {
-    initializeGroq,
-    sendChatToGroq,
-    processChat
-};
+    return fullResponse.trim();
+  } catch (error) {
+    logger.error('Error processing chat with Groq:', error);
+    throw error;
+  }
+}
