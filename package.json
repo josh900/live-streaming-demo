@@ -2,6 +2,7 @@
   "name": "live-streaming-demo",
   "version": "1.0.0",
   "description": "D-ID live streaming demo with Groq integration",
+  "type": "module",
   "main": "app.js",
   "scripts": {
     "dev": "node app.js"

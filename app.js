@@ -1,10 +1,14 @@
-const express = require('express');
-const http = require('http');
-const WebSocket = require('ws');
-const cors = require('cors');
-const path = require('path');
-const { processChat, initializeGroq } = require('./groq');
-const DID_API = require('./api.js');
+import express from 'express';
+import http from 'http';
+import { WebSocketServer } from 'ws';
+import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { processChat, initializeGroq } from './groq.js';
+import DID_API from './api.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const port = process.env.PORT || 3000;
 
@@ -28,7 +32,7 @@ app.get('/agents', (req, res) => {
 const server = http.createServer(app);
 
 // Create WebSocket server
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocketServer({ server });
 
 // Initialize Groq
 initializeGroq().catch(error => {
