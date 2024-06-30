@@ -1,6 +1,6 @@
-const fetch = require('node-fetch');
-const DID_API = require('./api.js');
-const Logger = require('./logger.js');
+import fetch from 'node-fetch';
+import Logger from './logger.js';
+import DID_API from './api.js';
 
 const logger = new Logger('INFO');
 
