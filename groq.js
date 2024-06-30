@@ -1,11 +1,12 @@
 const WebSocket = require('ws');
 const fetch = require('node-fetch');
+const DID_API = require('./api.js');
 
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_API_KEY = DID_API.groqKey;
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 if (!GROQ_API_KEY) {
-    console.error('GROQ_API_KEY is not set. Please set it as an environment variable.');
+    console.error('GROQ_API_KEY is not set in api.js. Please set it and restart the server.');
     process.exit(1);
 }
 
