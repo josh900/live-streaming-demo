@@ -162,6 +162,16 @@ function updateAvatar(imageUrl) {
   ws.send(JSON.stringify({ type: 'avatar_update', imageUrl }));
 }
 
+// Show error message
+function showErrorMessage(message) {
+  logger.error(message);
+  const errorElement = document.createElement('div');
+  errorElement.textContent = message;
+  errorElement.style.color = 'red';
+  errorElement.style.marginTop = '10px';
+  document.body.appendChild(errorElement);
+}
+
 // Initialize the application when the page loads
 window.onload = initialize;
 
