@@ -3,7 +3,7 @@ const http = require('http');
 const WebSocket = require('ws');
 const cors = require('cors');
 const path = require('path');
-const { processChat } = require('./groq');
+const { processChat, initializeGroq } = require('./groq');
 const DID_API = require('./api.js');
 
 const port = process.env.PORT || 3000;
@@ -30,6 +30,12 @@ const server = http.createServer(app);
 // Create WebSocket server
 const wss = new WebSocket.Server({ server });
 
+// Initialize Groq
+initializeGroq(DID_API.groqKey).catch(error => {
+    console.error('Failed to initialize Groq:', error);
+    process.exit(1);
+});
+
 // WebSocket connection handler
 wss.on('connection', (ws) => {
     console.log('New WebSocket connection established');
@@ -41,16 +47,9 @@ wss.on('connection', (ws) => {
 
             switch (data.type) {
                 case 'transcription':
-                    try {
-                        // For non-streaming response:
-                        //const response = await processChat(data.text);
-                        // Or for streaming response:
-                        const response = await sendStreamingRequest(data.text);
-                        ws.send(JSON.stringify({ type: 'groq_response', response }));
-                    } catch (error) {
-                        console.error('Error processing chat:', error);
-                        ws.send(JSON.stringify({ type: 'error', message: 'Failed to process chat' }));
-                    }
+                    // Process transcription with Groq
+                    const response = await processChat(data.text);
+                    ws.send(JSON.stringify({ type: 'groq_response', response }));
                     break;
 
                 case 'avatar_update':
@@ -85,9 +84,6 @@ app.use((err, req, res, next) => {
 server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
     console.log(`WebSocket server is running on ws://localhost:${port}`);
-    console.log('Using D-ID API key:', DID_API.key);
-    console.log('Using Groq API key:', DID_API.groqKey);
-    console.log('Using Deepgram API key:', DID_API.deepgramKey);
 });
 
 // Graceful shutdown
