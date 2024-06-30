@@ -5,12 +5,41 @@ const logger = new Logger('INFO');
 let deepgramSocket;
 let audioContext;
 let mediaStream;
-let mediaRecorder;
 let audioInput;
-let processor;
+let workletNode;
 
 const SAMPLE_RATE = 16000;
-const SAMPLE_SIZE = 16;
+
+// First, we need to define the AudioWorklet processor
+const workletCode = `
+class DeepgramProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.bufferSize = 1024;
+    this.buffer = new Float32Array(this.bufferSize);
+    this.bufferIndex = 0;
+  }
+
+  process(inputs, outputs, parameters) {
+    const input = inputs[0];
+    const channel = input[0];
+
+    for (let i = 0; i < channel.length; i++) {
+      this.buffer[this.bufferIndex] = channel[i];
+      this.bufferIndex++;
+
+      if (this.bufferIndex === this.bufferSize) {
+        this.port.postMessage(this.buffer);
+        this.bufferIndex = 0;
+      }
+    }
+
+    return true;
+  }
+}
+
+registerProcessor('deepgram-processor', DeepgramProcessor);
+`;
 
 export async function initializeDeepgram(apiKey, onTranscriptionReceived) {
     logger.log('Initializing Deepgram');
@@ -46,38 +75,40 @@ export async function initializeDeepgram(apiKey, onTranscriptionReceived) {
     deepgramSocket.onclose = () => logger.log('Deepgram WebSocket closed');
     deepgramSocket.onerror = (error) => logger.error('Deepgram WebSocket error:', error);
 
-    // Initialize AudioContext only after user interaction
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    audioContext.suspend(); // Suspend until user interacts
+    // Initialize AudioContext
+    audioContext = new (window.AudioContext || window.webkitAudioContext)({sampleRate: SAMPLE_RATE});
 }
 
 export async function startRecording() {
     logger.log('Starting recording');
     try {
-        await audioContext.resume(); // Resume AudioContext
+        if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)({sampleRate: SAMPLE_RATE});
+        }
+        await audioContext.resume();
+
+        // Add the AudioWorklet module
+        const blob = new Blob([workletCode], { type: 'application/javascript' });
+        const workletUrl = URL.createObjectURL(blob);
+        await audioContext.audioWorklet.addModule(workletUrl);
+
         mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         
-        const gainNode = audioContext.createGain();
-        gainNode.gain.value = 1.0;
-
         audioInput = audioContext.createMediaStreamSource(mediaStream);
-        audioInput.connect(gainNode);
 
-        processor = audioContext.createScriptProcessor(1024, 1, 1);
-        gainNode.connect(processor);
-        processor.connect(audioContext.destination);
-
-        processor.onaudioprocess = (e) => {
+        workletNode = new AudioWorkletNode(audioContext, 'deepgram-processor');
+        workletNode.port.onmessage = (event) => {
             if (deepgramSocket.readyState === WebSocket.OPEN) {
-                const inputData = e.inputBuffer.getChannelData(0);
-                const downsampledBuffer = downsampleBuffer(inputData, SAMPLE_RATE);
-                const intData = new Int16Array(downsampledBuffer.length);
-                for (let i = 0; i < downsampledBuffer.length; i++) {
-                    intData[i] = Math.max(-1, Math.min(1, downsampledBuffer[i])) * 0x7FFF;
+                const floatData = event.data;
+                const intData = new Int16Array(floatData.length);
+                for (let i = 0; i < floatData.length; i++) {
+                    intData[i] = Math.max(-1, Math.min(1, floatData[i])) * 0x7FFF;
                 }
                 deepgramSocket.send(intData.buffer);
             }
         };
+
+        audioInput.connect(workletNode).connect(audioContext.destination);
 
         logger.log('Recording started successfully');
     } catch (error) {
@@ -91,42 +122,17 @@ export async function stopRecording() {
     if (mediaStream) {
         mediaStream.getTracks().forEach(track => track.stop());
     }
-    if (processor) {
-        processor.disconnect();
+    if (workletNode) {
+        workletNode.disconnect();
+    }
+    if (audioInput) {
         audioInput.disconnect();
     }
     if (deepgramSocket && deepgramSocket.readyState === WebSocket.OPEN) {
         deepgramSocket.close();
     }
-    await audioContext.suspend(); // Suspend AudioContext
+    await audioContext.suspend();
     logger.log('Recording stopped');
-}
-
-function downsampleBuffer(buffer, targetSampleRate) {
-    if (targetSampleRate === audioContext.sampleRate) {
-        return buffer;
-    }
-    
-    const sampleRateRatio = audioContext.sampleRate / targetSampleRate;
-    const newLength = Math.round(buffer.length / sampleRateRatio);
-    const result = new Float32Array(newLength);
-    
-    let offsetResult = 0;
-    let offsetBuffer = 0;
-    
-    while (offsetResult < result.length) {
-        const nextOffsetBuffer = Math.round((offsetResult + 1) * sampleRateRatio);
-        let accum = 0, count = 0;
-        for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
-            accum += buffer[i];
-            count++;
-        }
-        result[offsetResult] = accum / count;
-        offsetResult++;
-        offsetBuffer = nextOffsetBuffer;
-    }
-    
-    return result;
 }
 
 export function isDeepgramConnected() {
