@@ -78,12 +78,6 @@ wss.on('connection', (ws) => {
     });
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).send('Something broke!');
-});
-
 // Start the server
 server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);

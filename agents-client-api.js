@@ -87,16 +87,25 @@ function stopKeepAlive() {
 }
 
 async function initialize() {
-    logger.log('Initializing application');
-    initializeWebSocket();
-    await initializeConnection();
-    await initializeGroq(DID_API.groqKey);
-    initializeAvatar();
-    
-    // Initialize Deepgram after user interaction
-    document.getElementById('start-button').addEventListener('click', async () => {
-        await initializeDeepgram(DID_API.deepgramKey, onTranscriptionReceived);
-    });
+  logger.log('Initializing application');
+  initializeWebSocket();
+  await initializeConnection();
+  await initializeGroq(DID_API.groqKey);
+  initializeAvatar();
+  
+  // Initialize Deepgram after user interaction
+  document.getElementById('start-button').addEventListener('click', async () => {
+      if (!isRecording) {
+          await initializeDeepgram(DID_API.deepgramKey, onTranscriptionReceived);
+          await startRecording();
+          isRecording = true;
+          document.getElementById('start-button').textContent = 'Stop';
+      } else {
+          await stopRecording();
+          isRecording = false;
+          document.getElementById('start-button').textContent = 'Start';
+      }
+  });
 }
 
 const startButton = document.getElementById('start-button');
