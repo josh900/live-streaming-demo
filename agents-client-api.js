@@ -6,7 +6,7 @@ import { initializeDeepgram, startRecording, stopRecording } from './deepgram.js
 import { initializeGroq, sendChatToGroq } from './groq.js';
 import { initializeAvatar, updateAvatarAppearance } from './avatar.js';
 
-const logger = new Logger('DEBUG');
+const logger = new Logger('INFO');
 
 let peerConnection;
 let streamId;
@@ -129,7 +129,7 @@ async function handleStartButtonClick() {
         } catch (error) {
             logger.error('Failed to start recording:', error);
             startButton.textContent = 'Start';
-            alert('Failed to start recording. Please check your internet connection and try again.');
+            showErrorMessage('Failed to start recording. Please check your internet connection and try again.');
         }
     } else {
         logger.log('Stopping recording');
