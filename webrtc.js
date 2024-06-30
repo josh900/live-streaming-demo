@@ -1,6 +1,6 @@
 import Logger from './logger.js';
 
-const logger = new Logger('DEBUG');
+const logger = new Logger('INFO');
 
 export async function initializeWebRTC(DID_API) {
     logger.log('Initializing WebRTC');

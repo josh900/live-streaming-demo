@@ -6,7 +6,7 @@ import { initializeDeepgram, startRecording, stopRecording } from './deepgram.js
 import { initializeGroq, sendChatToGroq } from './groq.js';
 import { initializeAvatar, updateAvatarAppearance } from './avatar.js';
 
-const logger = new Logger('DEBUG');
+const logger = new Logger('INFO');
 
 let peerConnection;
 let streamId;

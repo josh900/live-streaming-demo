@@ -1,6 +1,6 @@
 import Logger from './logger.js';
 
-const logger = new Logger('DEBUG');
+const logger = new Logger('INFO');
 
 let deepgramSocket;
 let audioContext;
