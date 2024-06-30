@@ -46,18 +46,19 @@ export async function initializeDeepgram(apiKey, onTranscriptionReceived) {
     deepgramSocket.onclose = () => logger.log('Deepgram WebSocket closed');
     deepgramSocket.onerror = (error) => logger.error('Deepgram WebSocket error:', error);
 
-    // Initialize AudioContext
+    // Initialize AudioContext only after user interaction
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    audioContext.suspend(); // Suspend until user interacts
 }
 
 export async function startRecording() {
     logger.log('Starting recording');
     try {
+        await audioContext.resume(); // Resume AudioContext
         mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         
-        // Create a gain node to control volume
         const gainNode = audioContext.createGain();
-        gainNode.gain.value = 1.0; // Adjust this value to change input volume
+        gainNode.gain.value = 1.0;
 
         audioInput = audioContext.createMediaStreamSource(mediaStream);
         audioInput.connect(gainNode);
@@ -97,6 +98,7 @@ export async function stopRecording() {
     if (deepgramSocket && deepgramSocket.readyState === WebSocket.OPEN) {
         deepgramSocket.close();
     }
+    await audioContext.suspend(); // Suspend AudioContext
     logger.log('Recording stopped');
 }
 

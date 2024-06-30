@@ -34,8 +34,7 @@ export async function initializeWebRTC(DID_API) {
 export async function createPeerConnection(offer, iceServers) {
     logger.log('Creating peer connection');
     const peerConnection = new RTCPeerConnection({
-        iceServers: iceServers || [{ urls: ['stun:stun.l.google.com:19302'] }],
-        sdpSemantics: 'unified-plan'
+        iceServers: iceServers || [{ urls: ['stun:stun.l.google.com:19302'] }]
     });
 
     peerConnection.addEventListener('icegatheringstatechange', () => {
@@ -103,14 +102,12 @@ export async function handleNegotiationNeeded(peerConnection) {
     try {
         const offer = await peerConnection.createOffer();
         await peerConnection.setLocalDescription(offer);
-        // Here you would typically send this offer to the other peer
         logger.log('New offer created and set as local description');
     } catch (error) {
         logger.error('Error during negotiation:', error);
     }
 }
 
-// Utility function to set up media stream
 export async function setupMediaStream(peerConnection) {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
