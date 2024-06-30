@@ -1,4 +1,3 @@
-import fetch from 'node-fetch';
 import Logger from './logger.js';
 import DID_API from './api.js';
 
@@ -51,8 +50,12 @@ export async function processChat(message) {
     const stream = await sendChatToGroq(message);
     let fullResponse = '';
 
-    for await (const chunk of stream) {
-      const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
+    const reader = stream.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = new TextDecoder().decode(value);
+      const lines = chunk.split('\n').filter(line => line.trim() !== '');
       for (const line of lines) {
         const trimmedLine = line.replace(/^data: /, '');
         if (trimmedLine === '[DONE]') {
