@@ -1,12 +1,11 @@
-'use strict';
 import DID_API from './api.js';
 import Logger from './logger.js';
-import { initializeWebRTC, createPeerConnection } from './webrtc.js';
+import { initializeWebRTC, createPeerConnection, handleNegotiationNeeded } from './webrtc.js';
 import { initializeDeepgram, startRecording, stopRecording } from './deepgram.js';
 import { initializeGroq, sendChatToGroq } from './groq.js';
 import { initializeAvatar, updateAvatarAppearance } from './avatar.js';
 
-const logger = new Logger('INFO');
+const logger = new Logger('DEBUG');
 
 let peerConnection;
 let streamId;
@@ -49,17 +48,31 @@ function initializeWebSocket() {
 }
 
 async function initializeConnection() {
-    logger.log('Initializing WebRTC connection');
-    try {
-        const { newStreamId, newSessionId, offer, iceServers } = await initializeWebRTC(DID_API);
-        streamId = newStreamId;
-        sessionId = newSessionId;
-        peerConnection = await createPeerConnection(offer, iceServers);
-        startKeepAlive();
-    } catch (error) {
-        logger.error('Error initializing connection:', error);
-        showErrorMessage('Failed to connect. Please try again.');
-    }
+  logger.log('Initializing WebRTC connection');
+  try {
+      const { newStreamId, newSessionId, offer, iceServers } = await initializeWebRTC(DID_API);
+      streamId = newStreamId;
+      sessionId = newSessionId;
+      peerConnection = await createPeerConnection(offer, iceServers);
+
+      // Add event listener for negotiationneeded
+      peerConnection.addEventListener('negotiationneeded', () => {
+          handleNegotiationNeeded(peerConnection, DID_API, streamId, sessionId);
+      });
+
+      startKeepAlive();
+
+      // Set a timeout to check if the connection was successful
+      setTimeout(() => {
+          if (peerConnection.iceConnectionState !== 'connected' && peerConnection.iceConnectionState !== 'completed') {
+              logger.error('WebRTC connection failed to establish within the timeout period');
+              showErrorMessage('Failed to establish a connection. Please check your network and try again.');
+          }
+      }, 30000); // 30 seconds timeout
+  } catch (error) {
+      logger.error('Error initializing connection:', error);
+      showErrorMessage('Failed to connect. Please try again.');
+  }
 }
 
 function startKeepAlive() {

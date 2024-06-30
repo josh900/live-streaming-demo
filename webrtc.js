@@ -34,13 +34,16 @@ export async function initializeWebRTC(DID_API) {
 export async function createPeerConnection(offer, iceServers) {
     logger.log('Creating peer connection');
     const peerConnection = new RTCPeerConnection({
-        iceServers: iceServers || [
+        iceServers: [
+            ...iceServers,
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
             { urls: 'stun:stun2.l.google.com:19302' },
             { urls: 'stun:stun3.l.google.com:19302' },
             { urls: 'stun:stun4.l.google.com:19302' },
-        ]
+        ],
+        iceTransportPolicy: 'all',
+        iceCandidatePoolSize: 10,
     });
 
     peerConnection.addEventListener('icegatheringstatechange', () => {
@@ -49,10 +52,18 @@ export async function createPeerConnection(offer, iceServers) {
 
     peerConnection.addEventListener('iceconnectionstatechange', () => {
         logger.log('ICE connection state:', peerConnection.iceConnectionState);
+        if (peerConnection.iceConnectionState === 'failed') {
+            logger.error('ICE connection failed. Attempting to restart ICE.');
+            peerConnection.restartIce();
+        }
     });
 
     peerConnection.addEventListener('connectionstatechange', () => {
         logger.log('Connection state:', peerConnection.connectionState);
+        if (peerConnection.connectionState === 'failed') {
+            logger.error('Connection failed. Attempting to recreate peer connection.');
+            recreatePeerConnection(offer, iceServers);
+        }
     });
 
     peerConnection.addEventListener('signalingstatechange', () => {
@@ -93,10 +104,19 @@ export async function createPeerConnection(offer, iceServers) {
     }
 }
 
+async function recreatePeerConnection(offer, iceServers) {
+    logger.log('Recreating peer connection');
+    if (peerConnection) {
+        peerConnection.close();
+    }
+    peerConnection = await createPeerConnection(offer, iceServers);
+}
+
 export function addIceCandidate(peerConnection, candidate) {
     if (candidate) {
         logger.log('Adding ICE candidate');
-        return peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        return peerConnection.addIceCandidate(new RTCIceCandidate(candidate))
+            .catch(error => logger.error('Error adding ICE candidate:', error));
     }
 }
 
@@ -107,12 +127,31 @@ export function closePeerConnection(peerConnection) {
     }
 }
 
-export async function handleNegotiationNeeded(peerConnection) {
+export async function handleNegotiationNeeded(peerConnection, DID_API, streamId, sessionId) {
     logger.log('Handling negotiation needed event');
     try {
         const offer = await peerConnection.createOffer();
         await peerConnection.setLocalDescription(offer);
         logger.log('New offer created and set as local description');
+
+        // Send the new offer to the D-ID API
+        const response = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+            method: 'POST',
+            headers: {
+                Authorization: `Basic ${DID_API.key}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                answer: peerConnection.localDescription,
+                session_id: sessionId,
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to send new offer to D-ID API: ${response.status}`);
+        }
+
+        logger.log('New offer sent to D-ID API successfully');
     } catch (error) {
         logger.error('Error during negotiation:', error);
     }
