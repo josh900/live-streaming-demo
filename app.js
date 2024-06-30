@@ -31,7 +31,7 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 // Initialize Groq
-initializeGroq(DID_API.groqKey).catch(error => {
+initializeGroq().catch(error => {
     console.error('Failed to initialize Groq:', error);
     process.exit(1);
 });
@@ -47,15 +47,10 @@ wss.on('connection', (ws) => {
 
             switch (data.type) {
                 case 'transcription':
-                    try {
-                        // For non-streaming response:
-                        // const response = await processChat(data.text);
-                        // Or for streaming response:
-                        const response = await sendStreamingRequest(data.text);
-                        ws.send(JSON.stringify({ type: 'groq_response', response }));
-                    } catch (error) {
-                        console.error('Error processing chat:', error);
-                        ws.send(JSON.stringify({ type: 'error', message: 'Failed to process chat' }));
+                    // Process transcription with Groq
+                    const responseStream = await processChat(data.text);
+                    for await (const chunk of responseStream) {
+                        ws.send(JSON.stringify({ type: 'groq_response', response: chunk }));
                     }
                     break;
 

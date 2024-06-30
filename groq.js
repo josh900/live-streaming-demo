@@ -1,6 +1,4 @@
-'use strict';
-
-const WebSocket = require('ws');
+const fetch = require('node-fetch');
 const DID_API = require('./api.js');
 const Logger = require('./logger.js');
 
@@ -14,69 +12,13 @@ if (!GROQ_API_KEY) {
     process.exit(1);
 }
 
-let groqSocket;
-
-function initializeGroq(apiKey) {
-    return new Promise((resolve, reject) => {
-        groqSocket = new WebSocket('wss://api.groq.com/v1/streaming/completions');
-
-        groqSocket.on('open', () => {
-            logger.log('Groq WebSocket opened');
-            groqSocket.send(JSON.stringify({ type: 'authentication', api_key: apiKey }));
-            resolve();
-        });
-
-        groqSocket.on('close', () => logger.log('Groq WebSocket closed'));
-        groqSocket.on('error', (error) => {
-            logger.error('Groq WebSocket error:', error);
-            reject(error);
-        });
-    });
+async function initializeGroq() {
+    logger.log('Groq API initialized');
+    return true;
 }
 
 async function sendChatToGroq(message) {
     logger.log('Sending chat to Groq:', message);
-    return new Promise((resolve, reject) => {
-        if (groqSocket.readyState !== WebSocket.OPEN) {
-            reject(new Error('Groq WebSocket is not open'));
-            return;
-        }
-
-        groqSocket.send(JSON.stringify({
-            type: 'chat',
-            messages: [{ role: 'user', content: message }],
-            model: 'mixtral-8x7b-32768',
-            temperature: 0.7,
-            max_tokens: 150,
-            stream: true
-        }));
-
-        let fullResponse = '';
-
-        const messageHandler = (event) => {
-            const response = JSON.parse(event.data);
-            if (response.type === 'chat_token') {
-                fullResponse += response.token;
-            } else if (response.type === 'chat_complete') {
-                groqSocket.removeListener('message', messageHandler);
-                resolve(fullResponse);
-            } else if (response.type === 'error') {
-                groqSocket.removeListener('message', messageHandler);
-                reject(new Error(response.error));
-            }
-        };
-
-        groqSocket.on('message', messageHandler);
-    });
-}
-
-function closeGroqConnection() {
-    if (groqSocket && groqSocket.readyState === WebSocket.OPEN) {
-        groqSocket.close();
-    }
-}
-
-async function processChat(message) {
     try {
         const response = await fetch(GROQ_API_URL, {
             method: 'POST',
@@ -89,7 +31,7 @@ async function processChat(message) {
                 messages: [{ role: 'user', content: message }],
                 temperature: 0.7,
                 max_tokens: 150,
-                stream: false
+                stream: true
             })
         });
 
@@ -97,8 +39,36 @@ async function processChat(message) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        const data = await response.json();
-        return data.choices[0].message.content;
+        return response.body;
+    } catch (error) {
+        logger.error('Error sending chat to Groq:', error);
+        throw error;
+    }
+}
+
+async function processChat(message) {
+    try {
+        const stream = await sendChatToGroq(message);
+        let fullResponse = '';
+
+        for await (const chunk of stream) {
+            const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
+            for (const line of lines) {
+                const trimmedLine = line.replace(/^data: /, '');
+                if (trimmedLine === '[DONE]') {
+                    return fullResponse.trim();
+                }
+                try {
+                    const parsed = JSON.parse(trimmedLine);
+                    const content = parsed.choices[0]?.delta?.content || '';
+                    fullResponse += content;
+                } catch (error) {
+                    console.error('Error parsing JSON:', error);
+                }
+            }
+        }
+
+        return fullResponse.trim();
     } catch (error) {
         logger.error('Error processing chat with Groq:', error);
         throw error;
@@ -108,6 +78,5 @@ async function processChat(message) {
 module.exports = {
     initializeGroq,
     sendChatToGroq,
-    closeGroqConnection,
     processChat
 };
