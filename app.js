@@ -12,7 +12,7 @@ const app = express();
 
 // Middleware
 app.use(cors());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname));
 app.use(express.json());
 
 // Routes
@@ -48,10 +48,8 @@ wss.on('connection', (ws) => {
             switch (data.type) {
                 case 'transcription':
                     // Process transcription with Groq
-                    const responseStream = await processChat(data.text);
-                    for await (const chunk of responseStream) {
-                        ws.send(JSON.stringify({ type: 'groq_response', response: chunk }));
-                    }
+                    const response = await processChat(data.text);
+                    ws.send(JSON.stringify({ type: 'groq_response', response }));
                     break;
 
                 case 'avatar_update':
