@@ -66,7 +66,7 @@ export async function processChat(message) {
           const content = parsed.choices[0]?.delta?.content || '';
           fullResponse += content;
         } catch (error) {
-          console.error('Error parsing JSON:', error);
+          logger.error('Error parsing JSON:', error);
         }
       }
     }
