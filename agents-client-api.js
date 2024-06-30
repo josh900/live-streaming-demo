@@ -19,7 +19,7 @@ const videoElement = document.getElementById('video-element');
 videoElement.setAttribute('playsinline', '');
 
 function initializeWebSocket() {
-    ws = new WebSocket('ws://localhost:3000');
+  ws = new WebSocket(`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`);
 
     ws.onopen = () => {
         logger.log('WebSocket connection established');
