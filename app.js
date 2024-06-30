@@ -4,6 +4,7 @@ const WebSocket = require('ws');
 const cors = require('cors');
 const path = require('path');
 const { processChat } = require('./groq');
+const DID_API = require('./api.js');
 
 const port = process.env.PORT || 3000;
 
@@ -77,6 +78,9 @@ app.use((err, req, res, next) => {
 server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
     console.log(`WebSocket server is running on ws://localhost:${port}`);
+    console.log('Using D-ID API key:', DID_API.key);
+    console.log('Using Groq API key:', DID_API.groqKey);
+    console.log('Using Deepgram API key:', DID_API.deepgramKey);
 });
 
 // Graceful shutdown
