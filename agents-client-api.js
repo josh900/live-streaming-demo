@@ -1,11 +1,12 @@
+'use strict';
 import DID_API from './api.js';
 import Logger from './logger.js';
-import { initializeWebRTC, createPeerConnection, handleNegotiationNeeded } from './webrtc.js';
+import { initializeWebRTC, createPeerConnection, addIceCandidate, closePeerConnection } from './webrtc.js';
 import { initializeDeepgram, startRecording, stopRecording } from './deepgram.js';
 import { initializeGroq, sendChatToGroq } from './groq.js';
 import { initializeAvatar, updateAvatarAppearance } from './avatar.js';
 
-const logger = new Logger('DEBUG');
+const logger = new Logger('INFO');
 
 let peerConnection;
 let streamId;
@@ -18,7 +19,7 @@ const videoElement = document.getElementById('video-element');
 videoElement.setAttribute('playsinline', '');
 
 function initializeWebSocket() {
-  ws = new WebSocket(`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`);
+    ws = new WebSocket(`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`);
 
     ws.onopen = () => {
         logger.log('WebSocket connection established');
@@ -42,37 +43,44 @@ function initializeWebSocket() {
         logger.error('WebSocket error:', error);
     };
 
-    ws.onclose = () => {
-        logger.log('WebSocket connection closed');
+    ws.onclose = (event) => {
+        logger.log('WebSocket connection closed:', event);
     };
 }
 
 async function initializeConnection() {
-  logger.log('Initializing WebRTC connection');
-  try {
-      const { newStreamId, newSessionId, offer, iceServers } = await initializeWebRTC(DID_API);
-      streamId = newStreamId;
-      sessionId = newSessionId;
-      peerConnection = await createPeerConnection(offer, iceServers);
+    logger.log('Initializing WebRTC connection');
+    try {
+        const { newStreamId, newSessionId, offer, iceServers } = await initializeWebRTC(DID_API);
+        streamId = newStreamId;
+        sessionId = newSessionId;
+        peerConnection = await createPeerConnection(offer, iceServers);
+        peerConnection.onicecandidate = event => {
+            if (event.candidate) {
+                sendIceCandidate(event.candidate);
+            }
+        };
+        startKeepAlive();
+    } catch (error) {
+        logger.error('Error initializing connection:', error);
+        showErrorMessage('Failed to connect. Please try again.');
+    }
+}
 
-      // Add event listener for negotiationneeded
-      peerConnection.addEventListener('negotiationneeded', () => {
-          handleNegotiationNeeded(peerConnection, DID_API, streamId, sessionId);
-      });
-
-      startKeepAlive();
-
-      // Set a timeout to check if the connection was successful
-      setTimeout(() => {
-          if (peerConnection.iceConnectionState !== 'connected' && peerConnection.iceConnectionState !== 'completed') {
-              logger.error('WebRTC connection failed to establish within the timeout period');
-              showErrorMessage('Failed to establish a connection. Please check your network and try again.');
-          }
-      }, 30000); // 30 seconds timeout
-  } catch (error) {
-      logger.error('Error initializing connection:', error);
-      showErrorMessage('Failed to connect. Please try again.');
-  }
+function sendIceCandidate(candidate) {
+    fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
+        method: 'POST',
+        headers: {
+            Authorization: `Basic ${DID_API.key}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            candidate: candidate.candidate,
+            sdpMid: candidate.sdpMid,
+            sdpMLineIndex: candidate.sdpMLineIndex,
+            session_id: sessionId,
+        }),
+    }).catch(error => logger.error('Error sending ICE candidate:', error));
 }
 
 function startKeepAlive() {
@@ -100,29 +108,17 @@ function stopKeepAlive() {
 }
 
 async function initialize() {
-  logger.log('Initializing application');
-  initializeWebSocket();
-  await initializeConnection();
-  await initializeGroq(DID_API.groqKey);
-  initializeAvatar();
-  
-  // Initialize Deepgram after user interaction
-  document.getElementById('start-button').addEventListener('click', async () => {
-      if (!isRecording) {
-          await initializeDeepgram(DID_API.deepgramKey, onTranscriptionReceived);
-          await startRecording();
-          isRecording = true;
-          document.getElementById('start-button').textContent = 'Stop';
-      } else {
-          await stopRecording();
-          isRecording = false;
-          document.getElementById('start-button').textContent = 'Start';
-      }
-  });
+    logger.log('Initializing application');
+    initializeWebSocket();
+    await initializeConnection();
+    await initializeGroq(DID_API.groqKey);
+    initializeAvatar();
+    
+    document.getElementById('start-button').addEventListener('click', handleStartButtonClick);
 }
 
-const startButton = document.getElementById('start-button');
-startButton.onclick = async () => {
+async function handleStartButtonClick() {
+    const startButton = document.getElementById('start-button');
     if (!isRecording) {
         logger.log('Starting recording');
         startButton.textContent = 'Stop';
@@ -141,7 +137,7 @@ startButton.onclick = async () => {
         isRecording = false;
         startButton.textContent = 'Start';
     }
-};
+}
 
 function onTranscriptionReceived(transcript) {
     logger.log('Transcription received:', transcript);
