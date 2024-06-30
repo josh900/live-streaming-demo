@@ -1,6 +1,6 @@
 import Logger from './logger.js';
 
-const logger = new Logger('INFO');
+const logger = new Logger('DEBUG');
 
 export async function initializeWebRTC(DID_API) {
     logger.log('Initializing WebRTC');
@@ -109,74 +109,23 @@ export function closePeerConnection(peerConnection) {
 }
 
 export async function handleNegotiationNeeded(peerConnection) {
-  logger.log('Handling negotiation needed event');
-  try {
-      const offer = await peerConnection.createOffer();
-      await peerConnection.setLocalDescription(offer);
-      logger.log('New offer created and set as local description');
-      // Here you would typically send this offer to the remote peer
-      // through your signaling channel
-  } catch (error) {
-      logger.error('Error during negotiation:', error);
-  }
+    logger.log('Handling negotiation needed event');
+    try {
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        logger.log('New offer created and set as local description');
+    } catch (error) {
+        logger.error('Error during negotiation:', error);
+    }
 }
 
 export async function setupMediaStream(peerConnection) {
-  try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
-      logger.log('Local media stream added to peer connection');
-  } catch (error) {
-      logger.error('Error setting up media stream:', error);
-      throw error;
-  }
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
+        logger.log('Local media stream added to peer connection');
+    } catch (error) {
+        logger.error('Error setting up media stream:', error);
+        throw error;
+    }
 }
-
-logger.js
-#################
-class Logger {
-constructor(level = 'INFO') {
-  this.level = level;
-  this.levels = {
-    ERROR: 0,
-    WARN: 1,
-    INFO: 2,
-    DEBUG: 3
-  };
-}
-
-shouldLog(messageLevel) {
-  return this.levels[messageLevel] <= this.levels[this.level];
-}
-
-formatMessage(level, ...args) {
-  const timestamp = new Date().toISOString();
-  return `[${timestamp}] [${level}] ${args.join(' ')}`;
-}
-
-log(...args) {
-  if (this.shouldLog('INFO')) {
-    console.log(this.formatMessage('INFO', ...args));
-  }
-}
-
-error(...args) {
-  if (this.shouldLog('ERROR')) {
-    console.error(this.formatMessage('ERROR', ...args));
-  }
-}
-
-warn(...args) {
-  if (this.shouldLog('WARN')) {
-    console.warn(this.formatMessage('WARN', ...args));
-  }
-}
-
-debug(...args) {
-  if (this.shouldLog('DEBUG')) {
-    console.debug(this.formatMessage('DEBUG', ...args));
-  }
-}
-}
-
-export default Logger;
