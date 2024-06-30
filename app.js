@@ -28,17 +28,6 @@ app.get('/agents', (req, res) => {
     res.sendFile(path.join(__dirname, 'index-agents.html'));
 });
 
-app.post('/chat', async (req, res) => {
-    try {
-        const { message } = req.body;
-        const response = await serverProcessChat(message);
-        res.json({ response });
-    } catch (error) {
-        console.error('Error processing chat:', error);
-        res.status(500).json({ error: 'An error occurred while processing the chat' });
-    }
-});
-
 // Create HTTP server
 const server = http.createServer(app);
 
