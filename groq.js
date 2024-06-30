@@ -1,3 +1,5 @@
+import DID_API from './api.js';
+
 const WebSocket = require('ws');
 
 const GROQ_API_KEY = DID_API.groqKey;
