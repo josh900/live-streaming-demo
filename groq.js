@@ -1,7 +1,6 @@
 'use strict';
 
 const WebSocket = require('ws');
-const fetch = require('node-fetch');
 const DID_API = require('./api.js');
 const Logger = require('./logger.js');
 
