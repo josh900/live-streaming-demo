@@ -113,13 +113,20 @@ startButton.onclick = async () => {
     if (!isRecording) {
         logger.log('Starting recording');
         startButton.textContent = 'Stop';
-        await startRecording();
+        try {
+            await initializeDeepgram(DID_API.deepgramKey, onTranscriptionReceived);
+            await startRecording();
+            isRecording = true;
+        } catch (error) {
+            logger.error('Failed to start recording:', error);
+            startButton.textContent = 'Start';
+        }
     } else {
         logger.log('Stopping recording');
-        startButton.textContent = 'Start';
         await stopRecording();
+        isRecording = false;
+        startButton.textContent = 'Start';
     }
-    isRecording = !isRecording;
 };
 
 function onTranscriptionReceived(transcript) {
