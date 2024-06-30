@@ -34,15 +34,7 @@ export async function initializeWebRTC(DID_API) {
 
 export async function createPeerConnection(offer, iceServers) {
     logger.log('Creating peer connection');
-    const peerConnection = new RTCPeerConnection({
-        iceServers: Array.isArray(iceServers) ? iceServers : [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:stun2.l.google.com:19302' },
-            { urls: 'stun:stun3.l.google.com:19302' },
-            { urls: 'stun:stun4.l.google.com:19302' },
-        ]
-    });
+    const peerConnection = new RTCPeerConnection({ iceServers });
 
     peerConnection.addEventListener('icegatheringstatechange', () => {
         logger.log('ICE gathering state:', peerConnection.iceGatheringState);
@@ -60,10 +52,6 @@ export async function createPeerConnection(offer, iceServers) {
         logger.log('Signaling state:', peerConnection.signalingState);
     });
 
-    peerConnection.addEventListener('icecandidateerror', (event) => {
-        logger.error('ICE candidate error:', event);
-    });
-
     peerConnection.addEventListener('track', (event) => {
         logger.log('Track received:', event.track.kind);
         if (event.track.kind === 'video') {
@@ -75,15 +63,12 @@ export async function createPeerConnection(offer, iceServers) {
     });
 
     try {
-        logger.log('Setting remote description');
         await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
         logger.log('Remote description set successfully');
 
-        logger.log('Creating answer');
         const answer = await peerConnection.createAnswer();
         logger.log('Answer created successfully');
 
-        logger.log('Setting local description');
         await peerConnection.setLocalDescription(answer);
         logger.log('Local description set successfully');
 
@@ -105,27 +90,5 @@ export function closePeerConnection(peerConnection) {
     if (peerConnection) {
         logger.log('Closing peer connection');
         peerConnection.close();
-    }
-}
-
-export async function handleNegotiationNeeded(peerConnection) {
-    logger.log('Handling negotiation needed event');
-    try {
-        const offer = await peerConnection.createOffer();
-        await peerConnection.setLocalDescription(offer);
-        logger.log('New offer created and set as local description');
-    } catch (error) {
-        logger.error('Error during negotiation:', error);
-    }
-}
-
-export async function setupMediaStream(peerConnection) {
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
-        logger.log('Local media stream added to peer connection');
-    } catch (error) {
-        logger.error('Error setting up media stream:', error);
-        throw error;
     }
 }

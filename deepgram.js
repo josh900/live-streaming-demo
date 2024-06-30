@@ -6,39 +6,9 @@ let deepgramSocket;
 let audioContext;
 let mediaStream;
 let audioInput;
-let workletNode;
+let processor;
 
 const SAMPLE_RATE = 16000;
-
-const workletCode = `
-class DeepgramProcessor extends AudioWorkletProcessor {
-  constructor() {
-    super();
-    this.bufferSize = 1024;
-    this.buffer = new Float32Array(this.bufferSize);
-    this.bufferIndex = 0;
-  }
-
-  process(inputs, outputs, parameters) {
-    const input = inputs[0];
-    const channel = input[0];
-
-    for (let i = 0; i < channel.length; i++) {
-      this.buffer[this.bufferIndex] = channel[i];
-      this.bufferIndex++;
-
-      if (this.bufferIndex === this.bufferSize) {
-        this.port.postMessage(this.buffer);
-        this.bufferIndex = 0;
-      }
-    }
-
-    return true;
-  }
-}
-
-registerProcessor('deepgram-processor', DeepgramProcessor);
-`;
 
 export async function initializeDeepgram(apiKey, onTranscriptionReceived) {
     logger.log('Initializing Deepgram');
@@ -85,79 +55,69 @@ export async function initializeDeepgram(apiKey, onTranscriptionReceived) {
             reject(error);
         };
     });
-
-    // Initialize AudioContext
-    audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
 }
 
 export async function startRecording() {
-  logger.log('Starting recording');
-  try {
-      if (!audioContext) {
-          audioContext = new (window.AudioContext || window.webkitAudioContext)({sampleRate: SAMPLE_RATE});
-      }
-      await audioContext.resume();
+    logger.log('Starting recording');
+    try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)({sampleRate: SAMPLE_RATE});
+        await audioContext.resume();
 
-      // Add the AudioWorklet module
-      const blob = new Blob([workletCode], { type: 'application/javascript' });
-      const workletUrl = URL.createObjectURL(blob);
-      await audioContext.audioWorklet.addModule(workletUrl);
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioInput = audioContext.createMediaStreamSource(mediaStream);
 
-      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
-      audioInput = audioContext.createMediaStreamSource(mediaStream);
+        processor = audioContext.createScriptProcessor(1024, 1, 1);
+        processor.onaudioprocess = (e) => {
+            if (deepgramSocket && deepgramSocket.readyState === WebSocket.OPEN) {
+                const float32Array = e.inputBuffer.getChannelData(0);
+                const int16Array = new Int16Array(float32Array.length);
+                for (let i = 0; i < float32Array.length; i++) {
+                    int16Array[i] = Math.max(-1, Math.min(1, float32Array[i])) * 0x7FFF;
+                }
+                deepgramSocket.send(int16Array.buffer);
+            }
+        };
 
-      workletNode = new AudioWorkletNode(audioContext, 'deepgram-processor');
-      workletNode.port.onmessage = (event) => {
-          if (deepgramSocket && deepgramSocket.readyState === WebSocket.OPEN) {
-              const floatData = event.data;
-              const intData = new Int16Array(floatData.length);
-              for (let i = 0; i < floatData.length; i++) {
-                  intData[i] = Math.max(-1, Math.min(1, floatData[i])) * 0x7FFF;
-              }
-              deepgramSocket.send(intData.buffer);
-          } else {
-              logger.warn('Deepgram WebSocket not open, audio data discarded');
-          }
-      };
+        audioInput.connect(processor);
+        processor.connect(audioContext.destination);
 
-      audioInput.connect(workletNode).connect(audioContext.destination);
-
-      logger.log('Recording started successfully');
-  } catch (error) {
-      logger.error('Error starting recording:', error);
-      throw error;
-  }
+        logger.log('Recording started successfully');
+    } catch (error) {
+        logger.error('Error starting recording:', error);
+        throw error;
+    }
 }
 
 export async function stopRecording() {
-  logger.log('Stopping recording');
-  if (mediaStream) {
-      mediaStream.getTracks().forEach(track => track.stop());
-  }
-  if (workletNode) {
-      workletNode.disconnect();
-  }
-  if (audioInput) {
-      audioInput.disconnect();
-  }
-  if (deepgramSocket && deepgramSocket.readyState === WebSocket.OPEN) {
-      deepgramSocket.close();
-  }
-  await audioContext.suspend();
-  logger.log('Recording stopped');
+    logger.log('Stopping recording');
+    if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+    }
+    if (processor) {
+        processor.disconnect();
+    }
+    if (audioInput) {
+        audioInput.disconnect();
+    }
+    if (deepgramSocket && deepgramSocket.readyState === WebSocket.OPEN) {
+        deepgramSocket.close();
+    }
+    if (audioContext) {
+        await audioContext.close();
+    }
+    logger.log('Recording stopped');
 }
 
 export function isDeepgramConnected() {
-  return deepgramSocket && deepgramSocket.readyState === WebSocket.OPEN;
+    return deepgramSocket && deepgramSocket.readyState === WebSocket.OPEN;
 }
 
 export async function reconnectDeepgram(apiKey, onTranscriptionReceived) {
-  if (isDeepgramConnected()) {
-      logger.log('Deepgram is already connected');
-      return;
-  }
+    if (isDeepgramConnected()) {
+        logger.log('Deepgram is already connected');
+        return;
+    }
 
-  logger.log('Attempting to reconnect to Deepgram');
-  await initializeDeepgram(apiKey, onTranscriptionReceived);
+    logger.log('Attempting to reconnect to Deepgram');
+    await initializeDeepgram(apiKey, onTranscriptionReceived);
 }
