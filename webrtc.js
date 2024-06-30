@@ -2,6 +2,8 @@ import Logger from './logger.js';
 
 const logger = new Logger('DEBUG');
 
+let peerConnection = null;
+
 export async function initializeWebRTC(DID_API) {
     logger.log('Initializing WebRTC');
     try {
@@ -33,7 +35,10 @@ export async function initializeWebRTC(DID_API) {
 
 export async function createPeerConnection(offer, iceServers) {
     logger.log('Creating peer connection');
-    const peerConnection = new RTCPeerConnection({
+    if (peerConnection) {
+        peerConnection.close();
+    }
+    peerConnection = new RTCPeerConnection({
         iceServers: [
             ...iceServers,
             { urls: 'stun:stun.l.google.com:19302' },
@@ -106,35 +111,36 @@ export async function createPeerConnection(offer, iceServers) {
 
 async function recreatePeerConnection(offer, iceServers) {
     logger.log('Recreating peer connection');
-    if (peerConnection) {
-        peerConnection.close();
+    try {
+        await createPeerConnection(offer, iceServers);
+    } catch (error) {
+        logger.error('Error recreating peer connection:', error);
     }
-    peerConnection = await createPeerConnection(offer, iceServers);
 }
 
-export function addIceCandidate(peerConnection, candidate) {
-    if (candidate) {
+export function addIceCandidate(candidate) {
+    if (peerConnection && candidate) {
         logger.log('Adding ICE candidate');
         return peerConnection.addIceCandidate(new RTCIceCandidate(candidate))
             .catch(error => logger.error('Error adding ICE candidate:', error));
     }
 }
 
-export function closePeerConnection(peerConnection) {
+export function closePeerConnection() {
     if (peerConnection) {
         logger.log('Closing peer connection');
         peerConnection.close();
+        peerConnection = null;
     }
 }
 
-export async function handleNegotiationNeeded(peerConnection, DID_API, streamId, sessionId) {
+export async function handleNegotiationNeeded(DID_API, streamId, sessionId) {
     logger.log('Handling negotiation needed event');
     try {
         const offer = await peerConnection.createOffer();
         await peerConnection.setLocalDescription(offer);
         logger.log('New offer created and set as local description');
 
-        // Send the new offer to the D-ID API
         const response = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
             method: 'POST',
             headers: {
@@ -157,7 +163,7 @@ export async function handleNegotiationNeeded(peerConnection, DID_API, streamId,
     }
 }
 
-export async function setupMediaStream(peerConnection) {
+export async function setupMediaStream() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
         stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
