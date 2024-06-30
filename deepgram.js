@@ -1,103 +1,142 @@
 import Logger from './logger.js';
 
 const logger = new Logger('INFO');
+
 let deepgramSocket;
-let mediaRecorder;
 let audioContext;
-let sourceNode;
-let processorNode;
+let mediaStream;
+let mediaRecorder;
+let audioInput;
+let processor;
+
+const SAMPLE_RATE = 16000;
+const SAMPLE_SIZE = 16;
 
 export async function initializeDeepgram(apiKey, onTranscriptionReceived) {
-  logger.log('Initializing Deepgram');
-  
-  deepgramSocket = new WebSocket('wss://api.deepgram.com/v1/listen', [
-    'token',
-    apiKey,
-  ]);
+    logger.log('Initializing Deepgram');
+    
+    deepgramSocket = new WebSocket('wss://api.deepgram.com/v1/listen', [
+        'token',
+        apiKey,
+    ]);
 
-  deepgramSocket.onopen = () => {
-    logger.log('Deepgram WebSocket opened');
-    deepgramSocket.send(JSON.stringify({
-      type: 'KeepAlive',
-    }));
-  };
+    deepgramSocket.onopen = () => {
+        logger.log('Deepgram WebSocket opened');
+        const metadata = {
+            sampling_rate: SAMPLE_RATE,
+            channels: 1,
+            encoding: 'linear16',
+            language: 'en-US',
+        };
+        deepgramSocket.send(JSON.stringify(metadata));
+    };
 
-  deepgramSocket.onclose = () => logger.log('Deepgram WebSocket closed');
-  deepgramSocket.onerror = (error) => logger.error('Deepgram WebSocket error:', error);
+    deepgramSocket.onmessage = (message) => {
+        try {
+            const received = JSON.parse(message.data);
+            const transcript = received.channel?.alternatives[0]?.transcript;
+            if (transcript && transcript.trim() !== '') {
+                onTranscriptionReceived(transcript);
+            }
+        } catch (error) {
+            logger.error('Error parsing Deepgram message:', error);
+        }
+    };
 
-  deepgramSocket.onmessage = (message) => {
-    const received = JSON.parse(message.data);
-    const transcript = received.channel?.alternatives[0]?.transcript;
-    if (transcript && transcript.trim() !== '') {
-      logger.debug('Raw transcript:', transcript);
-      onTranscriptionReceived(transcript);
-    }
-  };
+    deepgramSocket.onclose = () => logger.log('Deepgram WebSocket closed');
+    deepgramSocket.onerror = (error) => logger.error('Deepgram WebSocket error:', error);
 
-  // Set up audio context and processor
-  audioContext = new (window.AudioContext || window.webkitAudioContext)();
-  processorNode = audioContext.createScriptProcessor(4096, 1, 1);
-  
-  processorNode.onaudioprocess = (e) => {
-    if (deepgramSocket.readyState === WebSocket.OPEN) {
-      const inputData = e.inputBuffer.getChannelData(0);
-      const uint8Array = new Uint8Array(inputData.buffer);
-      deepgramSocket.send(uint8Array);
-    }
-  };
+    // Initialize AudioContext
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
 }
 
 export async function startRecording() {
-  logger.log('Starting recording');
-  
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    sourceNode = audioContext.createMediaStreamSource(stream);
-    sourceNode.connect(processorNode);
-    processorNode.connect(audioContext.destination);
+    logger.log('Starting recording');
+    try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        // Create a gain node to control volume
+        const gainNode = audioContext.createGain();
+        gainNode.gain.value = 1.0; // Adjust this value to change input volume
 
-    mediaRecorder = new MediaRecorder(stream);
-    mediaRecorder.start();
+        audioInput = audioContext.createMediaStreamSource(mediaStream);
+        audioInput.connect(gainNode);
 
-    logger.log('Recording started successfully');
-  } catch (error) {
-    logger.error('Error starting recording:', error);
-    throw error;
-  }
+        processor = audioContext.createScriptProcessor(1024, 1, 1);
+        gainNode.connect(processor);
+        processor.connect(audioContext.destination);
+
+        processor.onaudioprocess = (e) => {
+            if (deepgramSocket.readyState === WebSocket.OPEN) {
+                const inputData = e.inputBuffer.getChannelData(0);
+                const downsampledBuffer = downsampleBuffer(inputData, SAMPLE_RATE);
+                const intData = new Int16Array(downsampledBuffer.length);
+                for (let i = 0; i < downsampledBuffer.length; i++) {
+                    intData[i] = Math.max(-1, Math.min(1, downsampledBuffer[i])) * 0x7FFF;
+                }
+                deepgramSocket.send(intData.buffer);
+            }
+        };
+
+        logger.log('Recording started successfully');
+    } catch (error) {
+        logger.error('Error starting recording:', error);
+        throw error;
+    }
 }
 
 export async function stopRecording() {
-  logger.log('Stopping recording');
-  
-  if (mediaRecorder && mediaRecorder.state === 'recording') {
-    mediaRecorder.stop();
-  }
-  
-  if (sourceNode) {
-    sourceNode.disconnect();
-  }
-  
-  if (processorNode) {
-    processorNode.disconnect();
-  }
-  
-  if (deepgramSocket && deepgramSocket.readyState === WebSocket.OPEN) {
-    deepgramSocket.close();
-  }
-  
-  logger.log('Recording stopped');
+    logger.log('Stopping recording');
+    if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+    }
+    if (processor) {
+        processor.disconnect();
+        audioInput.disconnect();
+    }
+    if (deepgramSocket && deepgramSocket.readyState === WebSocket.OPEN) {
+        deepgramSocket.close();
+    }
+    logger.log('Recording stopped');
 }
 
-// Function to handle reconnection
-async function reconnectDeepgram(apiKey, onTranscriptionReceived) {
-  logger.log('Attempting to reconnect to Deepgram');
-  await initializeDeepgram(apiKey, onTranscriptionReceived);
+function downsampleBuffer(buffer, targetSampleRate) {
+    if (targetSampleRate === audioContext.sampleRate) {
+        return buffer;
+    }
+    
+    const sampleRateRatio = audioContext.sampleRate / targetSampleRate;
+    const newLength = Math.round(buffer.length / sampleRateRatio);
+    const result = new Float32Array(newLength);
+    
+    let offsetResult = 0;
+    let offsetBuffer = 0;
+    
+    while (offsetResult < result.length) {
+        const nextOffsetBuffer = Math.round((offsetResult + 1) * sampleRateRatio);
+        let accum = 0, count = 0;
+        for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
+            accum += buffer[i];
+            count++;
+        }
+        result[offsetResult] = accum / count;
+        offsetResult++;
+        offsetBuffer = nextOffsetBuffer;
+    }
+    
+    return result;
 }
 
-// Set up an interval to send keep-alive messages
-setInterval(() => {
-  if (deepgramSocket && deepgramSocket.readyState === WebSocket.OPEN) {
-    deepgramSocket.send(JSON.stringify({ type: 'KeepAlive' }));
-    logger.debug('Sent KeepAlive message to Deepgram');
-  }
-}, 5000);  // Send keep-alive every 5 seconds
+export function isDeepgramConnected() {
+    return deepgramSocket && deepgramSocket.readyState === WebSocket.OPEN;
+}
+
+export async function reconnectDeepgram(apiKey, onTranscriptionReceived) {
+    if (isDeepgramConnected()) {
+        logger.log('Deepgram is already connected');
+        return;
+    }
+
+    logger.log('Attempting to reconnect to Deepgram');
+    await initializeDeepgram(apiKey, onTranscriptionReceived);
+}
