@@ -316,7 +316,8 @@ async function fetchWithRetries(url, options, retries = 0) {
   try {
     const response = await fetch(url, options);
     if (!response.ok) {
-      throw new Error(`HTTP error ${response.status}: ${await response.text()}`);
+      const errorText = await response.text();
+      throw new Error(`HTTP error ${response.status}: ${errorText}`);
     }
     return response;
   } catch (err) {
@@ -325,7 +326,7 @@ async function fetchWithRetries(url, options, retries = 0) {
     }
     
     const delay = baseDelay * Math.pow(2, retries) + Math.random() * 1000;
-    logger.warn(`Request failed, retrying in ${delay}ms. Error: ${err.message}`);
+    logger.warn(`Request failed, retrying in ${delay}ms. URL: ${url}, Error: ${err.message}`);
     await new Promise(resolve => setTimeout(resolve, delay));
     
     return fetchWithRetries(url, options, retries + 1);
@@ -344,7 +345,7 @@ async function initializeConnection() {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      source_url: 'brad_idle.png',
+      source_url: 'https://avatar.skoop.digital/brad_idle.png',
       compatibility_mode: 'auto',
       output_resolution: 720,
       stream_warmup: true,
