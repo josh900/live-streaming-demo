@@ -4,27 +4,7 @@ import DID_API from './api.js';
 const GROQ_API_KEY = DID_API.groqKey;
 const DEEPGRAM_API_KEY = DID_API.deepgramKey;
 
-// Logging levels
-const LOG_LEVELS = {
-  ERROR: 0,
-  WARN: 1,
-  INFO: 2,
-  DEBUG: 3
-};
-
-let currentLogLevel = LOG_LEVELS.INFO;
-
-function log(level, message, ...args) {
-  if (level <= currentLogLevel) {
-    const timestamp = new Date().toISOString();
-    console.log(`[${timestamp}] ${LOG_LEVELS[level]}: ${message}`, ...args);
-  }
-}
-
-if (DID_API.key == '🤫') {
-  log(LOG_LEVELS.ERROR, 'Please put your API key inside ./api.js and restart..');
-  alert('Please put your API key inside ./api.js and restart..');
-}
+if (DID_API.key == '🤫') alert('Please put your api key inside ./api.js and restart..');
 
 const RTCPeerConnection = (
   window.RTCPeerConnection ||
@@ -45,7 +25,6 @@ let deepgramSocket;
 let transcript = '';
 let inactivityTimeout;
 let transcriptionTimer;
-let keepAliveInterval;
 
 const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentence unless absolutely needed.`;
 
@@ -58,21 +37,19 @@ const signalingStatusLabel = document.getElementById('signaling-status-label');
 const streamingStatusLabel = document.getElementById('streaming-status-label');
 
 window.onload = async (event) => {
-  log(LOG_LEVELS.INFO, 'Window loaded');
   playIdleVideo();
   showLoadingSymbol();
   try {
     await initializeConnection();
     hideLoadingSymbol();
   } catch (error) {
-    log(LOG_LEVELS.ERROR, 'Error during auto-initialization:', error);
+    console.error('Error during auto-initialization:', error);
     hideLoadingSymbol();
     showErrorMessage('Failed to connect. Please try again.');
   }
 };
 
 function showLoadingSymbol() {
-  log(LOG_LEVELS.DEBUG, 'Showing loading symbol');
   const loadingSymbol = document.createElement('div');
   loadingSymbol.id = 'loading-symbol';
   loadingSymbol.innerHTML = 'Connecting...';
@@ -89,7 +66,6 @@ function showLoadingSymbol() {
 }
 
 function hideLoadingSymbol() {
-  log(LOG_LEVELS.DEBUG, 'Hiding loading symbol');
   const loadingSymbol = document.getElementById('loading-symbol');
   if (loadingSymbol) {
     document.body.removeChild(loadingSymbol);
@@ -97,7 +73,6 @@ function hideLoadingSymbol() {
 }
 
 function showErrorMessage(message) {
-  log(LOG_LEVELS.ERROR, 'Showing error message:', message);
   const errorMessage = document.createElement('div');
   errorMessage.innerHTML = message;
   errorMessage.style.color = 'red';
@@ -109,7 +84,6 @@ function showErrorMessage(message) {
 }
 
 async function createPeerConnection(offer, iceServers) {
-  log(LOG_LEVELS.INFO, 'Creating peer connection');
   if (!peerConnection) {
     const config = { 
       iceServers,
@@ -130,27 +104,28 @@ async function createPeerConnection(offer, iceServers) {
   }
 
   await peerConnection.setRemoteDescription(offer);
-  log(LOG_LEVELS.DEBUG, 'Set remote SDP');
+  console.log('Set remote SDP');
 
   const sessionClientAnswer = await peerConnection.createAnswer();
-  log(LOG_LEVELS.DEBUG, 'Created local SDP');
+  console.log('Created local SDP');
 
   await peerConnection.setLocalDescription(sessionClientAnswer);
-  log(LOG_LEVELS.DEBUG, 'Set local SDP');
+  console.log('Set local SDP');
 
   return sessionClientAnswer;
 }
 
+
 function onIceGatheringStateChange() {
   iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
   iceGatheringStatusLabel.className = 'iceGatheringState-' + peerConnection.iceGatheringState;
-  log(LOG_LEVELS.INFO, 'ICE gathering state changed:', peerConnection.iceGatheringState);
+  console.log('ICE gathering state changed:', peerConnection.iceGatheringState);
 }
 
 function onIceCandidate(event) {
   if (event.candidate) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
-    log(LOG_LEVELS.DEBUG, 'New ICE candidate:', candidate);
+    console.log('New ICE candidate:', candidate);
 
     fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
       method: 'POST',
@@ -166,10 +141,10 @@ function onIceCandidate(event) {
       }),
     }).then(response => {
       if (!response.ok) {
-        log(LOG_LEVELS.ERROR, 'Failed to send ICE candidate:', response.status, response.statusText);
+        console.error('Failed to send ICE candidate:', response.status, response.statusText);
       }
     }).catch(error => {
-      log(LOG_LEVELS.ERROR, 'Error sending ICE candidate:', error);
+      console.error('Error sending ICE candidate:', error);
     });
   }
 }
@@ -177,7 +152,7 @@ function onIceCandidate(event) {
 function onIceConnectionStateChange() {
   iceStatusLabel.innerText = peerConnection.iceConnectionState;
   iceStatusLabel.className = 'iceConnectionState-' + peerConnection.iceConnectionState;
-  log(LOG_LEVELS.INFO, 'ICE connection state changed:', peerConnection.iceConnectionState);
+  console.log('ICE connection state changed:', peerConnection.iceConnectionState);
 
   if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'closed') {
     stopAllStreams();
@@ -189,13 +164,13 @@ function onIceConnectionStateChange() {
 function onConnectionStateChange() {
   peerStatusLabel.innerText = peerConnection.connectionState;
   peerStatusLabel.className = 'peerConnectionState-' + peerConnection.connectionState;
-  log(LOG_LEVELS.INFO, 'Peer connection state changed:', peerConnection.connectionState);
+  console.log('Peer connection state changed:', peerConnection.connectionState);
 }
 
 function onSignalingStateChange() {
   signalingStatusLabel.innerText = peerConnection.signalingState;
   signalingStatusLabel.className = 'signalingState-' + peerConnection.signalingState;
-  log(LOG_LEVELS.INFO, 'Signaling state changed:', peerConnection.signalingState);
+  console.log('Signaling state changed:', peerConnection.signalingState);
 }
 
 function onVideoStatusChange(videoIsPlaying, stream) {
@@ -209,11 +184,10 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   }
   streamingStatusLabel.innerText = status;
   streamingStatusLabel.className = 'streamingState-' + status;
-  log(LOG_LEVELS.INFO, 'Video status changed:', status);
+  console.log('Video status changed:', status);
 }
-
 function onTrack(event) {
-  log(LOG_LEVELS.DEBUG, 'onTrack event:', event);
+  console.log('onTrack event:', event);
   if (!event.track) return;
 
   // Clear any existing interval
@@ -232,7 +206,7 @@ function onTrack(event) {
             videoStatsFound = true;
             const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
 
-            log(LOG_LEVELS.DEBUG, 'Video stats:', {
+            console.log('Video stats:', {
               bytesReceived: report.bytesReceived,
               lastBytesReceived,
               videoIsPlaying,
@@ -241,20 +215,20 @@ function onTrack(event) {
 
             if (videoStatusChanged) {
               videoIsPlaying = report.bytesReceived > lastBytesReceived;
-              log(LOG_LEVELS.INFO, 'Video status changed:', videoIsPlaying);
+              console.log('Video status changed:', videoIsPlaying);
               onVideoStatusChange(videoIsPlaying, event.streams[0]);
             }
             lastBytesReceived = report.bytesReceived;
           }
         });
         if (!videoStatsFound) {
-          log(LOG_LEVELS.DEBUG, 'No video stats found yet.');
+          console.log('No video stats found yet.');
         }
       } catch (error) {
-        log(LOG_LEVELS.ERROR, 'Error getting stats:', error);
+        console.error('Error getting stats:', error);
       }
     } else {
-      log(LOG_LEVELS.DEBUG, 'Peer connection not ready for stats.');
+      console.log('Peer connection not ready for stats.');
     }
   }, 1000);
 
@@ -264,7 +238,7 @@ function onTrack(event) {
 
 function setVideoElement(stream) {
   if (!stream) {
-    log(LOG_LEVELS.WARN, 'No stream available to set video element');
+    console.log('No stream available to set video element');
     return;
   }
   videoElement.classList.add("animated");
@@ -278,13 +252,12 @@ function setVideoElement(stream) {
 
   if (videoElement.paused) {
     videoElement.play().then(() => {
-      log(LOG_LEVELS.INFO, 'Video playback started');
-    }).catch(e => log(LOG_LEVELS.ERROR, 'Error playing video:', e));
+      console.log('Video playback started');
+    }).catch(e => console.error('Error playing video:', e));
   }
 }
 
 function playIdleVideo() {
-  log(LOG_LEVELS.INFO, 'Playing idle video');
   videoElement.classList.add("animated");
   videoElement.srcObject = undefined;
   videoElement.src = 'emma_idle.mp4';
@@ -297,7 +270,7 @@ function playIdleVideo() {
 
 function stopAllStreams() {
   if (videoElement.srcObject) {
-    log(LOG_LEVELS.INFO, 'Stopping video streams');
+    console.log('Stopping video streams');
     videoElement.srcObject.getTracks().forEach((track) => track.stop());
     videoElement.srcObject = null;
   }
@@ -305,7 +278,7 @@ function stopAllStreams() {
 
 function closePC(pc = peerConnection) {
   if (!pc) return;
-  log(LOG_LEVELS.INFO, 'Stopping peer connection');
+  console.log('Stopping peer connection');
   pc.close();
   pc.removeEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
   pc.removeEventListener('icecandidate', onIceCandidate, true);
@@ -318,7 +291,7 @@ function closePC(pc = peerConnection) {
   signalingStatusLabel.innerText = '';
   iceStatusLabel.innerText = '';
   peerStatusLabel.innerText = '';
-  log(LOG_LEVELS.INFO, 'Stopped peer connection');
+  console.log('Stopped peer connection');
   if (pc === peerConnection) {
     peerConnection = null;
   }
@@ -336,7 +309,7 @@ async function fetchWithRetries(url, options, retries = 1) {
   } catch (err) {
     if (retries <= maxRetryCount) {
       const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 1000;
-      log(LOG_LEVELS.WARN, `Request failed, retrying ${retries}/${maxRetryCount} in ${delay}ms. Error: ${err.message}`);
+      console.log(`Request failed, retrying ${retries}/${maxRetryCount} in ${delay}ms. Error: ${err.message}`);
       await new Promise((resolve) => setTimeout(resolve, delay));
       return fetchWithRetries(url, options, retries + 1);
     } else {
@@ -349,7 +322,7 @@ async function initializeConnection() {
   stopAllStreams();
   closePC();
 
-  log(LOG_LEVELS.INFO, 'Initializing connection...');
+  console.log('Initializing connection...');
   const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
     method: 'POST',
     headers: {
@@ -367,12 +340,12 @@ async function initializeConnection() {
   const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
   streamId = newStreamId;
   sessionId = newSessionId;
-  log(LOG_LEVELS.INFO, 'Stream created:', { streamId, sessionId });
+  console.log('Stream created:', { streamId, sessionId });
 
   try {
     sessionClientAnswer = await createPeerConnection(offer, iceServers);
   } catch (e) {
-    log(LOG_LEVELS.ERROR, 'Error during streaming setup:', e);
+    console.error('Error during streaming setup:', e);
     stopAllStreams();
     closePC();
     throw e;
@@ -394,44 +367,12 @@ async function initializeConnection() {
     throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
   }
 
-  log(LOG_LEVELS.INFO, 'Connection initialized successfully');
-  
-  // Start the keep-alive mechanism
-  startKeepAlive();
-}
-
-function startKeepAlive() {
-  // Clear any existing interval
-  if (keepAliveInterval) {
-    clearInterval(keepAliveInterval);
-  }
-  
-  // Send a keep-alive message every 30 seconds
-  keepAliveInterval = setInterval(async () => {
-    try {
-      const response = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/keepalive`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${DID_API.key}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ session_id: sessionId }),
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Keep-alive failed: ${response.status} ${response.statusText}`);
-      }
-      
-      log(LOG_LEVELS.DEBUG, 'Keep-alive sent successfully');
-    } catch (error) {
-      log(LOG_LEVELS.ERROR, 'Error sending keep-alive:', error);
-    }
-  }, 30000); // 30 seconds
+  console.log('Connection initialized successfully');
 }
 
 async function startStreaming(assistantReply) {
   try {
-    log(LOG_LEVELS.INFO, 'Starting streaming with reply:', assistantReply);
+    console.log('Starting streaming with reply:', assistantReply);
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'POST',
       headers: {
@@ -450,26 +391,22 @@ async function startStreaming(assistantReply) {
         config: {
           fluent: true,
           pad_audio: 0,
-          stitch: true,
-          sharpen: true,
-          reduce_noise: true,
-          auto_match: true
+          stitch: true
         },
-        driver_url: 'bank://lively/',
         session_id: sessionId,
       }),
     });
 
     const playResponseData = await playResponse.json();
-    log(LOG_LEVELS.INFO, 'Streaming response:', playResponseData);
+    console.log('Streaming response:', playResponseData);
 
     if (playResponseData.status === 'started') {
-      log(LOG_LEVELS.INFO, 'Stream started successfully');
+      console.log('Stream started successfully');
     } else {
-      log(LOG_LEVELS.WARN, 'Unexpected response status:', playResponseData.status);
+      console.warn('Unexpected response status:', playResponseData.status);
     }
   } catch (error) {
-    log(LOG_LEVELS.ERROR, 'Error during streaming:', error.message);
+    console.error('Error during streaming:', error.message);
     if (isRecording) {
       await reinitializeConnection();
     }
@@ -478,20 +415,7 @@ async function startStreaming(assistantReply) {
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  const audioContext = new AudioContext();
-  
-  await audioContext.audioWorklet.addModule('audioProcessor.js');
-  const audioProcessor = new AudioWorkletNode(audioContext, 'audio-processor');
-  
-  const microphone = audioContext.createMediaStreamSource(stream);
-  microphone.connect(audioProcessor);
-  audioProcessor.connect(audioContext.destination);
-
-  audioProcessor.port.onmessage = (event) => {
-    if (deepgramSocket.readyState === WebSocket.OPEN) {
-      deepgramSocket.send(event.data.buffer);
-    }
-  };
+  mediaRecorder = new MediaRecorder(stream);
 
   deepgramSocket = new WebSocket('wss://api.deepgram.com/v1/listen', [
     'token',
@@ -499,7 +423,7 @@ async function startRecording() {
   ]);
 
   deepgramSocket.onopen = () => {
-    log(LOG_LEVELS.INFO, 'Deepgram WebSocket Connection opened');
+    console.log('Deepgram WebSocket Connection opened');
     mediaRecorder.addEventListener('dataavailable', async (event) => {
       if (event.data.size > 0 && deepgramSocket.readyState === WebSocket.OPEN) {
         deepgramSocket.send(event.data);
@@ -512,7 +436,7 @@ async function startRecording() {
       if (deepgramSocket.readyState === WebSocket.OPEN) {
         const keepAliveMsg = JSON.stringify({ type: "KeepAlive" });
         deepgramSocket.send(keepAliveMsg);
-        log(LOG_LEVELS.DEBUG, "Sent KeepAlive message to Deepgram");
+        console.log("Sent KeepAlive message");
       }
     }, 3000);
 
@@ -541,7 +465,7 @@ async function startRecording() {
   };
 
   deepgramSocket.onclose = async () => {
-    log(LOG_LEVELS.INFO, 'Deepgram WebSocket connection closed');
+    console.log('WebSocket connection closed');
     if (isRecording) {
       await reinitializeConnection();
     }
@@ -550,7 +474,7 @@ async function startRecording() {
   // Start inactivity timeout
   inactivityTimeout = setTimeout(() => {
     if (isRecording) {
-      log(LOG_LEVELS.INFO, 'Inactivity timeout reached. Stopping recording.');
+      console.log('Inactivity timeout reached. Stopping recording.');
       startButton.click();
     }
   }, 45000); // 45 seconds
@@ -571,9 +495,6 @@ async function stopRecording() {
 
 async function sendChatToGroq() {
   try {
-    const startTime = performance.now();
-    log(LOG_LEVELS.INFO, 'Sending chat to Groq');
-    
     const response = await fetch('https://avatar.skoop.digital/chat', {
       method: 'POST',
       headers: {
@@ -622,10 +543,6 @@ async function sendChatToGroq() {
       }
     }
 
-    const endTime = performance.now();
-    const duration = endTime - startTime;
-    log(LOG_LEVELS.INFO, `Groq response received in ${duration.toFixed(2)}ms`);
-
     chatHistory.push({
       role: 'assistant',
       content: assistantReply,
@@ -633,19 +550,19 @@ async function sendChatToGroq() {
 
     document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${assistantReply}</span><br>`;
 
-    log(LOG_LEVELS.INFO, 'Assistant reply:', assistantReply);
+    console.log('Assistant reply:', assistantReply);
 
     clearTimeout(inactivityTimeout);
     inactivityTimeout = setTimeout(() => {
       if (isRecording) {
-        log(LOG_LEVELS.INFO, 'Inactivity timeout reached. Stopping recording.');
+        console.log('Inactivity timeout reached. Stopping recording.');
         startButton.click();
       }
     }, 45000); // 45 seconds
 
     await startStreaming(assistantReply);
   } catch (error) {
-    log(LOG_LEVELS.ERROR, 'Error:', error);
+    console.error('Error:', error);
     if (isRecording) {
       await reinitializeConnection();
     }
@@ -653,7 +570,7 @@ async function sendChatToGroq() {
 }
 
 async function reinitializeConnection() {
-  log(LOG_LEVELS.INFO, 'Reinitializing connection...');
+  console.log('Reinitializing connection...');
   stopAllStreams();
   closePC();
 
@@ -685,13 +602,12 @@ destroyButton.onclick = async () => {
       body: JSON.stringify({ session_id: sessionId }),
     });
 
-    log(LOG_LEVELS.INFO, 'Stream destroyed successfully');
+    console.log('Stream destroyed successfully');
   } catch (error) {
-    log(LOG_LEVELS.ERROR, 'Error destroying stream:', error);
+    console.error('Error destroying stream:', error);
   } finally {
     stopAllStreams();
     closePC();
-    clearInterval(keepAliveInterval);
   }
 };
 
@@ -711,6 +627,6 @@ startButton.onclick = async () => {
 
 // Initialize the connection when the page loads
 initializeConnection().catch(error => {
-  log(LOG_LEVELS.ERROR, 'Failed to initialize connection:', error);
+  console.error('Failed to initialize connection:', error);
   showErrorMessage('Failed to initialize connection. Please try again.');
 });
