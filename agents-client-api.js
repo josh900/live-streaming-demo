@@ -1,6 +1,4 @@
-markdownCopy## agents-client-api.js
 
-```javascript
 'use strict';
 import DID_API from './api.js';
 import logger from './logger.js';
