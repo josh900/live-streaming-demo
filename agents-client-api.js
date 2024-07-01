@@ -2,7 +2,6 @@
 import DID_API from './api.js';
 import logger from './logger.js';
 
-
 const GROQ_API_KEY = DID_API.groqKey;
 const DEEPGRAM_API_KEY = DID_API.deepgramKey;
 
@@ -28,31 +27,9 @@ let transcript = '';
 let inactivityTimeout;
 let transcriptionTimer;
 let keepAliveInterval;
-
+let socket;
 
 const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentence unless absolutely needed.`;
-
-
-document.addEventListener('DOMContentLoaded', () => {
-  const idleVideoElement = document.getElementById('idle-video-element');
-  const streamVideoElement = document.getElementById('stream-video-element');
-
-  if (idleVideoElement) {
-    idleVideoElement.setAttribute('playsinline', '');
-  }
-
-  if (streamVideoElement) {
-    streamVideoElement.setAttribute('playsinline', '');
-  }
-
-  const peerStatusLabel = document.getElementById('peer-status-label');
-  const iceStatusLabel = document.getElementById('ice-status-label');
-  const iceGatheringStatusLabel = document.getElementById('ice-gathering-status-label');
-  const signalingStatusLabel = document.getElementById('signalingStatus-label');
-  const streamingStatusLabel = document.getElementById('streaming-status-label');
-
-});
-
 
 function getVideoElements() {
   const idle = document.getElementById('idle-video-element');
@@ -75,8 +52,48 @@ function getStatusLabels() {
   };
 }
 
+function initializeWebSocket() {
+  socket = new WebSocket(`ws://${window.location.host}`);
 
-window.onload = async (event) => {
+  socket.onopen = () => {
+    logger.info('WebSocket connection established');
+  };
+
+  socket.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    logger.debug('Received WebSocket message:', data);
+
+    switch (data.type) {
+      case 'transcription':
+        updateTranscription(data.text);
+        break;
+      case 'assistantReply':
+        updateAssistantReply(data.text);
+        break;
+      default:
+        logger.warn('Unknown WebSocket message type:', data.type);
+    }
+  };
+
+  socket.onerror = (error) => {
+    logger.error('WebSocket error:', error);
+  };
+
+  socket.onclose = () => {
+    logger.info('WebSocket connection closed');
+    setTimeout(initializeWebSocket, 5000);
+  };
+}
+
+function updateTranscription(text) {
+  document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User (interim):</u> ${text}</span><br>`;
+}
+
+function updateAssistantReply(text) {
+  document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
+}
+
+async function initialize() {
   const { idle, stream } = getVideoElements();
   if (idle) idle.setAttribute('playsinline', '');
   if (stream) stream.setAttribute('playsinline', '');
@@ -87,14 +104,17 @@ window.onload = async (event) => {
     await initializeConnection();
     hideLoadingSymbol();
   } catch (error) {
-    logger.error('Error during auto-initialization:', error);
+    logger.error('Error during initialization:', error);
     hideLoadingSymbol();
     showErrorMessage('Failed to connect. Please try again.');
   }
-};
+}
 
-
-
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initialize);
+} else {
+  initialize();
+}
 
 function showLoadingSymbol() {
   const loadingSymbol = document.createElement('div');
@@ -126,8 +146,10 @@ function showErrorMessage(message) {
   errorMessage.style.marginBottom = '10px';
   document.body.appendChild(errorMessage);
 
-  destroyButton.style.display = 'inline-block';
-  connectButton.style.display = 'inline-block';
+  const destroyButton = document.getElementById('destroy-button');
+  const connectButton = document.getElementById('connect-button');
+  if (destroyButton) destroyButton.style.display = 'inline-block';
+  if (connectButton) connectButton.style.display = 'inline-block';
 }
 
 async function createPeerConnection(offer, iceServers) {
@@ -145,34 +167,35 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
     peerConnection.addEventListener('track', onTrack, true);
 
-    // Add transceivers to ensure we receive audio and video
     peerConnection.addTransceiver('audio', {direction: 'recvonly'});
     peerConnection.addTransceiver('video', {direction: 'recvonly'});
   }
 
   await peerConnection.setRemoteDescription(offer);
-  console.log('Set remote SDP');
+  logger.info('Set remote SDP');
 
   const sessionClientAnswer = await peerConnection.createAnswer();
-  console.log('Created local SDP');
+  logger.info('Created local SDP');
 
   await peerConnection.setLocalDescription(sessionClientAnswer);
-  console.log('Set local SDP');
+  logger.info('Set local SDP');
 
   return sessionClientAnswer;
 }
 
-
 function onIceGatheringStateChange() {
-  iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
-  iceGatheringStatusLabel.className = 'iceGatheringState-' + peerConnection.iceGatheringState;
-  console.log('ICE gathering state changed:', peerConnection.iceGatheringState);
+  const { iceGathering: iceGatheringStatusLabel } = getStatusLabels();
+  if (iceGatheringStatusLabel) {
+    iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
+    iceGatheringStatusLabel.className = 'iceGatheringState-' + peerConnection.iceGatheringState;
+  }
+  logger.info('ICE gathering state changed:', peerConnection.iceGatheringState);
 }
 
 function onIceCandidate(event) {
   if (event.candidate) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
-    console.log('New ICE candidate:', candidate);
+    logger.debug('New ICE candidate:', candidate);
 
     fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
       method: 'POST',
@@ -188,18 +211,21 @@ function onIceCandidate(event) {
       }),
     }).then(response => {
       if (!response.ok) {
-        console.error('Failed to send ICE candidate:', response.status, response.statusText);
+        logger.error('Failed to send ICE candidate:', response.status, response.statusText);
       }
     }).catch(error => {
-      console.error('Error sending ICE candidate:', error);
+      logger.error('Error sending ICE candidate:', error);
     });
   }
 }
 
 function onIceConnectionStateChange() {
-  iceStatusLabel.innerText = peerConnection.iceConnectionState;
-  iceStatusLabel.className = 'iceConnectionState-' + peerConnection.iceConnectionState;
-  console.log('ICE connection state changed:', peerConnection.iceConnectionState);
+  const { ice: iceStatusLabel } = getStatusLabels();
+  if (iceStatusLabel) {
+    iceStatusLabel.innerText = peerConnection.iceConnectionState;
+    iceStatusLabel.className = 'iceConnectionState-' + peerConnection.iceConnectionState;
+  }
+  logger.info('ICE connection state changed:', peerConnection.iceConnectionState);
 
   if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'closed') {
     stopAllStreams();
@@ -209,18 +235,25 @@ function onIceConnectionStateChange() {
 }
 
 function onConnectionStateChange() {
-  peerStatusLabel.innerText = peerConnection.connectionState;
-  peerStatusLabel.className = 'peerConnectionState-' + peerConnection.connectionState;
-  console.log('Peer connection state changed:', peerConnection.connectionState);
+  const { peer: peerStatusLabel } = getStatusLabels();
+  if (peerStatusLabel) {
+    peerStatusLabel.innerText = peerConnection.connectionState;
+    peerStatusLabel.className = 'peerConnectionState-' + peerConnection.connectionState;
+  }
+  logger.info('Peer connection state changed:', peerConnection.connectionState);
 }
 
 function onSignalingStateChange() {
-  signalingStatusLabel.innerText = peerConnection.signalingState;
-  signalingStatusLabel.className = 'signalingState-' + peerConnection.signalingState;
-  console.log('Signaling state changed:', peerConnection.signalingState);
+  const { signaling: signalingStatusLabel } = getStatusLabels();
+  if (signalingStatusLabel) {
+    signalingStatusLabel.innerText = peerConnection.signalingState;
+    signalingStatusLabel.className = 'signalingState-' + peerConnection.signalingState;
+  }
+  logger.info('Signaling state changed:', peerConnection.signalingState);
 }
 
 function onVideoStatusChange(videoIsPlaying, stream) {
+  const { streaming: streamingStatusLabel } = getStatusLabels();
   let status;
   if (videoIsPlaying) {
     status = 'streaming';
@@ -229,21 +262,21 @@ function onVideoStatusChange(videoIsPlaying, stream) {
     status = 'empty';
     playIdleVideo();
   }
-  streamingStatusLabel.innerText = status;
-  streamingStatusLabel.className = 'streamingState-' + status;
-  console.log('Video status changed:', status);
+  if (streamingStatusLabel) {
+    streamingStatusLabel.innerText = status;
+    streamingStatusLabel.className = 'streamingState-' + status;
+  }
+  logger.info('Video status changed:', status);
 }
 
 function onTrack(event) {
-  console.log('onTrack event:', event);
+  logger.debug('onTrack event:', event);
   if (!event.track) return;
 
-  // Clear any existing interval
   if (statsIntervalId) {
     clearInterval(statsIntervalId);
   }
 
-  // Set up a new interval for this track
   statsIntervalId = setInterval(async () => {
     if (peerConnection && peerConnection.connectionState === 'connected') {
       try {
@@ -254,7 +287,7 @@ function onTrack(event) {
             videoStatsFound = true;
             const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
 
-            console.log('Video stats:', {
+            logger.debug('Video stats:', {
               bytesReceived: report.bytesReceived,
               lastBytesReceived,
               videoIsPlaying,
@@ -263,30 +296,34 @@ function onTrack(event) {
 
             if (videoStatusChanged) {
               videoIsPlaying = report.bytesReceived > lastBytesReceived;
-              console.log('Video status changed:', videoIsPlaying);
+              logger.info('Video status changed:', videoIsPlaying);
               onVideoStatusChange(videoIsPlaying, event.streams[0]);
             }
             lastBytesReceived = report.bytesReceived;
           }
         });
         if (!videoStatsFound) {
-          console.log('No video stats found yet.');
+          logger.debug('No video stats found yet.');
         }
       } catch (error) {
-        console.error('Error getting stats:', error);
+        logger.error('Error getting stats:', error);
       }
     } else {
-      console.log('Peer connection not ready for stats.');
+      logger.debug('Peer connection not ready for stats.');
     }
   }, 1000);
 
-  // Immediately set up the video element
   setVideoElement(event.streams[0]);
 }
 
 function setVideoElement(stream) {
+  const { stream: streamVideoElement } = getVideoElements();
+  if (!streamVideoElement) {
+    logger.error('Stream video element not found');
+    return;
+  }
   if (!stream) {
-    console.log('No stream available to set video element');
+    logger.warn('No stream available to set video element');
     return;
   }
   streamVideoElement.classList.add("animated");
@@ -300,14 +337,18 @@ function setVideoElement(stream) {
 
   if (streamVideoElement.paused) {
     streamVideoElement.play().then(() => {
-      console.log('Video playback started');
-    }).catch(e => console.error('Error playing video:', e));
+      logger.info('Video playback started');
+    }).catch(e => logger.error('Error playing video:', e));
   }
 }
 
 function playIdleVideo() {
+  const { idle: idleVideoElement } = getVideoElements();
+  if (!idleVideoElement) {
+    logger.error('Idle video element not found');
+    return;
+  }
   idleVideoElement.classList.add("animated");
-  streamVideoElement.srcObject = undefined;
   idleVideoElement.src = 'brad_idle.mp4';
   idleVideoElement.loop = true;
 
@@ -317,8 +358,9 @@ function playIdleVideo() {
 }
 
 function stopAllStreams() {
-  if (streamVideoElement.srcObject) {
-    console.log('Stopping video streams');
+  const { stream: streamVideoElement } = getVideoElements();
+  if (streamVideoElement && streamVideoElement.srcObject) {
+    logger.info('Stopping video streams');
     streamVideoElement.srcObject.getTracks().forEach((track) => track.stop());
     streamVideoElement.srcObject = null;
   }
@@ -326,7 +368,7 @@ function stopAllStreams() {
 
 function closePC(pc = peerConnection) {
   if (!pc) return;
-  console.log('Stopping peer connection');
+  logger.info('Stopping peer connection');
   pc.close();
   pc.removeEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
   pc.removeEventListener('icecandidate', onIceCandidate, true);
@@ -335,11 +377,12 @@ function closePC(pc = peerConnection) {
   pc.removeEventListener('signalingstatechange', onSignalingStateChange, true);
   pc.removeEventListener('track', onTrack, true);
   clearInterval(statsIntervalId);
-  iceGatheringStatusLabel.innerText = '';
-  signalingStatusLabel.innerText = '';
-  iceStatusLabel.innerText = '';
-  peerStatusLabel.innerText = '';
-  console.log('Stopped peer connection');
+  const labels = getStatusLabels();
+  if (labels.iceGathering) labels.iceGathering.innerText = '';
+  if (labels.signaling) labels.signaling.innerText = '';
+  if (labels.ice) labels.ice.innerText = '';
+  if (labels.peer) labels.peer.innerText = '';
+  logger.info('Stopped peer connection');
   if (pc === peerConnection) {
     peerConnection = null;
   }
@@ -357,7 +400,7 @@ async function fetchWithRetries(url, options, retries = 1) {
   } catch (err) {
     if (retries <= maxRetryCount) {
       const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 1000;
-      console.log(`Request failed, retrying ${retries}/${maxRetryCount} in ${delay}ms. Error: ${err.message}`);
+      logger.warn(`Request failed, retrying ${retries}/${maxRetryCount} in ${delay}ms. Error: ${err.message}`);
       await new Promise((resolve) => setTimeout(resolve, delay));
       return fetchWithRetries(url, options, retries + 1);
     } else {
@@ -455,8 +498,6 @@ function stopKeepAlive() {
   }
 }
 
-
-
 async function startStreaming(assistantReply) {
   try {
     logger.info('Starting streaming with reply:', assistantReply);
@@ -502,7 +543,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -671,7 +711,7 @@ async function sendChatToGroq() {
 }
 
 async function reinitializeConnection() {
-  console.log('Reinitializing connection...');
+  logger.info('Reinitializing connection...');
   stopAllStreams();
   closePC();
 
@@ -703,9 +743,9 @@ destroyButton.onclick = async () => {
       body: JSON.stringify({ session_id: sessionId }),
     });
 
-    console.log('Stream destroyed successfully');
+    logger.info('Stream destroyed successfully');
   } catch (error) {
-    console.error('Error destroying stream:', error);
+    logger.error('Error destroying stream:', error);
   } finally {
     stopAllStreams();
     closePC();
@@ -725,6 +765,9 @@ startButton.onclick = async () => {
   }
   isRecording = !isRecording;
 };
+
+// Initialize WebSocket connection
+initializeWebSocket();
 
 // Initialize the connection when the page loads
 initializeConnection().catch(error => {

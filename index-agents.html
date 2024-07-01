@@ -44,7 +44,6 @@
     <h3>Click the button below to start speaking:</h3>
     <button id="start-button" type="button">Speak</button>
   </div>
-  <script type="module" src="./agents-client-api.js"></script>
   <script>
     // AudioWorklet implementation
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -80,6 +79,8 @@
       audioProcessor.connect(audioContext.destination);
     }).catch(err => console.error('Error loading AudioWorklet:', err));
   </script>
+    <script type="module" src="./agents-client-api.js"></script>
+
 </body>
 
 </html>
