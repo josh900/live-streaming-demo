@@ -5,9 +5,8 @@ import { initializeWebRTC, createPeerConnection, addIceCandidate, closePeerConne
 import { initializeDeepgram, startRecording, stopRecording } from './deepgram.js';
 import { initializeGroq, sendChatToGroq } from './groq.js';
 import { initializeAvatar, updateAvatarAppearance } from './avatar.js';
-import { handleError } from './errorHandler.js';
 
-const logger = new Logger('INFO');
+const logger = new Logger('DEBUG');
 
 let peerConnection;
 let streamId;
@@ -41,7 +40,7 @@ function initializeWebSocket() {
     };
 
     ws.onerror = (error) => {
-        handleError('WebSocket error', error);
+        logger.error('WebSocket error:', error);
     };
 
     ws.onclose = (event) => {
@@ -63,7 +62,7 @@ async function initializeConnection() {
         };
         startKeepAlive();
     } catch (error) {
-        handleError('Failed to initialize connection', error);
+        logger.error('Error initializing connection:', error);
         showErrorMessage('Failed to connect. Please try again.');
     }
 }
@@ -81,7 +80,7 @@ function sendIceCandidate(candidate) {
             sdpMLineIndex: candidate.sdpMLineIndex,
             session_id: sessionId,
         }),
-    }).catch(error => handleError('Error sending ICE candidate', error));
+    }).catch(error => logger.error('Error sending ICE candidate:', error));
 }
 
 function startKeepAlive() {
@@ -97,100 +96,100 @@ function startKeepAlive() {
                 body: JSON.stringify({ session_id: sessionId }),
             });
         } catch (error) {
-            handleError('Keep-alive request failed', error);
+            logger.error('Keep-alive request failed:', error);
         }
     }, 30000);
 }
 
 function stopKeepAlive() {
-  if (keepAliveInterval) {
-      clearInterval(keepAliveInterval);
-  }
+    if (keepAliveInterval) {
+        clearInterval(keepAliveInterval);
+    }
 }
 
 async function initialize() {
-  logger.log('Initializing application');
-  initializeWebSocket();
-  await initializeConnection();
-  await initializeGroq(DID_API.groqKey);
-  initializeAvatar();
-  
-  document.getElementById('start-button').addEventListener('click', handleStartButtonClick);
+    logger.log('Initializing application');
+    initializeWebSocket();
+    await initializeConnection();
+    await initializeGroq(DID_API.groqKey);
+    initializeAvatar();
+    
+    document.getElementById('start-button').addEventListener('click', handleStartButtonClick);
 }
 
 async function handleStartButtonClick() {
-  const startButton = document.getElementById('start-button');
-  if (!isRecording) {
-      logger.log('Starting recording');
-      startButton.textContent = 'Stop';
-      try {
-          await initializeDeepgram(DID_API.deepgramKey, onTranscriptionReceived);
-          await startRecording();
-          isRecording = true;
-      } catch (error) {
-          handleError('Failed to start recording', error);
-          startButton.textContent = 'Start';
-          alert('Failed to start recording. Please check your internet connection and try again.');
-      }
-  } else {
-      logger.log('Stopping recording');
-      await stopRecording();
-      isRecording = false;
-      startButton.textContent = 'Start';
-  }
+    const startButton = document.getElementById('start-button');
+    if (!isRecording) {
+        logger.log('Starting recording');
+        startButton.textContent = 'Stop';
+        try {
+            await initializeDeepgram(DID_API.deepgramKey, onTranscriptionReceived);
+            await startRecording();
+            isRecording = true;
+        } catch (error) {
+            logger.error('Failed to start recording:', error);
+            startButton.textContent = 'Start';
+            alert('Failed to start recording. Please check your internet connection and try again.');
+        }
+    } else {
+        logger.log('Stopping recording');
+        await stopRecording();
+        isRecording = false;
+        startButton.textContent = 'Start';
+    }
 }
 
 function onTranscriptionReceived(transcript) {
-  logger.log('Transcription received:', transcript);
-  ws.send(JSON.stringify({ type: 'transcription', text: transcript }));
+    logger.log('Transcription received:', transcript);
+    ws.send(JSON.stringify({ type: 'transcription', text: transcript }));
 }
 
 async function startStreaming(response) {
-  logger.log('Starting stream with response:', response);
-  try {
-      const playResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
-          method: 'POST',
-          headers: {
-              Authorization: `Basic ${DID_API.key}`,
-              'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-              script: {
-                  type: 'text',
-                  input: response,
-                  provider: {
-                      type: 'microsoft',
-                      voice_id: 'en-US-JennyMultilingualV2Neural'
-                  }
-              },
-              config: {
-                  fluent: true,
-                  pad_audio: 0,
-                  stitch: true
-              },
-              session_id: sessionId,
-          }),
-      });
+    logger.log('Starting stream with response:', response);
+    try {
+        const playResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+            method: 'POST',
+            headers: {
+                Authorization: `Basic ${DID_API.key}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                script: {
+                    type: 'text',
+                    input: response,
+                    provider: {
+                        type: 'microsoft',
+                        voice_id: 'en-US-JennyMultilingualV2Neural'
+                    }
+                },
+                config: {
+                    fluent: true,
+                    pad_audio: 0,
+                    stitch: true
+                },
+                session_id: sessionId,
+            }),
+        });
 
-      if (!playResponse.ok) {
-          throw new Error(`HTTP error ${playResponse.status}`);
-      }
-  } catch (error) {
-      handleError('Error during streaming', error);
-  }
+        if (!playResponse.ok) {
+            throw new Error(`HTTP error ${playResponse.status}`);
+        }
+    } catch (error) {
+        logger.error('Error during streaming:', error);
+    }
 }
 
 function updateAvatar(imageUrl) {
-  ws.send(JSON.stringify({ type: 'avatar_update', imageUrl }));
+    ws.send(JSON.stringify({ type: 'avatar_update', imageUrl }));
 }
 
 function showErrorMessage(message) {
-  logger.error(message);
-  const errorElement = document.createElement('div');
-  errorElement.textContent = message;
-  errorElement.style.color = 'red';
-  errorElement.style.marginTop = '10px';
-  document.body.appendChild(errorElement);
+    logger.error(message);
+    const errorElement = document.createElement('div');
+    errorElement.textContent = message;
+    errorElement.style.color = 'red';
+    errorElement.style.marginTop = '10px';
+    document.body.appendChild(errorElement);
 }
 
 window.onload = initialize;
