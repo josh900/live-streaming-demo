@@ -595,14 +595,16 @@ async function startRecording() {
 
   deepgramSocket.onmessage = (message) => {
     const received = JSON.parse(message.data);
-    const partialTranscript = received.channel.alternatives[0].transcript;
-
-    if (partialTranscript) {
-      transcript += partialTranscript;
-      document.getElementById('msgHistory').innerHTML = document.getElementById('msgHistory').innerHTML.replace(/<span style='opacity:0.5'><u>User \(interim\):<\/u>.*<\/span><br>/, `<span style='opacity:0.5'><u>User (interim):</u> ${transcript}</span><br>`);
+    if (received.channel && received.channel.alternatives && received.channel.alternatives.length > 0) {
+      const partialTranscript = received.channel.alternatives[0].transcript;
+      if (partialTranscript) {
+        transcript += partialTranscript;
+        document.getElementById('msgHistory').innerHTML = document.getElementById('msgHistory').innerHTML.replace(/<span style='opacity:0.5'><u>User \(interim\):<\/u>.*<\/span><br>/, `<span style='opacity:0.5'><u>User (interim):</u> ${transcript}</span><br>`);
+      }
     }
   };
-
+  
+  
   deepgramSocket.onclose = async () => {
     logger.info('Deepgram WebSocket connection closed');
     if (isRecording) {
