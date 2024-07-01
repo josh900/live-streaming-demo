@@ -49,22 +49,22 @@ function initializeWebSocket() {
 }
 
 async function initializeConnection() {
-  logger.log('Initializing WebRTC connection');
-  try {
-      const { newStreamId, newSessionId, offer, iceServers } = await initializeWebRTC(DID_API);
-      streamId = newStreamId;
-      sessionId = newSessionId;
-      peerConnection = await createPeerConnection(offer, iceServers);
-      peerConnection.onicecandidate = event => {
-          if (event.candidate) {
-              sendIceCandidate(event.candidate);
-          }
-      };
-      startKeepAlive();
-  } catch (error) {
-      handleError('Failed to initialize connection', error);
-      showErrorMessage('Failed to connect. Please try again.');
-  }
+    logger.log('Initializing WebRTC connection');
+    try {
+        const { newStreamId, newSessionId, offer, iceServers } = await initializeWebRTC(DID_API);
+        streamId = newStreamId;
+        sessionId = newSessionId;
+        peerConnection = await createPeerConnection(offer, iceServers);
+        peerConnection.onicecandidate = event => {
+            if (event.candidate) {
+                sendIceCandidate(event.candidate);
+            }
+        };
+        startKeepAlive();
+    } catch (error) {
+        logger.error('Error initializing connection:', error);
+        showErrorMessage('Failed to connect. Please try again.');
+    }
 }
 
 function sendIceCandidate(candidate) {

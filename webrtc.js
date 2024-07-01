@@ -1,7 +1,6 @@
 import Logger from './logger.js';
-import { handleError } from './errorHandler.js';
 
-const logger = new Logger('INFO');
+const logger = new Logger('DEBUG');
 
 export async function initializeWebRTC(DID_API) {
     logger.log('Initializing WebRTC');
@@ -28,7 +27,7 @@ export async function initializeWebRTC(DID_API) {
         logger.log('WebRTC session created:', { newStreamId, newSessionId });
         return { newStreamId, newSessionId, offer, iceServers };
     } catch (error) {
-        handleError('Error initializing WebRTC', error);
+        logger.error('Error initializing WebRTC:', error);
         throw error;
     }
 }
@@ -51,16 +50,10 @@ export async function createPeerConnection(offer, iceServers) {
 
     peerConnection.addEventListener('iceconnectionstatechange', () => {
         logger.log('ICE connection state:', peerConnection.iceConnectionState);
-        if (peerConnection.iceConnectionState === 'failed') {
-            handleError('ICE connection failed', new Error('ICE connection failed'));
-        }
     });
 
     peerConnection.addEventListener('connectionstatechange', () => {
         logger.log('Connection state:', peerConnection.connectionState);
-        if (peerConnection.connectionState === 'failed') {
-            handleError('Connection failed', new Error('Connection failed'));
-        }
     });
 
     peerConnection.addEventListener('signalingstatechange', () => {
@@ -68,7 +61,7 @@ export async function createPeerConnection(offer, iceServers) {
     });
 
     peerConnection.addEventListener('icecandidateerror', (event) => {
-        logger.warn('ICE candidate error:', event);
+        logger.error('ICE candidate error:', event);
     });
 
     peerConnection.addEventListener('track', (event) => {
@@ -96,7 +89,7 @@ export async function createPeerConnection(offer, iceServers) {
 
         return peerConnection;
     } catch (error) {
-        handleError('Error creating peer connection', error);
+        logger.error('Error creating peer connection:', error);
         throw error;
     }
 }
@@ -104,8 +97,7 @@ export async function createPeerConnection(offer, iceServers) {
 export function addIceCandidate(peerConnection, candidate) {
     if (candidate) {
         logger.log('Adding ICE candidate');
-        return peerConnection.addIceCandidate(new RTCIceCandidate(candidate))
-            .catch(error => handleError('Error adding ICE candidate', error));
+        return peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
     }
 }
 
@@ -113,5 +105,27 @@ export function closePeerConnection(peerConnection) {
     if (peerConnection) {
         logger.log('Closing peer connection');
         peerConnection.close();
+    }
+}
+
+export async function handleNegotiationNeeded(peerConnection) {
+    logger.log('Handling negotiation needed event');
+    try {
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        logger.log('New offer created and set as local description');
+    } catch (error) {
+        logger.error('Error during negotiation:', error);
+    }
+}
+
+export async function setupMediaStream(peerConnection) {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
+        logger.log('Local media stream added to peer connection');
+    } catch (error) {
+        logger.error('Error setting up media stream:', error);
+        throw error;
     }
 }

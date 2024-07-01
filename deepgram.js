@@ -41,53 +41,54 @@ registerProcessor('deepgram-processor', DeepgramProcessor);
 `;
 
 export async function initializeDeepgram(apiKey, onTranscriptionReceived) {
-  logger.log('Initializing Deepgram');
+    logger.log('Initializing Deepgram');
 
-  return new Promise((resolve, reject) => {
-      deepgramSocket = new WebSocket('wss://api.deepgram.com/v1/listen', [
-          'token',
-          apiKey,
-      ]);
+    return new Promise((resolve, reject) => {
+        deepgramSocket = new WebSocket('wss://api.deepgram.com/v1/listen', [
+            'token',
+            apiKey,
+        ]);
 
-      const timeout = setTimeout(() => {
-          if (deepgramSocket.readyState !== WebSocket.OPEN) {
-              handleError('Connection to Deepgram timed out', new Error('Connection timeout'));
-              deepgramSocket.close();
-              reject(new Error('Connection to Deepgram timed out'));
-          }
-      }, 10000);
+        const timeout = setTimeout(() => {
+            if (deepgramSocket.readyState !== WebSocket.OPEN) {
+                reject(new Error('Connection to Deepgram timed out'));
+                deepgramSocket.close();
+            }
+        }, 10000); // 10 second timeout
 
-      deepgramSocket.onopen = () => {
-          clearTimeout(timeout);
-          logger.log('Deepgram WebSocket opened');
-          const metadata = {
-              sampling_rate: SAMPLE_RATE,
-              channels: 1,
-              encoding: 'linear16',
-              language: 'en-US',
-          };
-          deepgramSocket.send(JSON.stringify(metadata));
-          resolve();
-      };
+        deepgramSocket.onopen = () => {
+            clearTimeout(timeout);
+            logger.log('Deepgram WebSocket opened');
+            const metadata = {
+                sampling_rate: SAMPLE_RATE,
+                channels: 1,
+                encoding: 'linear16',
+                language: 'en-US',
+            };
+            deepgramSocket.send(JSON.stringify(metadata));
+            resolve();
+        };
 
-      deepgramSocket.onmessage = (event) => {
-          const result = JSON.parse(event.data);
-          if (result.channel && result.channel.alternatives && result.channel.alternatives[0]) {
-              const transcript = result.channel.alternatives[0].transcript;
-              if (transcript) {
-                  onTranscriptionReceived(transcript);
-              }
-          }
-      };
+        deepgramSocket.onmessage = (event) => {
+            const result = JSON.parse(event.data);
+            if (result.channel && result.channel.alternatives && result.channel.alternatives[0]) {
+                const transcript = result.channel.alternatives[0].transcript;
+                if (transcript) {
+                    onTranscriptionReceived(transcript);
+                }
+            }
+        };
 
-      deepgramSocket.onerror = (error) => {
-          clearTimeout(timeout);
-          handleError('Deepgram WebSocket error', error);
-          reject(error);
-      };
-  });
+        deepgramSocket.onerror = (error) => {
+            clearTimeout(timeout);
+            logger.error('Deepgram WebSocket error:', error);
+            reject(error);
+        };
+    });
+
+    // Initialize AudioContext
+    audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
 }
-
 
 export async function startRecording() {
   logger.log('Starting recording');
