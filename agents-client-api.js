@@ -355,11 +355,6 @@ async function startStreaming(assistantReply) {
       }),
     });
 
-    if (!playResponse.ok) {
-      const errorText = await playResponse.text();
-      throw new Error(`HTTP error ${playResponse.status}: ${errorText}`);
-    }
-
     const playResponseData = await playResponse.json();
     console.log('Streaming response:', playResponseData);
 
@@ -370,15 +365,11 @@ async function startStreaming(assistantReply) {
     }
   } catch (error) {
     console.error('Error during streaming:', error.message);
-    if (error.message.includes('500')) {
-      console.log('Attempting to reinitialize connection due to server error');
+    if (isRecording) {
       await reinitializeConnection();
     }
   }
 }
-
-
-
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   mediaRecorder = new MediaRecorder(stream);
