@@ -48,6 +48,9 @@ const iceGatheringStatusLabel = document.getElementById('ice-gathering-status-la
 const signalingStatusLabel = document.getElementById('signaling-status-label');
 const streamingStatusLabel = document.getElementById('streaming-status-label');
 
+logger.setLogLevel('DEBUG');
+
+
 window.onload = async (event) => {
   logger.info('Window loaded, initializing application');
   playIdleVideo();
