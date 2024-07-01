@@ -1,4 +1,3 @@
-
 'use strict';
 import DID_API from './api.js';
 import logger from './logger.js';
@@ -31,6 +30,8 @@ let transcript = '';
 let inactivityTimeout;
 let transcriptionTimer;
 let keepAliveInterval;
+let retryCount = 0;
+let maxRetries = 5;
 
 const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentence unless absolutely needed.`;
 
@@ -41,9 +42,6 @@ const iceStatusLabel = document.getElementById('ice-status-label');
 const iceGatheringStatusLabel = document.getElementById('ice-gathering-status-label');
 const signalingStatusLabel = document.getElementById('signaling-status-label');
 const streamingStatusLabel = document.getElementById('streaming-status-label');
-
-logger.setLogLevel('DEBUG');
-
 
 window.onload = async (event) => {
   logger.info('Window loaded, initializing application');
@@ -140,7 +138,7 @@ function onIceCandidate(event) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
     logger.debug('New ICE candidate:', candidate);
 
-    fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
+    fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -152,10 +150,6 @@ function onIceCandidate(event) {
         sdpMLineIndex,
         session_id: sessionId,
       }),
-    }).then(response => {
-      if (!response.ok) {
-        logger.error('Failed to send ICE candidate:', response.status, response.statusText);
-      }
     }).catch(error => {
       logger.error('Error sending ICE candidate:', error);
     });
@@ -275,12 +269,15 @@ function playIdleVideo() {
   logger.info('Playing idle video');
   videoElement.classList.add("animated");
   videoElement.srcObject = undefined;
-  videoElement.src = 'emma_idle.mp4';
+  videoElement.src = 'brad_idle.mp4';
   videoElement.loop = true;
+  videoElement.muted = true;
 
   setTimeout(() => {
     videoElement.classList.remove("animated");
   }, 300);
+
+  videoElement.play().catch(e => logger.error('Error playing idle video:', e));
 }
 
 function stopAllStreams() {
@@ -312,9 +309,10 @@ function closePC(pc = peerConnection) {
   }
 }
 
-async function fetchWithRetries(url, options, retries = 1) {
-  const maxRetryCount = 3;
-  const maxDelaySec = 4;
+async function fetchWithRetries(url, options, retries = 0) {
+  const maxRetries = 3;
+  const baseDelay = 1000; // 1 second
+
   try {
     const response = await fetch(url, options);
     if (!response.ok) {
@@ -322,16 +320,18 @@ async function fetchWithRetries(url, options, retries = 1) {
     }
     return response;
   } catch (err) {
-    if (retries <= maxRetryCount) {
-      const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 1000;
-      logger.warn(`Request failed, retrying ${retries}/${maxRetryCount} in ${delay}ms. Error: ${err.message}`);
-      await new Promise((resolve) => setTimeout(resolve, delay));
-      return fetchWithRetries(url, options, retries + 1);
-    } else {
+    if (retries >= maxRetries) {
       throw new Error(`Max retries exceeded. Error: ${err.message}`);
     }
+    
+    const delay = baseDelay * Math.pow(2, retries) + Math.random() * 1000;
+    logger.warn(`Request failed, retrying in ${delay}ms. Error: ${err.message}`);
+    await new Promise(resolve => setTimeout(resolve, delay));
+    
+    return fetchWithRetries(url, options, retries + 1);
   }
 }
+
 async function initializeConnection() {
   stopAllStreams();
   closePC();
@@ -344,7 +344,7 @@ async function initializeConnection() {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg',
+      source_url: 'brad_idle.png',
       compatibility_mode: 'auto',
       output_resolution: 720,
       stream_warmup: true,
@@ -354,6 +354,10 @@ async function initializeConnection() {
         fluent: true,
         pad_audio: 0,
         motion_factor: 0.8,
+        align_driver: true,
+        auto_match: true,
+        normalization_factor: 0.8,
+        sharpen: true,
       }
     }),
   });
@@ -372,7 +376,7 @@ async function initializeConnection() {
     throw e;
   }
 
-  const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+  const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
     method: 'POST',
     headers: {
       Authorization: `Basic ${DID_API.key}`,
@@ -397,24 +401,35 @@ function startKeepAlive() {
   if (keepAliveInterval) {
     clearInterval(keepAliveInterval);
   }
-  keepAliveInterval = setInterval(async () => {
-    try {
-      const response = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/keepalive`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${DID_API.key}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ session_id: sessionId }),
-      });
-      if (!response.ok) {
-        throw new Error(`Keep-alive failed: ${response.status} ${response.statusText}`);
-      }
-      logger.debug('Keep-alive successful');
-    } catch (error) {
-      logger.error('Keep-alive error:', error);
+  keepAliveInterval = setInterval(sendKeepAlive, 30000); // Send keep-alive every 30 seconds
+}
+
+async function sendKeepAlive() {
+  try {
+    const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/keepalive`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+    if (!response.ok) {
+      throw new Error(`Keep-alive failed: ${response.status} ${response.statusText}`);
     }
-  }, 30000); // Send keep-alive every 30 seconds
+    logger.debug('Keep-alive successful');
+    retryCount = 0; // Reset retry count on successful keep-alive
+  } catch (error) {
+    logger.error('Keep-alive error:', error);
+    retryCount++;
+    if (retryCount >= maxRetries) {
+      logger.error('Max retries exceeded for keep-alive. Reinitializing connection.');
+      clearInterval(keepAliveInterval);
+      await reinitializeConnection();
+    } else {
+      logger.warn(`Retrying keep-alive in ${30 * Math.pow(2, retryCount)} seconds`);
+    }
+  }
 }
 
 async function startStreaming(assistantReply) {
@@ -432,14 +447,20 @@ async function startStreaming(assistantReply) {
           input: assistantReply,
           provider: {
             type: 'microsoft',
-            voice_id: 'en-US-JennyMultilingualV2Neural'
+            voice_id: 'en-US-ChristopherNeural'
           }
         },
         config: {
           fluent: true,
-          pad_audio: 0,
-          stitch: true
+          pad_audio: 0.5,
+          stitch: true,
+          align_driver: true,
+          auto_match: true,
+          normalization_factor: 0.8,
+          sharpen: true,
+          motion_factor: 0.8,
         },
+        driver_url: 'bank://lively/',
         session_id: sessionId,
       }),
     });
@@ -645,7 +666,7 @@ connectButton.onclick = initializeConnection;
 const destroyButton = document.getElementById('destroy-button');
 destroyButton.onclick = async () => {
   try {
-    await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+    await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'DELETE',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
