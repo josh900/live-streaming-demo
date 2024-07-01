@@ -28,6 +28,8 @@ let inactivityTimeout;
 let transcriptionTimer;
 let keepAliveInterval;
 let socket;
+let transcriptionStartTime;
+
 
 const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentence unless absolutely needed.`;
 
@@ -53,7 +55,8 @@ function getStatusLabels() {
 }
 
 function initializeWebSocket() {
-  socket = new WebSocket(`ws://${window.location.host}`);
+  socket = new WebSocket(`wss://${window.location.host}`);
+
 
   socket.onopen = () => {
     logger.info('WebSocket connection established');
@@ -421,7 +424,7 @@ async function initializeConnection() {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Brad_m/v1_image.jpeg',
+      source_url: 'https://skoop-general.s3.amazonaws.com/brad_idle.png',
       compatibility_mode: 'auto',
       output_resolution: 720,
       stream_warmup: true,
@@ -547,6 +550,8 @@ async function startStreaming(assistantReply) {
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   mediaRecorder = new MediaRecorder(stream);
+  transcriptionStartTime = Date.now();
+
 
   deepgramSocket = new WebSocket('wss://api.deepgram.com/v1/listen', [
     'token',
