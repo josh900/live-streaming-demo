@@ -329,7 +329,7 @@ async function fetchWithRetries(url, options, retries = 1) {
     }
   }
 }
-javascriptCopyasync function initializeConnection() {
+async function initializeConnection() {
   stopAllStreams();
   closePC();
 
