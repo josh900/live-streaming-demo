@@ -54,18 +54,47 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
+function getVideoElements() {
+  const idle = document.getElementById('idle-video-element');
+  const stream = document.getElementById('stream-video-element');
+  
+  if (!idle || !stream) {
+    logger.warn('Video elements not found in the DOM');
+  }
+  
+  return { idle, stream };
+}
+
+function getStatusLabels() {
+  return {
+    peer: document.getElementById('peer-status-label'),
+    ice: document.getElementById('ice-status-label'),
+    iceGathering: document.getElementById('ice-gathering-status-label'),
+    signaling: document.getElementById('signaling-status-label'),
+    streaming: document.getElementById('streaming-status-label')
+  };
+}
+
+
 window.onload = async (event) => {
+  const { idle, stream } = getVideoElements();
+  if (idle) idle.setAttribute('playsinline', '');
+  if (stream) stream.setAttribute('playsinline', '');
+
   playIdleVideo();
   showLoadingSymbol();
   try {
     await initializeConnection();
     hideLoadingSymbol();
   } catch (error) {
-    console.error('Error during auto-initialization:', error);
+    logger.error('Error during auto-initialization:', error);
     hideLoadingSymbol();
     showErrorMessage('Failed to connect. Please try again.');
   }
 };
+
+
+
 
 function showLoadingSymbol() {
   const loadingSymbol = document.createElement('div');
