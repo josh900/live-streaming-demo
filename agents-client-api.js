@@ -32,13 +32,27 @@ let keepAliveInterval;
 
 const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentence unless absolutely needed.`;
 
-const videoElement = document.getElementById('video-element');
-videoElement.setAttribute('playsinline', '');
-const peerStatusLabel = document.getElementById('peer-status-label');
-const iceStatusLabel = document.getElementById('ice-status-label');
-const iceGatheringStatusLabel = document.getElementById('ice-gathering-status-label');
-const signalingStatusLabel = document.getElementById('signaling-status-label');
-const streamingStatusLabel = document.getElementById('streaming-status-label');
+
+document.addEventListener('DOMContentLoaded', () => {
+  const idleVideoElement = document.getElementById('idle-video-element');
+  const streamVideoElement = document.getElementById('stream-video-element');
+
+  if (idleVideoElement) {
+    idleVideoElement.setAttribute('playsinline', '');
+  }
+
+  if (streamVideoElement) {
+    streamVideoElement.setAttribute('playsinline', '');
+  }
+
+  const peerStatusLabel = document.getElementById('peer-status-label');
+  const iceStatusLabel = document.getElementById('ice-status-label');
+  const iceGatheringStatusLabel = document.getElementById('ice-gathering-status-label');
+  const signalingStatusLabel = document.getElementById('signalingStatus-label');
+  const streamingStatusLabel = document.getElementById('streaming-status-label');
+
+});
+
 
 window.onload = async (event) => {
   playIdleVideo();
