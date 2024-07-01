@@ -1,3 +1,4 @@
+
 'use strict';
 import DID_API from './api.js';
 import logger from './logger.js';
@@ -30,7 +31,6 @@ let transcript = '';
 let inactivityTimeout;
 let transcriptionTimer;
 let keepAliveInterval;
-let isRecording = false;
 
 const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentence unless absolutely needed.`;
 
@@ -42,9 +42,12 @@ const iceGatheringStatusLabel = document.getElementById('ice-gathering-status-la
 const signalingStatusLabel = document.getElementById('signaling-status-label');
 const streamingStatusLabel = document.getElementById('streaming-status-label');
 
+logger.setLogLevel('DEBUG');
+
+
 window.onload = async (event) => {
   logger.info('Window loaded, initializing application');
-  await playIdleVideo();
+  playIdleVideo();
   showLoadingSymbol();
   try {
     await initializeConnection();
@@ -137,7 +140,7 @@ function onIceCandidate(event) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
     logger.debug('New ICE candidate:', candidate);
 
-    fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
+    fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -149,6 +152,10 @@ function onIceCandidate(event) {
         sdpMLineIndex,
         session_id: sessionId,
       }),
+    }).then(response => {
+      if (!response.ok) {
+        logger.error('Failed to send ICE candidate:', response.status, response.statusText);
+      }
     }).catch(error => {
       logger.error('Error sending ICE candidate:', error);
     });
@@ -248,41 +255,32 @@ function setVideoElement(stream) {
     logger.warn('No stream available to set video element');
     return;
   }
+  videoElement.classList.add("animated");
   videoElement.srcObject = stream;
   videoElement.loop = false;
   videoElement.muted = false;
 
+  setTimeout(() => {
+    videoElement.classList.remove("animated");
+  }, 300);
+
   if (videoElement.paused) {
     videoElement.play().then(() => {
       logger.info('Video playback started');
-    }).catch(e => {
-      logger.error('Error playing video:', e);
-      if (e.name === 'NotAllowedError') {
-        logger.info('Autoplay not allowed, waiting for user interaction');
-        document.addEventListener('click', () => {
-          videoElement.play().catch(playError => logger.error('Error playing video after user interaction:', playError));
-        }, { once: true });
-      }
-    });
+    }).catch(e => logger.error('Error playing video:', e));
   }
 }
 
-async function playIdleVideo() {
+function playIdleVideo() {
   logger.info('Playing idle video');
+  videoElement.classList.add("animated");
+  videoElement.srcObject = undefined;
   videoElement.src = 'emma_idle.mp4';
   videoElement.loop = true;
-  try {
-    await videoElement.play();
-    logger.info('Idle video playback started');
-  } catch (e) {
-    logger.error('Error playing idle video:', e);
-    if (e.name === 'NotAllowedError') {
-      logger.info('Autoplay not allowed, waiting for user interaction');
-      document.addEventListener('click', () => {
-        videoElement.play().catch(playError => logger.error('Error playing idle video after user interaction:', playError));
-      }, { once: true });
-    }
-  }
+
+  setTimeout(() => {
+    videoElement.classList.remove("animated");
+  }, 300);
 }
 
 function stopAllStreams() {
@@ -314,9 +312,9 @@ function closePC(pc = peerConnection) {
   }
 }
 
-async function fetchWithRetries(url, options, retries = 0) {
-  const maxRetries = 3;
-  const baseDelay = 1000; // 1 second
+async function fetchWithRetries(url, options, retries = 1) {
+  const maxRetryCount = 3;
+  const maxDelaySec = 4;
   try {
     const response = await fetch(url, options);
     if (!response.ok) {
@@ -324,17 +322,16 @@ async function fetchWithRetries(url, options, retries = 0) {
     }
     return response;
   } catch (err) {
-    if (retries < maxRetries) {
-      const delay = Math.min(Math.pow(2, retries) * baseDelay + Math.random() * 1000, 10000);
-      logger.warn(`Request failed, retrying in ${delay}ms. Error: ${err.message}`);
-      await new Promise(resolve => setTimeout(resolve, delay));
+    if (retries <= maxRetryCount) {
+      const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 1000;
+      logger.warn(`Request failed, retrying ${retries}/${maxRetryCount} in ${delay}ms. Error: ${err.message}`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
       return fetchWithRetries(url, options, retries + 1);
     } else {
       throw new Error(`Max retries exceeded. Error: ${err.message}`);
     }
   }
 }
-
 async function initializeConnection() {
   stopAllStreams();
   closePC();
@@ -348,18 +345,16 @@ async function initializeConnection() {
     },
     body: JSON.stringify({
       source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg',
-      driver_url: 'bank://lively/',
+      compatibility_mode: 'auto',
+      output_resolution: 720,
+      stream_warmup: true,
+      audio_optimization: 2,
       config: {
         stitch: true,
         fluent: true,
-        pad_audio: 0.5,
-        auto_match: true,
-        normalization_factor: 1,
-        sharpen: true,
-      },
-      audio_optimization: 2,
-      output_resolution: 720,
-      stream_warmup: true
+        pad_audio: 0,
+        motion_factor: 0.8,
+      }
     }),
   });
 
@@ -377,7 +372,7 @@ async function initializeConnection() {
     throw e;
   }
 
-  const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+  const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
     method: 'POST',
     headers: {
       Authorization: `Basic ${DID_API.key}`,
@@ -404,7 +399,7 @@ function startKeepAlive() {
   }
   keepAliveInterval = setInterval(async () => {
     try {
-      const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/keepalive`, {
+      const response = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/keepalive`, {
         method: 'POST',
         headers: {
           Authorization: `Basic ${DID_API.key}`,
@@ -442,13 +437,9 @@ async function startStreaming(assistantReply) {
         },
         config: {
           fluent: true,
-          pad_audio: 0.5,
-          stitch: true,
-          auto_match: true,
-          normalization_factor: 1,
-          sharpen: true,
+          pad_audio: 0,
+          stitch: true
         },
-        driver_url: 'bank://lively/',
         session_id: sessionId,
       }),
     });
@@ -553,7 +544,7 @@ async function sendChatToGroq() {
   try {
     const startTime = performance.now();
     logger.info('Sending chat to Groq');
-    const response = await fetchWithRetries('https://avatar.skoop.digital/chat', {
+    const response = await fetch('https://avatar.skoop.digital/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -654,7 +645,7 @@ connectButton.onclick = initializeConnection;
 const destroyButton = document.getElementById('destroy-button');
 destroyButton.onclick = async () => {
   try {
-    await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+    await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'DELETE',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -669,11 +660,11 @@ destroyButton.onclick = async () => {
   } finally {
     stopAllStreams();
     closePC();
-    clearInterval(keepAliveInterval);
   }
 };
 
 const startButton = document.getElementById('start-button');
+let isRecording = false;
 
 startButton.onclick = async () => {
   if (!isRecording) {
