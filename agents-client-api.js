@@ -31,12 +31,6 @@ let transcript = '';
 let inactivityTimeout;
 let transcriptionTimer;
 let keepAliveInterval;
-let keepAliveRetryCount = 0;
-const MAX_KEEPALIVE_RETRIES = 5;
-const INITIAL_KEEPALIVE_INTERVAL = 30000; // 30 seconds
-let currentKeepAliveInterval = INITIAL_KEEPALIVE_INTERVAL;
-let keepAliveTimeoutId = null;
-
 
 const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentence unless absolutely needed.`;
 
@@ -261,55 +255,32 @@ function setVideoElement(stream) {
     logger.warn('No stream available to set video element');
     return;
   }
-  
-  if (videoElement.srcObject !== stream) {
-    videoElement.classList.add("animated");
-    videoElement.srcObject = stream;
-    videoElement.loop = false;
-    videoElement.muted = false;
+  videoElement.classList.add("animated");
+  videoElement.srcObject = stream;
+  videoElement.loop = false;
+  videoElement.muted = false;
 
-    setTimeout(() => {
-      videoElement.classList.remove("animated");
-    }, 300);
+  setTimeout(() => {
+    videoElement.classList.remove("animated");
+  }, 300);
 
-    if (videoElement.paused) {
-      videoElement.play().then(() => {
-        logger.info('Video playback started');
-      }).catch(e => {
-        if (e.name === 'AbortError') {
-          logger.warn('Video playback was aborted, likely due to a new load request');
-        } else {
-          logger.error('Error playing video:', e);
-        }
-      });
-    }
-  } else {
-    logger.debug('Video element already set to the current stream');
+  if (videoElement.paused) {
+    videoElement.play().then(() => {
+      logger.info('Video playback started');
+    }).catch(e => logger.error('Error playing video:', e));
   }
 }
 
-let currentIdleVideoSrc = null;
-
-
 function playIdleVideo() {
-  const idleVideoSrc = 'emma_idle.mp4';
-  
-  if (currentIdleVideoSrc !== idleVideoSrc) {
-    logger.info('Playing idle video');
-    videoElement.classList.add("animated");
-    videoElement.srcObject = null;
-    videoElement.src = idleVideoSrc;
-    videoElement.loop = true;
-    currentIdleVideoSrc = idleVideoSrc;
+  logger.info('Playing idle video');
+  videoElement.classList.add("animated");
+  videoElement.srcObject = undefined;
+  videoElement.src = 'emma_idle.mp4';
+  videoElement.loop = true;
 
-    setTimeout(() => {
-      videoElement.classList.remove("animated");
-    }, 300);
-
-    videoElement.play().catch(e => logger.error('Error playing idle video:', e));
-  } else {
-    logger.debug('Idle video is already playing');
-  }
+  setTimeout(() => {
+    videoElement.classList.remove("animated");
+  }, 300);
 }
 
 function stopAllStreams() {
@@ -361,8 +332,6 @@ async function fetchWithRetries(url, options, retries = 1) {
     }
   }
 }
-
-
 async function initializeConnection() {
   stopAllStreams();
   closePC();
@@ -423,14 +392,12 @@ async function initializeConnection() {
   startKeepAlive();
 }
 
-
 function startKeepAlive() {
   logger.debug('Starting keep-alive mechanism');
-  if (keepAliveTimeoutId) {
-    clearTimeout(keepAliveTimeoutId);
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval);
   }
-  
-  const sendKeepAlive = async () => {
+  keepAliveInterval = setInterval(async () => {
     try {
       const response = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/keepalive`, {
         method: 'POST',
@@ -440,31 +407,14 @@ function startKeepAlive() {
         },
         body: JSON.stringify({ session_id: sessionId }),
       });
-      
       if (!response.ok) {
         throw new Error(`Keep-alive failed: ${response.status} ${response.statusText}`);
       }
-      
       logger.debug('Keep-alive successful');
-      keepAliveRetryCount = 0;
-      currentKeepAliveInterval = INITIAL_KEEPALIVE_INTERVAL;
     } catch (error) {
       logger.error('Keep-alive error:', error);
-      keepAliveRetryCount++;
-      
-      if (keepAliveRetryCount <= MAX_KEEPALIVE_RETRIES) {
-        currentKeepAliveInterval *= 2; // Exponential backoff
-        logger.warn(`Retrying keep-alive in ${currentKeepAliveInterval / 1000} seconds`);
-      } else {
-        logger.error('Max keep-alive retries reached. Stopping keep-alive mechanism.');
-        return;
-      }
     }
-    
-    keepAliveTimeoutId = setTimeout(sendKeepAlive, currentKeepAliveInterval);
-  };
-  
-  sendKeepAlive();
+  }, 30000); // Send keep-alive every 30 seconds
 }
 
 async function startStreaming(assistantReply) {
@@ -710,9 +660,6 @@ destroyButton.onclick = async () => {
   } finally {
     stopAllStreams();
     closePC();
-    if (keepAliveTimeoutId) {
-      clearTimeout(keepAliveTimeoutId);
-    }
   }
 };
 
