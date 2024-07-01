@@ -5,8 +5,9 @@ import { initializeWebRTC, createPeerConnection, addIceCandidate, closePeerConne
 import { initializeDeepgram, startRecording, stopRecording } from './deepgram.js';
 import { initializeGroq, sendChatToGroq } from './groq.js';
 import { initializeAvatar, updateAvatarAppearance } from './avatar.js';
+import { handleError } from './errorHandler.js';
 
-const logger = new Logger('DEBUG');
+const logger = new Logger('INFO');
 
 let peerConnection;
 let streamId;
@@ -17,6 +18,20 @@ let ws;
 
 const videoElement = document.getElementById('video-element');
 videoElement.setAttribute('playsinline', '');
+
+async function initialize() {
+    logger.log('Initializing application');
+    initializeWebSocket();
+    try {
+        await initializeConnection();
+        await initializeGroq(DID_API.groqKey);
+        initializeAvatar();
+        
+        document.getElementById('start-button').addEventListener('click', handleStartButtonClick);
+    } catch (error) {
+        handleError('Initialization failed', error);
+    }
+}
 
 function initializeWebSocket() {
     ws = new WebSocket(`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`);
@@ -40,7 +55,7 @@ function initializeWebSocket() {
     };
 
     ws.onerror = (error) => {
-        logger.error('WebSocket error:', error);
+        handleError('WebSocket error', error);
     };
 
     ws.onclose = (event) => {
@@ -62,8 +77,7 @@ async function initializeConnection() {
         };
         startKeepAlive();
     } catch (error) {
-        logger.error('Error initializing connection:', error);
-        showErrorMessage('Failed to connect. Please try again.');
+        handleError('Failed to initialize connection', error);
     }
 }
 
@@ -80,7 +94,7 @@ function sendIceCandidate(candidate) {
             sdpMLineIndex: candidate.sdpMLineIndex,
             session_id: sessionId,
         }),
-    }).catch(error => logger.error('Error sending ICE candidate:', error));
+    }).catch(error => handleError('Error sending ICE candidate', error));
 }
 
 function startKeepAlive() {
@@ -96,7 +110,7 @@ function startKeepAlive() {
                 body: JSON.stringify({ session_id: sessionId }),
             });
         } catch (error) {
-            logger.error('Keep-alive request failed:', error);
+            handleError('Keep-alive request failed', error);
         }
     }, 30000);
 }
@@ -105,16 +119,6 @@ function stopKeepAlive() {
     if (keepAliveInterval) {
         clearInterval(keepAliveInterval);
     }
-}
-
-async function initialize() {
-    logger.log('Initializing application');
-    initializeWebSocket();
-    await initializeConnection();
-    await initializeGroq(DID_API.groqKey);
-    initializeAvatar();
-    
-    document.getElementById('start-button').addEventListener('click', handleStartButtonClick);
 }
 
 async function handleStartButtonClick() {
@@ -127,9 +131,8 @@ async function handleStartButtonClick() {
             await startRecording();
             isRecording = true;
         } catch (error) {
-            logger.error('Failed to start recording:', error);
+            handleError('Failed to start recording', error);
             startButton.textContent = 'Start';
-            alert('Failed to start recording. Please check your internet connection and try again.');
         }
     } else {
         logger.log('Stopping recording');
@@ -175,23 +178,10 @@ async function startStreaming(response) {
             throw new Error(`HTTP error ${playResponse.status}`);
         }
     } catch (error) {
-        logger.error('Error during streaming:', error);
+        handleError('Error during streaming', error);
     }
-}
-
-function updateAvatar(imageUrl) {
-    ws.send(JSON.stringify({ type: 'avatar_update', imageUrl }));
-}
-
-function showErrorMessage(message) {
-    logger.error(message);
-    const errorElement = document.createElement('div');
-    errorElement.textContent = message;
-    errorElement.style.color = 'red';
-    errorElement.style.marginTop = '10px';
-    document.body.appendChild(errorElement);
 }
 
 window.onload = initialize;
 
-export { startStreaming, showErrorMessage, updateAvatar };
+export { startStreaming, updateAvatarAppearance };
