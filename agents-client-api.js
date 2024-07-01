@@ -1,5 +1,7 @@
 'use strict';
 import DID_API from './api.js';
+import logger from './logger.js';
+
 
 const GROQ_API_KEY = DID_API.groqKey;
 const DEEPGRAM_API_KEY = DID_API.deepgramKey;
@@ -25,6 +27,8 @@ let deepgramSocket;
 let transcript = '';
 let inactivityTimeout;
 let transcriptionTimer;
+let keepAliveInterval;
+
 
 const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentence unless absolutely needed.`;
 
@@ -322,7 +326,7 @@ async function initializeConnection() {
   stopAllStreams();
   closePC();
 
-  console.log('Initializing connection...');
+  logger.info('Initializing connection...');
   const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
     method: 'POST',
     headers: {
@@ -330,22 +334,27 @@ async function initializeConnection() {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Emma_f/v1_image.jpeg',
+      source_url: 'https://create-images-results.d-id.com/DefaultPresenters/Brad_m/v1_image.jpeg',
       compatibility_mode: 'auto',
       output_resolution: 720,
-      stream_warmup: true
+      stream_warmup: true,
+      config: {
+        stitch: true,
+        fluent: true,
+        pad_audio: 0.5,
+      }
     }),
   });
 
   const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
   streamId = newStreamId;
   sessionId = newSessionId;
-  console.log('Stream created:', { streamId, sessionId });
+  logger.info('Stream created:', { streamId, sessionId });
 
   try {
     sessionClientAnswer = await createPeerConnection(offer, iceServers);
   } catch (e) {
-    console.error('Error during streaming setup:', e);
+    logger.error('Error during streaming setup:', e);
     stopAllStreams();
     closePC();
     throw e;
@@ -367,12 +376,46 @@ async function initializeConnection() {
     throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
   }
 
-  console.log('Connection initialized successfully');
+  logger.info('Connection initialized successfully');
+  startKeepAlive();
 }
+
+function startKeepAlive() {
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval);
+  }
+  keepAliveInterval = setInterval(async () => {
+    try {
+      const response = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/keepalive`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      if (!response.ok) {
+        throw new Error(`Keep-alive failed: ${response.status} ${response.statusText}`);
+      }
+      logger.debug('Keep-alive sent successfully');
+    } catch (error) {
+      logger.error('Error sending keep-alive:', error);
+    }
+  }, 30000); // Send keep-alive every 30 seconds
+}
+
+function stopKeepAlive() {
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval);
+    keepAliveInterval = null;
+  }
+}
+
+
 
 async function startStreaming(assistantReply) {
   try {
-    console.log('Starting streaming with reply:', assistantReply);
+    logger.info('Starting streaming with reply:', assistantReply);
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'POST',
       headers: {
@@ -385,33 +428,37 @@ async function startStreaming(assistantReply) {
           input: assistantReply,
           provider: {
             type: 'microsoft',
-            voice_id: 'en-US-JennyMultilingualV2Neural'
+            voice_id: 'en-US-ChristopherNeural'
           }
         },
         config: {
           fluent: true,
-          pad_audio: 0,
-          stitch: true
+          pad_audio: 0.5,
+          stitch: true,
+          sharpen: true,
+          motion_factor: 0.8,
         },
+        driver_url: 'bank://lively/',
         session_id: sessionId,
       }),
     });
 
     const playResponseData = await playResponse.json();
-    console.log('Streaming response:', playResponseData);
+    logger.info('Streaming response:', playResponseData);
 
     if (playResponseData.status === 'started') {
-      console.log('Stream started successfully');
+      logger.info('Stream started successfully');
     } else {
-      console.warn('Unexpected response status:', playResponseData.status);
+      logger.warn('Unexpected response status:', playResponseData.status);
     }
   } catch (error) {
-    console.error('Error during streaming:', error.message);
+    logger.error('Error during streaming:', error.message);
     if (isRecording) {
       await reinitializeConnection();
     }
   }
 }
+
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -423,7 +470,7 @@ async function startRecording() {
   ]);
 
   deepgramSocket.onopen = () => {
-    console.log('Deepgram WebSocket Connection opened');
+    logger.info('Deepgram WebSocket Connection opened');
     mediaRecorder.addEventListener('dataavailable', async (event) => {
       if (event.data.size > 0 && deepgramSocket.readyState === WebSocket.OPEN) {
         deepgramSocket.send(event.data);
@@ -436,13 +483,15 @@ async function startRecording() {
       if (deepgramSocket.readyState === WebSocket.OPEN) {
         const keepAliveMsg = JSON.stringify({ type: "KeepAlive" });
         deepgramSocket.send(keepAliveMsg);
-        console.log("Sent KeepAlive message");
+        logger.debug("Sent KeepAlive message to Deepgram");
       }
     }, 3000);
 
     // Start transcription timer
     transcriptionTimer = setInterval(() => {
       if (transcript.trim() !== '') {
+        const transcriptionTime = Date.now() - transcriptionStartTime;
+        logger.info(`Transcription completed in ${transcriptionTime}ms`);
         document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User:</u> ${transcript}</span><br>`;
         chatHistory.push({
           role: 'user',
@@ -450,6 +499,7 @@ async function startRecording() {
         });
         sendChatToGroq();
         transcript = '';
+        transcriptionStartTime = Date.now();
       }
     }, 5000); // Send transcription every 5 seconds
   };
@@ -465,7 +515,7 @@ async function startRecording() {
   };
 
   deepgramSocket.onclose = async () => {
-    console.log('WebSocket connection closed');
+    logger.info('Deepgram WebSocket connection closed');
     if (isRecording) {
       await reinitializeConnection();
     }
@@ -474,10 +524,12 @@ async function startRecording() {
   // Start inactivity timeout
   inactivityTimeout = setTimeout(() => {
     if (isRecording) {
-      console.log('Inactivity timeout reached. Stopping recording.');
+      logger.info('Inactivity timeout reached. Stopping recording.');
       startButton.click();
     }
   }, 45000); // 45 seconds
+
+  transcriptionStartTime = Date.now();
 }
 
 async function stopRecording() {
@@ -495,6 +547,7 @@ async function stopRecording() {
 
 async function sendChatToGroq() {
   try {
+    const startTime = Date.now();
     const response = await fetch('https://avatar.skoop.digital/chat', {
       method: 'POST',
       headers: {
@@ -543,6 +596,10 @@ async function sendChatToGroq() {
       }
     }
 
+    const endTime = Date.now();
+    const processingTime = endTime - startTime;
+    logger.info(`Groq processing completed in ${processingTime}ms`);
+
     chatHistory.push({
       role: 'assistant',
       content: assistantReply,
@@ -550,19 +607,19 @@ async function sendChatToGroq() {
 
     document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${assistantReply}</span><br>`;
 
-    console.log('Assistant reply:', assistantReply);
+    logger.info('Assistant reply:', assistantReply);
 
     clearTimeout(inactivityTimeout);
     inactivityTimeout = setTimeout(() => {
       if (isRecording) {
-        console.log('Inactivity timeout reached. Stopping recording.');
+        logger.info('Inactivity timeout reached. Stopping recording.');
         startButton.click();
       }
     }, 45000); // 45 seconds
 
     await startStreaming(assistantReply);
   } catch (error) {
-    console.error('Error:', error);
+    logger.error('Error:', error);
     if (isRecording) {
       await reinitializeConnection();
     }
@@ -627,6 +684,10 @@ startButton.onclick = async () => {
 
 // Initialize the connection when the page loads
 initializeConnection().catch(error => {
-  console.error('Failed to initialize connection:', error);
+  logger.error('Failed to initialize connection:', error);
   showErrorMessage('Failed to initialize connection. Please try again.');
 });
+
+export function setLogLevel(level) {
+  logger.setLogLevel(level);
+}

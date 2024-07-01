@@ -28,7 +28,8 @@
 
     <div id="video-wrapper">
       <div>
-        <video id="video-element" width="400" height="400" src="" autoplay loop muted class="animated"></video>
+        <video id="idle-video-element" width="400" height="400" src="brad_idle.mp4" autoplay loop muted></video>
+        <video id="stream-video-element" width="400" height="400" autoplay></video>
       </div>
     </div>
 
@@ -39,14 +40,46 @@
     </div>
   </div>
 
-
-
-  </div>
   <div>
     <h3>Click the button below to start speaking:</h3>
     <button id="start-button" type="button">Speak</button>
   </div>
   <script type="module" src="./agents-client-api.js"></script>
+  <script>
+    // AudioWorklet implementation
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+    // AudioWorklet processor code
+    const workletCode = `
+      class AudioProcessor extends AudioWorkletProcessor {
+        process(inputs, outputs, parameters) {
+          const input = inputs[0];
+          const output = outputs[0];
+
+          for (let channel = 0; channel < input.length; channel++) {
+            const inputChannel = input[channel];
+            const outputChannel = output[channel];
+            for (let i = 0; i < inputChannel.length; i++) {
+              outputChannel[i] = inputChannel[i];
+            }
+          }
+
+          return true;
+        }
+      }
+
+      registerProcessor('audio-processor', AudioProcessor);
+    `;
+
+    const blob = new Blob([workletCode], { type: 'application/javascript' });
+    const workletUrl = URL.createObjectURL(blob);
+
+    audioContext.audioWorklet.addModule(workletUrl).then(() => {
+      const audioProcessor = new AudioWorkletNode(audioContext, 'audio-processor');
+      // Connect the audio processor to the audio context destination
+      audioProcessor.connect(audioContext.destination);
+    }).catch(err => console.error('Error loading AudioWorklet:', err));
+  </script>
 </body>
 
 </html>
