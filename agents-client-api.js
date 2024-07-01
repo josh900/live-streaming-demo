@@ -204,6 +204,7 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   streamingStatusLabel.className = 'streamingState-' + status;
   console.log('Video status changed:', status);
 }
+
 function onTrack(event) {
   console.log('onTrack event:', event);
   if (!event.track) return;
@@ -259,38 +260,38 @@ function setVideoElement(stream) {
     console.log('No stream available to set video element');
     return;
   }
-  videoElement.classList.add("animated");
-  videoElement.srcObject = stream;
-  videoElement.loop = false;
-  videoElement.muted = false;
+  streamVideoElement.classList.add("animated");
+  streamVideoElement.srcObject = stream;
+  streamVideoElement.loop = false;
+  streamVideoElement.muted = false;
 
   setTimeout(() => {
-    videoElement.classList.remove("animated");
+    streamVideoElement.classList.remove("animated");
   }, 300);
 
-  if (videoElement.paused) {
-    videoElement.play().then(() => {
+  if (streamVideoElement.paused) {
+    streamVideoElement.play().then(() => {
       console.log('Video playback started');
     }).catch(e => console.error('Error playing video:', e));
   }
 }
 
 function playIdleVideo() {
-  videoElement.classList.add("animated");
-  videoElement.srcObject = undefined;
-  videoElement.src = 'emma_idle.mp4';
-  videoElement.loop = true;
+  idleVideoElement.classList.add("animated");
+  streamVideoElement.srcObject = undefined;
+  idleVideoElement.src = 'brad_idle.mp4';
+  idleVideoElement.loop = true;
 
   setTimeout(() => {
-    videoElement.classList.remove("animated");
+    idleVideoElement.classList.remove("animated");
   }, 300);
 }
 
 function stopAllStreams() {
-  if (videoElement.srcObject) {
+  if (streamVideoElement.srcObject) {
     console.log('Stopping video streams');
-    videoElement.srcObject.getTracks().forEach((track) => track.stop());
-    videoElement.srcObject = null;
+    streamVideoElement.srcObject.getTracks().forEach((track) => track.stop());
+    streamVideoElement.srcObject = null;
   }
 }
 
