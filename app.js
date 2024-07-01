@@ -6,7 +6,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { processChat, initializeGroq } from './groq.js';
 import DID_API from './api.js';
-import { handleError } from './errorHandler.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,7 +36,7 @@ const wss = new WebSocketServer({ server });
 
 // Initialize Groq
 initializeGroq().catch(error => {
-    handleError('Failed to initialize Groq', error);
+    console.error('Failed to initialize Groq:', error);
     process.exit(1);
 });
 
@@ -69,7 +68,7 @@ wss.on('connection', (ws) => {
                     ws.send(JSON.stringify({ type: 'error', message: 'Unknown message type' }));
             }
         } catch (error) {
-            handleError('Error processing message', error);
+            console.error('Error processing message:', error);
             ws.send(JSON.stringify({ type: 'error', message: error.message }));
         }
     });
