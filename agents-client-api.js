@@ -18,7 +18,7 @@ let streamId;
 let sessionId;
 let sessionClientAnswer;
 let statsIntervalId;
-let videoIsPlaying;
+let videoIsPlaying = false;
 let lastBytesReceived;
 let chatHistory = [];
 let mediaRecorder;
@@ -30,7 +30,6 @@ let keepAliveInterval;
 let socket;
 let transcriptionStartTime;
 let didWebSocket;
-
 
 const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentence unless absolutely needed.`;
 
@@ -56,10 +55,15 @@ function getStatusLabels() {
 }
 
 function initializeDIDWebSocket() {
-  didWebSocket = new WebSocket(`wss://api.d-id.com`);
+  didWebSocket = new WebSocket(`wss://api.d-id.com/streams/${streamId}`);
 
   didWebSocket.onopen = () => {
-    console.log('D-ID WebSocket connected');
+    logger.info('D-ID WebSocket connected');
+    didWebSocket.send(JSON.stringify({
+      type: 'connect',
+      sessionId: sessionId,
+      authorization: `Basic ${DID_API.key}`
+    }));
     startKeepAlive();
   };
 
@@ -69,17 +73,17 @@ function initializeDIDWebSocket() {
   };
 
   didWebSocket.onerror = (error) => {
-    console.error('D-ID WebSocket error:', error);
+    logger.error('D-ID WebSocket error:', error);
   };
 
   didWebSocket.onclose = () => {
-    console.log('D-ID WebSocket closed');
+    logger.info('D-ID WebSocket closed');
+    clearInterval(keepAliveInterval);
     setTimeout(initializeDIDWebSocket, 5000);
   };
 }
 
 function handleDIDWebSocketMessage(data) {
-  // Handle different message types from D-ID
   switch (data.type) {
     case 'streamCreated':
       handleStreamCreated(data);
@@ -91,10 +95,8 @@ function handleDIDWebSocketMessage(data) {
   }
 }
 
-
 function initializeWebSocket() {
   socket = new WebSocket(`wss://${window.location.host}`);
-
 
   socket.onopen = () => {
     logger.info('WebSocket connection established');
@@ -238,25 +240,17 @@ function onIceCandidate(event) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
     logger.debug('New ICE candidate:', candidate);
 
-    fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    if (didWebSocket.readyState === WebSocket.OPEN) {
+      didWebSocket.send(JSON.stringify({
+        type: 'iceCandidate',
         candidate,
         sdpMid,
         sdpMLineIndex,
-        session_id: sessionId,
-      }),
-    }).then(response => {
-      if (!response.ok) {
-        logger.error('Failed to send ICE candidate:', response.status, response.statusText);
-      }
-    }).catch(error => {
-      logger.error('Error sending ICE candidate:', error);
-    });
+        sessionId
+      }));
+    } else {
+      logger.warn('D-ID WebSocket not open, unable to send ICE candidate');
+    }
   }
 }
 
@@ -295,24 +289,36 @@ function onSignalingStateChange() {
 
 function onVideoStatusChange(videoIsPlaying, stream) {
   const { streaming: streamingStatusLabel } = getStatusLabels();
-  let status;
+  const { idle: idleVideoElement, stream: streamVideoElement } = getVideoElements();
+  
   if (videoIsPlaying) {
-    status = 'streaming';
+    idleVideoElement.style.display = 'none';
+    streamVideoElement.style.display = 'block';
     setVideoElement(stream);
+    if (streamingStatusLabel) {
+      streamingStatusLabel.innerText = 'streaming';
+      streamingStatusLabel.className = 'streamingState-streaming';
+    }
   } else {
-    status = 'empty';
+    idleVideoElement.style.display = 'block';
+    streamVideoElement.style.display = 'none';
     playIdleVideo();
+    if (streamingStatusLabel) {
+      streamingStatusLabel.innerText = 'idle';
+      streamingStatusLabel.className = 'streamingState-idle';
+    }
   }
-  if (streamingStatusLabel) {
-    streamingStatusLabel.innerText = status;
-    streamingStatusLabel.className = 'streamingState-' + status;
-  }
-  logger.info('Video status changed:', status);
+  logger.info('Video status changed:', videoIsPlaying ? 'streaming' : 'idle');
 }
 
 function onTrack(event) {
   logger.debug('onTrack event:', event);
   if (!event.track) return;
+
+  const stream = event.streams[0];
+  if (stream) {
+    setVideoElement(stream);
+  }
 
   if (statsIntervalId) {
     clearInterval(statsIntervalId);
@@ -338,7 +344,7 @@ function onTrack(event) {
             if (videoStatusChanged) {
               videoIsPlaying = report.bytesReceived > lastBytesReceived;
               logger.info('Video status changed:', videoIsPlaying);
-              onVideoStatusChange(videoIsPlaying, event.streams[0]);
+              onVideoStatusChange(videoIsPlaying, stream);
             }
             lastBytesReceived = report.bytesReceived;
           }
@@ -353,8 +359,6 @@ function onTrack(event) {
       logger.debug('Peer connection not ready for stats.');
     }
   }, 1000);
-
-  setVideoElement(event.streams[0]);
 }
 
 function setVideoElement(stream) {
@@ -376,11 +380,9 @@ function setVideoElement(stream) {
     streamVideoElement.classList.remove("animated");
   }, 300);
 
-  if (streamVideoElement.paused) {
-    streamVideoElement.play().then(() => {
-      logger.info('Video playback started');
-    }).catch(e => logger.error('Error playing video:', e));
-  }
+  streamVideoElement.play().then(() => {
+    logger.info('Video playback started');
+  }).catch(e => logger.error('Error playing video:', e));
 }
 
 function playIdleVideo() {
@@ -417,6 +419,7 @@ function closePC(pc = peerConnection) {
   pc.removeEventListener('connectionstatechange', onConnectionStateChange, true);
   pc.removeEventListener('signalingstatechange', onSignalingStateChange, true);
   pc.removeEventListener('track', onTrack, true);
+
   clearInterval(statsIntervalId);
   const labels = getStatusLabels();
   if (labels.iceGathering) labels.iceGathering.innerText = '';
@@ -444,7 +447,7 @@ async function fetchWithRetries(url, options, retries = 0) {
       throw error;
     }
     const delay = baseDelay * Math.pow(2, retries);
-    console.log(`Retrying in ${delay}ms...`);
+    logger.info(`Retrying in ${delay}ms...`);
     await new Promise(resolve => setTimeout(resolve, delay));
     return fetchWithRetries(url, options, retries + 1);
   }
@@ -505,18 +508,17 @@ async function initializeConnection() {
   }
 
   logger.info('Connection initialized successfully');
+  initializeDIDWebSocket();
   startKeepAlive();
 }
 
-
 function startKeepAlive() {
-  setInterval(() => {
-    if (didWebSocket.readyState === WebSocket.OPEN) {
+  keepAliveInterval = setInterval(() => {
+    if (didWebSocket && didWebSocket.readyState === WebSocket.OPEN) {
       didWebSocket.send(JSON.stringify({ type: 'keepAlive', streamId, sessionId }));
     }
   }, 30000);
 }
-
 
 async function startStreaming(assistantReply) {
   try {
@@ -564,12 +566,7 @@ async function startStreaming(assistantReply) {
   }
 }
 
-async function startRecording() {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  mediaRecorder = new MediaRecorder(stream);
-  transcriptionStartTime = Date.now();
-
-
+function initializeDeepgramSocket() {
   deepgramSocket = new WebSocket('wss://api.deepgram.com/v1/listen', [
     'token',
     DEEPGRAM_API_KEY,
@@ -577,37 +574,6 @@ async function startRecording() {
 
   deepgramSocket.onopen = () => {
     logger.info('Deepgram WebSocket Connection opened');
-    mediaRecorder.addEventListener('dataavailable', async (event) => {
-      if (event.data.size > 0 && deepgramSocket.readyState === WebSocket.OPEN) {
-        deepgramSocket.send(event.data);
-      }
-    });
-    mediaRecorder.start(1000);
-
-    // Send KeepAlive message every 3 seconds
-    setInterval(() => {
-      if (deepgramSocket.readyState === WebSocket.OPEN) {
-        const keepAliveMsg = JSON.stringify({ type: "KeepAlive" });
-        deepgramSocket.send(keepAliveMsg);
-        logger.debug("Sent KeepAlive message to Deepgram");
-      }
-    }, 3000);
-
-    // Start transcription timer
-    transcriptionTimer = setInterval(() => {
-      if (transcript.trim() !== '') {
-        const transcriptionTime = Date.now() - transcriptionStartTime;
-        logger.info(`Transcription completed in ${transcriptionTime}ms`);
-        document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User:</u> ${transcript}</span><br>`;
-        chatHistory.push({
-          role: 'user',
-          content: transcript,
-        });
-        sendChatToGroq();
-        transcript = '';
-        transcriptionStartTime = Date.now();
-      }
-    }, 5000); // Send transcription every 5 seconds
   };
 
   deepgramSocket.onmessage = (message) => {
@@ -620,14 +586,59 @@ async function startRecording() {
       }
     }
   };
-  
-  
+
   deepgramSocket.onclose = async () => {
     logger.info('Deepgram WebSocket connection closed');
     if (isRecording) {
       await reinitializeConnection();
     }
   };
+
+  deepgramSocket.onerror = (error) => {
+    logger.error('Deepgram WebSocket error:', error);
+  };
+}
+
+async function startRecording() {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  mediaRecorder = new MediaRecorder(stream);
+  transcriptionStartTime = Date.now();
+
+  if (!deepgramSocket || deepgramSocket.readyState !== WebSocket.OPEN) {
+    initializeDeepgramSocket();
+  }
+
+  mediaRecorder.addEventListener('dataavailable', async (event) => {
+    if (event.data.size > 0 && deepgramSocket.readyState === WebSocket.OPEN) {
+      deepgramSocket.send(event.data);
+    }
+  });
+  mediaRecorder.start(1000);
+
+  // Send KeepAlive message every 3 seconds
+  setInterval(() => {
+    if (deepgramSocket.readyState === WebSocket.OPEN) {
+      const keepAliveMsg = JSON.stringify({ type: "KeepAlive" });
+      deepgramSocket.send(keepAliveMsg);
+      logger.debug("Sent KeepAlive message to Deepgram");
+    }
+  }, 3000);
+
+  // Start transcription timer
+  transcriptionTimer = setInterval(() => {
+    if (transcript.trim() !== '') {
+      const transcriptionTime = Date.now() - transcriptionStartTime;
+      logger.info(`Transcription completed in ${transcriptionTime}ms`);
+      document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User:</u> ${transcript}</span><br>`;
+      chatHistory.push({
+        role: 'user',
+        content: transcript,
+      });
+      sendChatToGroq();
+      transcript = '';
+      transcriptionStartTime = Date.now();
+    }
+  }, 5000); // Send transcription every 5 seconds
 
   // Start inactivity timeout
   inactivityTimeout = setTimeout(() => {
@@ -636,8 +647,6 @@ async function startRecording() {
       startButton.click();
     }
   }, 45000); // 45 seconds
-
-  transcriptionStartTime = Date.now();
 }
 
 async function stopRecording() {
@@ -746,7 +755,7 @@ async function reinitializeConnection() {
   chatHistory = chatHistory.slice(0, -1); // Remove the last incomplete transcription from the chat history
 
   const msgHistory = document.getElementById('msgHistory');
-  msgHistory.innerHTML = msgHistory.innerHTML.slice(0, msgHistory.innerHTML.lastIndexOf('<span style=\'opacity:0.5\'><u>User:</u>'));
+  msgHistory.innerHTML = msgHistory.innerHTML.slice(0, msgHistory.innerHTML.lastIndexOf("<span style='opacity:0.5'><u>User:</u>"));
 
   await initializeConnection();
   await startRecording();
@@ -773,6 +782,13 @@ destroyButton.onclick = async () => {
   } finally {
     stopAllStreams();
     closePC();
+    clearInterval(keepAliveInterval);
+    if (didWebSocket) {
+      didWebSocket.close();
+    }
+    if (deepgramSocket) {
+      deepgramSocket.close();
+    }
   }
 };
 
@@ -792,8 +808,6 @@ startButton.onclick = async () => {
 
 // Initialize WebSocket connection
 initializeWebSocket();
-
-initializeDIDWebSocket();
 
 // Initialize the connection when the page loads
 initializeConnection().catch(error => {
