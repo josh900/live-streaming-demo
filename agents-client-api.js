@@ -34,7 +34,8 @@ let isInitializing = false;
 let audioContext;
 let audioSource;
 let audioDelay = 0.2; // 200ms delay
-
+let transitionCanvas;
+let transitionCtx;
 
 
 
@@ -47,6 +48,45 @@ const maxDelaySec = 4;
 const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentence unless absolutely needed.`;
 
 setLogLevel('INFO');
+
+
+function initTransitionCanvas() {
+  transitionCanvas = document.createElement('canvas');
+  transitionCanvas.width = 400;  // Match your video dimensions
+  transitionCanvas.height = 400;
+  transitionCtx = transitionCanvas.getContext('2d');
+  
+  // Position the canvas over the video elements
+  transitionCanvas.style.position = 'absolute';
+  transitionCanvas.style.top = '0';
+  transitionCanvas.style.left = '0';
+  transitionCanvas.style.zIndex = '3';  // Ensure it's on top
+  document.querySelector('#video-wrapper').appendChild(transitionCanvas);
+}
+
+function smoothTransition(duration = 500) {
+  const startTime = performance.now();
+  
+  function animate() {
+    const now = performance.now();
+    const progress = Math.min((now - startTime) / duration, 1);
+    
+    const blendedFrame = blendFrames(idleVideoElement, streamVideoElement, progress);
+    transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
+    transitionCtx.drawImage(blendedFrame, 0, 0);
+    
+    if (progress < 1) {
+      requestAnimationFrame(animate);
+    } else {
+      // Transition complete, hide canvas
+      transitionCanvas.style.display = 'none';
+    }
+  }
+  
+  // Show canvas and start animation
+  transitionCanvas.style.display = 'block';
+  requestAnimationFrame(animate);
+}
 
 function getVideoElements() {
   const idle = document.getElementById('idle-video-element');
@@ -118,6 +158,7 @@ async function initialize() {
 
   playIdleVideo();
   showLoadingSymbol();
+  initTransitionCanvas();
   try {
     await initializeConnection();
     startKeepAlive();
@@ -304,8 +345,10 @@ function setStreamVideoElement(stream) {
     audioSource.connect(delayNode);
     delayNode.connect(audioContext.destination);
   }
-}
 
+  // Start the transition
+  smoothTransition();
+}
 
 
 
@@ -399,11 +442,13 @@ function playIdleVideo() {
 }
 
 function stopAllStreams() {
-  const { stream: streamVideoElement } = getVideoElements();
-  if (streamVideoElement && streamVideoElement.srcObject) {
+  if (streamVideoElement.srcObject) {
     logger.info('Stopping video streams');
     streamVideoElement.srcObject.getTracks().forEach((track) => track.stop());
     streamVideoElement.srcObject = null;
+    
+    // Transition back to idle
+    smoothTransition();
   }
 }
 
@@ -473,10 +518,11 @@ async function initializeConnection() {
       body: JSON.stringify({
         source_url: 'https://skoop-general.s3.amazonaws.com/brad_idle.png',
         driver_url: 'bank://lively/',
+        stream_warmup: true,
         config: {
           stitch: true,
           fluent: true,
-          pad_audio: 0.5,
+          pad_audio: 1,
         }
       }),
     });
@@ -601,7 +647,7 @@ async function startStreaming(assistantReply) {
         },
         config: {
           fluent: true,
-          pad_audio: 0.5,
+          pad_audio: 1,
           stitch: true,
         },
         driver_url: 'bank://lively/',

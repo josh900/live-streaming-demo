@@ -3,8 +3,11 @@ const http = require('http');
 const WebSocket = require('ws');
 const cors = require('cors');
 const { createProxyMiddleware } = require('http-proxy-middleware');
+const compression = require('compression');
+app.use(compression());
 
 const port = 3000;
+
 
 const app = express();
 app.use(cors());
@@ -31,7 +34,9 @@ app.use('/chat', createProxyMiddleware({
   changeOrigin: true 
 }));
 
-const server = http.createServer(app);
+const spdy = require('spdy');
+const server = spdy.createServer(options, app);
+
 
 // Set up WebSocket server
 const wss = new WebSocket.Server({ server });
