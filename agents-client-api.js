@@ -925,7 +925,6 @@ async function initializeConnection() {
       throw e;
     }
 
-    // Add a small delay here to ensure the server has processed the new session
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
@@ -947,7 +946,6 @@ async function initializeConnection() {
     logger.info('Connection initialized successfully');
     startKeepAlive();
 
-    // Initialize video elements
     const { idle, stream } = getVideoElements();
     idleVideoElement = idle;
     streamVideoElement = stream;
@@ -959,7 +957,6 @@ async function initializeConnection() {
     showLoadingSymbol();
     initTransitionCanvas();
 
-    // Wait for the peer connection to be fully established
     await new Promise((resolve) => {
       const checkConnection = () => {
         if (peerConnection?.connectionState === 'connected') {
@@ -1074,7 +1071,6 @@ async function startRecording() {
     });
     mediaRecorder.start(1000);
 
-    // Send KeepAlive message every 3 seconds
     setInterval(() => {
       if (deepgramSocket.readyState === WebSocket.OPEN) {
         const keepAliveMsg = JSON.stringify({ type: "KeepAlive" });
@@ -1108,7 +1104,7 @@ async function startRecording() {
             transcript = '';
             transcriptionStartTime = Date.now();
           }
-        }, 750); // Wait for 0.75 seconds of silence before finalizing the transcription
+        }, 750);
       }
     }
   };
@@ -1120,35 +1116,18 @@ async function startRecording() {
     }
   };
 
-  // Start inactivity timeout
   inactivityTimeout = setTimeout(() => {
     if (isRecording) {
       logger.info('Inactivity timeout reached. Stopping recording.');
       startButton.click();
     }
-  }, 45000); // 45 seconds
+  }, 45000);
 
   transcriptionStartTime = Date.now();
 
-  // Set up audio processing
-  audioContext = new (window.AudioContext || window.webkitAudioContext)();
-  const sourceNode = audioContext.createMediaStreamSource(stream);
-  const delayNode = audioContext.createDelay(5.0); // max 5 seconds delay
-  delayNode.delayTime.value = audioDelay;
-  
-  sourceNode.connect(delayNode);
-  delayNode.connect(audioContext.destination);
-
-  // Create a new AudioWorkletNode
-  try {
-    await audioContext.audioWorklet.addModule('audio-processor.js');
-    const audioProcessor = new AudioWorkletNode(audioContext, 'audio-processor');
-    delayNode.connect(audioProcessor);
-    audioProcessor.connect(audioContext.destination);
-  } catch (err) {
-    logger.error('Error loading AudioWorklet:', err);
-  }
+  // We're removing the audio processing part to eliminate feedback
 }
+
 
 async function stopRecording() {
   if (mediaRecorder && mediaRecorder.state === 'recording') {
@@ -1247,7 +1226,7 @@ async function sendChatToGroq() {
         logger.info('Inactivity timeout reached. Stopping recording.');
         startButton.click();
       }
-    }, 45000); // 45 seconds
+    }, 45000);
 
     await startStreaming(assistantReply);
   } catch (error) {
@@ -1256,12 +1235,8 @@ async function sendChatToGroq() {
     if (isRecording) {
       await reinitializeConnection();
     }
-  } finally {
-    // Reset any UI elements or state as needed
-    // For example, re-enable input fields or buttons
   }
 }
-
 
 async function reinitializeConnection() {
   if (isInitializing) {
