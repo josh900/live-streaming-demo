@@ -29,6 +29,7 @@ let transcriptionTimer;
 let keepAliveInterval;
 let socket;
 let transcriptionStartTime;
+let didWebSocket;
 
 
 const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentence unless absolutely needed.`;
@@ -53,6 +54,43 @@ function getStatusLabels() {
     streaming: document.getElementById('streaming-status-label')
   };
 }
+
+function initializeDIDWebSocket() {
+  didWebSocket = new WebSocket(`wss://api.d-id.com`);
+
+  didWebSocket.onopen = () => {
+    console.log('D-ID WebSocket connected');
+    startKeepAlive();
+  };
+
+  didWebSocket.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    handleDIDWebSocketMessage(data);
+  };
+
+  didWebSocket.onerror = (error) => {
+    console.error('D-ID WebSocket error:', error);
+  };
+
+  didWebSocket.onclose = () => {
+    console.log('D-ID WebSocket closed');
+    setTimeout(initializeDIDWebSocket, 5000);
+  };
+}
+
+function handleDIDWebSocketMessage(data) {
+  // Handle different message types from D-ID
+  switch (data.type) {
+    case 'streamCreated':
+      handleStreamCreated(data);
+      break;
+    case 'iceCandidateReceived':
+      handleICECandidate(data);
+      break;
+    // Add more cases as needed
+  }
+}
+
 
 function initializeWebSocket() {
   socket = new WebSocket(`wss://${window.location.host}`);
@@ -391,24 +429,24 @@ function closePC(pc = peerConnection) {
   }
 }
 
-async function fetchWithRetries(url, options, retries = 1) {
-  const maxRetryCount = 3;
-  const maxDelaySec = 4;
+async function fetchWithRetries(url, options, retries = 0) {
+  const maxRetries = 3;
+  const baseDelay = 1000;
+
   try {
     const response = await fetch(url, options);
     if (!response.ok) {
-      throw new Error(`HTTP error ${response.status}: ${await response.text()}`);
+      throw new Error(`HTTP error ${response.status}`);
     }
     return response;
-  } catch (err) {
-    if (retries <= maxRetryCount) {
-      const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 1000;
-      logger.warn(`Request failed, retrying ${retries}/${maxRetryCount} in ${delay}ms. Error: ${err.message}`);
-      await new Promise((resolve) => setTimeout(resolve, delay));
-      return fetchWithRetries(url, options, retries + 1);
-    } else {
-      throw new Error(`Max retries exceeded. Error: ${err.message}`);
+  } catch (error) {
+    if (retries >= maxRetries) {
+      throw error;
     }
+    const delay = baseDelay * Math.pow(2, retries);
+    console.log(`Retrying in ${delay}ms...`);
+    await new Promise(resolve => setTimeout(resolve, delay));
+    return fetchWithRetries(url, options, retries + 1);
   }
 }
 
@@ -494,12 +532,14 @@ function startKeepAlive() {
   }, 30000); // Send keep-alive every 30 seconds
 }
 
-function stopKeepAlive() {
-  if (keepAliveInterval) {
-    clearInterval(keepAliveInterval);
-    keepAliveInterval = null;
-  }
+function startKeepAlive() {
+  setInterval(() => {
+    if (didWebSocket.readyState === WebSocket.OPEN) {
+      didWebSocket.send(JSON.stringify({ type: 'keepAlive', streamId, sessionId }));
+    }
+  }, 30000);
 }
+
 
 async function startStreaming(assistantReply) {
   try {
@@ -775,6 +815,11 @@ startButton.onclick = async () => {
 
 // Initialize WebSocket connection
 initializeWebSocket();
+
+// Call this function when initializing the application
+initializeDIDWebSocket();
+
+
 
 // Initialize the connection when the page loads
 initializeConnection().catch(error => {
