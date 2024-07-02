@@ -36,8 +36,6 @@ let audioSource;
 let audioDelay = 0.2; // 200ms delay
 let streamVideoElement;
 let idleVideoElement;
-let currentAvatar = 'brad';
-let additionalContext = '';
 
 
 
@@ -46,45 +44,7 @@ let additionalContext = '';
 const maxRetryCount = 3;
 const maxDelaySec = 4;
 
-const avatarSelect = document.getElementById('avatar-select');
-avatarSelect.addEventListener('change', async (event) => {
-  const newAvatar = event.target.value;
-  if (newAvatar !== currentAvatar) {
-    currentAvatar = newAvatar;
-    await reinitializeConnection();
-  }
-});
 
-function getAvatarUrls(avatarName) {
-  return {
-    idleImage: `https://skoop-general.s3.amazonaws.com/${avatarName}_idle.png`,
-    idleVideo: `${avatarName}_idle.mp4`
-  };
-}
-
-const saveContextButton = document.getElementById('save-context-button');
-saveContextButton.addEventListener('click', () => {
-  const contextInput = document.getElementById('context-input');
-  additionalContext = contextInput.value;
-  showToast('Context saved successfully!');
-});
-
-function showToast(message) {
-  const toast = document.createElement('div');
-  toast.textContent = message;
-  toast.style.position = 'fixed';
-  toast.style.bottom = '20px';
-  toast.style.right = '20px';
-  toast.style.backgroundColor = '#333';
-  toast.style.color = '#fff';
-  toast.style.padding = '10px';
-  toast.style.borderRadius = '5px';
-  toast.style.zIndex = '1000';
-  document.body.appendChild(toast);
-  setTimeout(() => {
-    document.body.removeChild(toast);
-  }, 3000);
-}
 
 
 const context = `
@@ -892,7 +852,6 @@ async function initializeConnection() {
     stopAllStreams();
     closePC();
 
-    const { idleImage } = getAvatarUrls(currentAvatar);
     const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
       method: 'POST',
       headers: {
@@ -900,7 +859,7 @@ async function initializeConnection() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        source_url: idleImage,
+        source_url: 'https://skoop-general.s3.amazonaws.com/brad_idle.png',
         driver_url: 'bank://lively/',
         stream_warmup: true,
         config: {
@@ -946,36 +905,8 @@ async function initializeConnection() {
 
     logger.info('Connection initialized successfully');
     startKeepAlive();
-
-    // Initialize video elements
-    const { idle, stream } = getVideoElements();
-    idleVideoElement = idle;
-    streamVideoElement = stream;
-
-    if (idleVideoElement) idleVideoElement.setAttribute('playsinline', '');
-    if (streamVideoElement) streamVideoElement.setAttribute('playsinline', '');
-
-    playIdleVideo();
-    showLoadingSymbol();
-    initTransitionCanvas();
-
-    // Wait for the peer connection to be fully established
-    await new Promise((resolve) => {
-      const checkConnection = () => {
-        if (peerConnection?.connectionState === 'connected') {
-          resolve();
-        } else {
-          setTimeout(checkConnection, 100);
-        }
-      };
-      checkConnection();
-    });
-
-    hideLoadingSymbol();
   } catch (error) {
     logger.error('Failed to initialize connection:', error);
-    hideLoadingSymbol();
-    showErrorMessage('Failed to connect. Please try again.');
     throw error;
   } finally {
     isInitializing = false;
@@ -1060,6 +991,7 @@ async function startRecording() {
   mediaRecorder = new MediaRecorder(stream);
   transcriptionStartTime = Date.now();
 
+
   deepgramSocket = new WebSocket('wss://api.deepgram.com/v1/listen', [
     'token',
     DEEPGRAM_API_KEY,
@@ -1082,36 +1014,35 @@ async function startRecording() {
         logger.debug("Sent KeepAlive message to Deepgram");
       }
     }, 3000);
-  };
 
-  let transcriptionTimeout;
+    // Start transcription timer
+    transcriptionTimer = setInterval(() => {
+      if (transcript.trim() !== '') {
+        const transcriptionTime = Date.now() - transcriptionStartTime;
+        logger.info(`Transcription completed in ${transcriptionTime}ms`);
+        document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User:</u> ${transcript}</span><br>`;
+        chatHistory.push({
+          role: 'user',
+          content: transcript,
+        });
+        sendChatToGroq();
+        transcript = '';
+        transcriptionStartTime = Date.now();
+      }
+    }, 500); // Send transcription every .5 seconds
+  };
 
   deepgramSocket.onmessage = (message) => {
     const received = JSON.parse(message.data);
     if (received.channel && received.channel.alternatives && received.channel.alternatives.length > 0) {
       const partialTranscript = received.channel.alternatives[0].transcript;
       if (partialTranscript) {
-        clearTimeout(transcriptionTimeout);
         transcript += partialTranscript;
         document.getElementById('msgHistory').innerHTML = document.getElementById('msgHistory').innerHTML.replace(/<span style='opacity:0.5'><u>User \(interim\):<\/u>.*<\/span><br>/, `<span style='opacity:0.5'><u>User (interim):</u> ${transcript}</span><br>`);
-        
-        transcriptionTimeout = setTimeout(() => {
-          if (transcript.trim() !== '') {
-            const transcriptionTime = Date.now() - transcriptionStartTime;
-            logger.info(`Transcription completed in ${transcriptionTime}ms`);
-            document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User:</u> ${transcript}</span><br>`;
-            chatHistory.push({
-              role: 'user',
-              content: transcript,
-            });
-            sendChatToGroq();
-            transcript = '';
-            transcriptionStartTime = Date.now();
-          }
-        }, 750); // Wait for 0.75 seconds of silence before finalizing the transcription
       }
     }
   };
+  
   
   deepgramSocket.onclose = async () => {
     logger.info('Deepgram WebSocket connection closed');
@@ -1129,25 +1060,6 @@ async function startRecording() {
   }, 45000); // 45 seconds
 
   transcriptionStartTime = Date.now();
-
-  // Set up audio processing
-  audioContext = new (window.AudioContext || window.webkitAudioContext)();
-  const sourceNode = audioContext.createMediaStreamSource(stream);
-  const delayNode = audioContext.createDelay(5.0); // max 5 seconds delay
-  delayNode.delayTime.value = audioDelay;
-  
-  sourceNode.connect(delayNode);
-  delayNode.connect(audioContext.destination);
-
-  // Create a new AudioWorkletNode
-  try {
-    await audioContext.audioWorklet.addModule('audio-processor.js');
-    const audioProcessor = new AudioWorkletNode(audioContext, 'audio-processor');
-    delayNode.connect(audioProcessor);
-    audioProcessor.connect(audioContext.destination);
-  } catch (err) {
-    logger.error('Error loading AudioWorklet:', err);
-  }
 }
 
 async function stopRecording() {
@@ -1175,7 +1087,7 @@ async function sendChatToGroq() {
         messages: [
           {
             role: 'system',
-            content: context + '\n' + additionalContext,
+            content: context,
           },
           ...chatHistory,
         ],
@@ -1207,18 +1119,8 @@ async function sendChatToGroq() {
               break;
             }
 
-            try {
-              const parsed = JSON.parse(data);
-              assistantReply += parsed.choices[0]?.delta?.content || '';
-              
-              // Update the UI with the partial response
-              document.getElementById('msgHistory').innerHTML = document.getElementById('msgHistory').innerHTML.replace(
-                /<span><u>Assistant \(typing\):<\/u>.*<\/span><br>/,
-                `<span><u>Assistant (typing):</u> ${assistantReply}</span><br>`
-              );
-            } catch (error) {
-              logger.error('Error parsing JSON:', error);
-            }
+            const parsed = JSON.parse(data);
+            assistantReply += parsed.choices[0]?.delta?.content || '';
           }
         }
       }
@@ -1233,11 +1135,7 @@ async function sendChatToGroq() {
       content: assistantReply,
     });
 
-    // Update the UI with the final response
-    document.getElementById('msgHistory').innerHTML = document.getElementById('msgHistory').innerHTML.replace(
-      /<span><u>Assistant \(typing\):<\/u>.*<\/span><br>/,
-      `<span><u>Assistant:</u> ${assistantReply}</span><br>`
-    );
+    document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${assistantReply}</span><br>`;
 
     logger.info('Assistant reply:', assistantReply);
 
@@ -1252,16 +1150,11 @@ async function sendChatToGroq() {
     await startStreaming(assistantReply);
   } catch (error) {
     logger.error('Error:', error);
-    document.getElementById('msgHistory').innerHTML += `<span style="color: red;">Error: ${error.message}</span><br>`;
     if (isRecording) {
       await reinitializeConnection();
     }
-  } finally {
-    // Reset any UI elements or state as needed
-    // For example, re-enable input fields or buttons
   }
 }
-
 
 async function reinitializeConnection() {
   if (isInitializing) {
