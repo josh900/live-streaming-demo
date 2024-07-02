@@ -668,7 +668,7 @@ async function startRecording() {
         transcript = '';
         transcriptionStartTime = Date.now();
       }
-    }, 2000); // Send transcription every 5 seconds
+    }, 500); // Send transcription every .5 seconds
   };
 
   deepgramSocket.onmessage = (message) => {
