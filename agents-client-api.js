@@ -36,6 +36,10 @@ let audioSource;
 let audioDelay = 0.2; // 200ms delay
 let transitionCanvas;
 let transitionCtx;
+let streamVideoElement;
+let idleVideoElement;
+
+
 
 
 
@@ -91,6 +95,7 @@ function smoothTransition(duration = 500) {
 function getVideoElements() {
   const idle = document.getElementById('idle-video-element');
   const stream = document.getElementById('stream-video-element');
+  
   
   if (!idle || !stream) {
     logger.warn('Video elements not found in the DOM');
@@ -155,6 +160,9 @@ async function initialize() {
   const { idle, stream } = getVideoElements();
   if (idle) idle.setAttribute('playsinline', '');
   if (stream) stream.setAttribute('playsinline', '');
+  idleVideoElement = idle;
+  streamVideoElement = stream;
+
 
   playIdleVideo();
   showLoadingSymbol();
@@ -442,7 +450,7 @@ function playIdleVideo() {
 }
 
 function stopAllStreams() {
-  if (streamVideoElement.srcObject) {
+  if (streamVideoElement && streamVideoElement.srcObject) {
     logger.info('Stopping video streams');
     streamVideoElement.srcObject.getTracks().forEach((track) => track.stop());
     streamVideoElement.srcObject = null;
