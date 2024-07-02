@@ -40,12 +40,12 @@ let idleVideoElement;
 const avatars = {
   brad: {
     idleImage: 'https://skoop-general.s3.amazonaws.com/brad_idle.png',
-    idleVideo: 'https://skoop-general.s3.amazonaws.com/brad_idle.mp4',
+    idleVideo: 'brad_idle.mp4',
     voice: 'en-US-ChristopherNeural'
   },
   emma: {
     idleImage: 'https://skoop-general.s3.amazonaws.com/emma_idle.png',
-    idleVideo: 'https://skoop-general.s3.amazonaws.com/emma_idle.mp4',
+    idleVideo: 'emma_idle.mp4',
     voice: 'en-US-AvaNeural'
   }
 };
