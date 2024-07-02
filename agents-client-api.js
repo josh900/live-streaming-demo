@@ -57,9 +57,26 @@ avatarSelect.addEventListener('change', handleAvatarChange);
 
 async function handleAvatarChange() {
   currentAvatar = avatarSelect.value;
-  await reinitializeConnection();
-}
+  
+  // Immediately update the idle video
+  const idleVideoElement = document.getElementById('idle-video-element');
+  if (idleVideoElement) {
+    idleVideoElement.src = avatars[currentAvatar].idleVideo;
+    idleVideoElement.load(); // Force the video to reload
+  }
 
+  // Reset the stream video
+  const streamVideoElement = document.getElementById('stream-video-element');
+  if (streamVideoElement) {
+    streamVideoElement.srcObject = null;
+  }
+
+  // Destroy the current connection
+  await destroyConnection();
+
+  // Reinitialize the connection with the new avatar
+  await initializeConnection();
+}
 
 const maxRetryCount = 3;
 const maxDelaySec = 4;
@@ -386,6 +403,29 @@ You are a helpful, harmless, and honest assistant. Please answer the users quest
 
 setLogLevel('INFO');
 
+async function destroyConnection() {
+  if (streamId) {
+    try {
+      await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+
+      logger.info('Stream destroyed successfully');
+    } catch (error) {
+      logger.error('Error destroying stream:', error);
+    } finally {
+      stopAllStreams();
+      closePC();
+      streamId = null;
+      sessionId = null;
+    }
+  }
+}
 
 
 function blendFrames(idleFrame, talkingFrame, progress) {
@@ -879,7 +919,7 @@ async function initializeConnection() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        source_url: `https://skoop-general.s3.amazonaws.com/${avatars[currentAvatar].idleImage}`,
+        source_url: avatars[currentAvatar].idleImage,
         driver_url: 'bank://lively/',
         stream_warmup: true,
         config: {
