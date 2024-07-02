@@ -33,6 +33,8 @@ let transcriptionStartTime;
 
 const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentence unless absolutely needed.`;
 
+setLogLevel('DEBUG');
+
 function getVideoElements() {
   const idle = document.getElementById('idle-video-element');
   const stream = document.getElementById('stream-video-element');
