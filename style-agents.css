@@ -155,6 +155,22 @@ h4 {
   width: 400px;
 }
 
+
+#avatar-select {
+  padding: 10px;
+  margin-right: 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+#avatar-select:focus {
+  outline: none;
+  border-color: #7459fe;
+}
+
+
 #idle-video-element,
 #stream-video-element {
   position: absolute;

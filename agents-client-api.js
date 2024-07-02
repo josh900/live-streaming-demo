@@ -39,12 +39,12 @@ let idleVideoElement;
 
 const avatars = {
   brad: {
-    idleImage: 'brad_idle.png',
+    idleImage: 'https://skoop-general.s3.amazonaws.com/brad_idle.png',
     idleVideo: 'brad_idle.mp4',
     voice: 'en-US-ChristopherNeural'
   },
   emma: {
-    idleImage: 'emma_idle.png',
+    idleImage: 'https://skoop-general.s3.amazonaws.com/emma_idle.png',
     idleVideo: 'emma_idle.mp4',
     voice: 'en-US-AvaNeural'
   }
