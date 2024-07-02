@@ -34,8 +34,6 @@ let isInitializing = false;
 let audioContext;
 let audioSource;
 let audioDelay = 0.2; // 200ms delay
-let transitionCanvas;
-let transitionCtx;
 let streamVideoElement;
 let idleVideoElement;
 
@@ -54,6 +52,27 @@ const context = `You are a helpful, harmless, and honest assistant. Please answe
 setLogLevel('INFO');
 
 
+
+function blendFrames(idleFrame, talkingFrame, progress) {
+  const canvas = document.createElement('canvas');
+  canvas.width = idleFrame.width || 400;  // Adjust if your video size is different
+  canvas.height = idleFrame.height || 400;
+  const ctx = canvas.getContext('2d');
+  
+  ctx.globalAlpha = 1 - progress;
+  ctx.drawImage(idleFrame, 0, 0, canvas.width, canvas.height);
+  
+  ctx.globalAlpha = progress;
+  ctx.drawImage(talkingFrame, 0, 0, canvas.width, canvas.height);
+  
+  return canvas;
+}
+
+let transitionCanvas;
+let transitionCtx;
+
+
+
 function initTransitionCanvas() {
   transitionCanvas = document.createElement('canvas');
   transitionCanvas.width = 400;  // Match your video dimensions
@@ -69,6 +88,10 @@ function initTransitionCanvas() {
 }
 
 function smoothTransition(duration = 500) {
+  if (!transitionCanvas) {
+    initTransitionCanvas();
+  }
+
   const startTime = performance.now();
   
   function animate() {
@@ -158,10 +181,13 @@ function updateAssistantReply(text) {
 
 async function initialize() {
   const { idle, stream } = getVideoElements();
-  if (idle) idle.setAttribute('playsinline', '');
-  if (stream) stream.setAttribute('playsinline', '');
   idleVideoElement = idle;
   streamVideoElement = stream;
+
+  if (idleVideoElement) idleVideoElement.setAttribute('playsinline', '');
+  if (streamVideoElement) streamVideoElement.setAttribute('playsinline', '');
+
+  initTransitionCanvas();
 
 
   playIdleVideo();
