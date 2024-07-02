@@ -512,7 +512,7 @@ function startKeepAlive() {
     } catch (error) {
       logger.warn('Error sending keep-alive:', error);
     }
-  }, 30000); // Send keep-alive every 30 seconds
+  }, 100000); // Send keep-alive every 30 seconds
 }
 
 
