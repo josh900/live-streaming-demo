@@ -147,6 +147,8 @@ h4 {
   width: 400px;
   height: 400px;
   background-position: center;
+  overflow: hidden;
+
 }
 
 .chat {
@@ -216,20 +218,6 @@ h4 {
   }
 }
 
-/* Custom styles for Brad avatar */
-#video-wrapper::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-image: url("brad_idle.png");
-  background-position: center;
-  background-size: cover;
-  border-radius: 50%;
-  z-index: 0;
-}
 
 #idle-video-element,
 #stream-video-element {
