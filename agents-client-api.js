@@ -29,6 +29,8 @@ let transcriptionTimer;
 let keepAliveInterval;
 let socket;
 let transcriptionStartTime;
+let sdpExchangeComplete = false;
+
 
 
 const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentence unless absolutely needed.`;
@@ -198,7 +200,7 @@ function onIceGatheringStateChange() {
 }
 
 function onIceCandidate(event) {
-  if (event.candidate) {
+  if (event.candidate && sdpExchangeComplete) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
     logger.debug('New ICE candidate:', candidate);
 
