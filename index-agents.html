@@ -13,17 +13,14 @@
 <body>
   <div id="content">
 
-   
+    <div id="avatar-selection">
+      <label for="avatar-dropdown">Select Avatar:</label>
+      <select id="avatar-dropdown">
+        <!-- Options will be populated dynamically -->
+      </select>
+    </div>
 
     <div id="status">
-
-      <div id="avatar-selection">
-        <label for="avatar-dropdown">Select Avatar:</label>
-        <select id="avatar-dropdown">
-          <!-- Options will be populated dynamically -->
-        </select>
-      </div>
-      
       <h4>WebRTC Connection Status</h4>
       ICE gathering status: <label id="ice-gathering-status-label"></label><br />
       ICE status: <label id="ice-status-label"></label><br />
@@ -45,13 +42,6 @@
     </div>
 
     <div class="chat">
-      
-      <div id="additional-context">
-        <h4>Additional Context</h4>
-        <textarea id="context-input" rows="4" cols="50"></textarea>
-        <button id="save-context-button">Save Context</button>
-      </div>
-
       <h4>Chat History</h4>
       <div id="msgHistory">
       </div>
