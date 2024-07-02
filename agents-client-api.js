@@ -1048,6 +1048,8 @@ async function startStreaming(assistantReply) {
   }
 }
 
+// Add these imports at the top of the file
+import { LiveTranscriptionEvents } from '@deepgram/sdk';
 
 // Update the startRecording function
 async function startRecording() {
