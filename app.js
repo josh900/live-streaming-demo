@@ -4,12 +4,14 @@ const WebSocket = require('ws');
 const cors = require('cors');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const compression = require('compression');
-app.use(compression());
 
 const port = 3000;
 
-
 const app = express();
+
+// Use compression middleware
+app.use(compression());
+
 app.use(cors());
 
 app.use('/', express.static(__dirname, {
@@ -34,9 +36,7 @@ app.use('/chat', createProxyMiddleware({
   changeOrigin: true 
 }));
 
-const spdy = require('spdy');
-const server = spdy.createServer(options, app);
-
+const server = http.createServer(app);
 
 // Set up WebSocket server
 const wss = new WebSocket.Server({ server });
