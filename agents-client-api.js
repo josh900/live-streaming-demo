@@ -256,21 +256,44 @@ function onSignalingStateChange() {
 }
 
 function onVideoStatusChange(videoIsPlaying, stream) {
-  const { streaming: streamingStatusLabel } = getStatusLabels();
+  const { idle: idleVideoElement, stream: streamVideoElement } = getVideoElements();
   let status;
+
   if (videoIsPlaying) {
     status = 'streaming';
-    setVideoElement(stream);
+    streamVideoElement.style.opacity = '1';
+    idleVideoElement.style.opacity = '0';
+    setStreamVideoElement(stream);
   } else {
     status = 'empty';
+    streamVideoElement.style.opacity = '0';
+    idleVideoElement.style.opacity = '1';
     playIdleVideo();
   }
+
+  const { streaming: streamingStatusLabel } = getStatusLabels();
   if (streamingStatusLabel) {
     streamingStatusLabel.innerText = status;
     streamingStatusLabel.className = 'streamingState-' + status;
   }
   logger.info('Video status changed:', status);
 }
+
+function setStreamVideoElement(stream) {
+  const { stream: streamVideoElement } = getVideoElements();
+  if (!streamVideoElement) {
+    logger.error('Stream video element not found');
+    return;
+  }
+  if (!stream) {
+    logger.warn('No stream available to set video element');
+    return;
+  }
+  streamVideoElement.srcObject = stream;
+  streamVideoElement.play().catch(e => logger.error('Error playing video:', e));
+}
+
+
 
 function onTrack(event) {
   logger.debug('onTrack event:', event);
@@ -425,9 +448,7 @@ async function initializeConnection() {
     },
     body: JSON.stringify({
       source_url: 'https://skoop-general.s3.amazonaws.com/brad_idle.png',
-      compatibility_mode: 'auto',
-      output_resolution: 720,
-      stream_warmup: true,
+      driver_url: 'bank://lively/',
       config: {
         stitch: true,
         fluent: true,
@@ -450,7 +471,7 @@ async function initializeConnection() {
     throw e;
   }
 
-  const sdpResponse = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+  const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
     method: 'POST',
     headers: {
       Authorization: `Basic ${DID_API.key}`,
@@ -470,13 +491,14 @@ async function initializeConnection() {
   startKeepAlive();
 }
 
+
 function startKeepAlive() {
   if (keepAliveInterval) {
     clearInterval(keepAliveInterval);
   }
   keepAliveInterval = setInterval(async () => {
     try {
-      const response = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/keepalive`, {
+      const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/keepalive`, {
         method: 'POST',
         headers: {
           Authorization: `Basic ${DID_API.key}`,
@@ -484,15 +506,13 @@ function startKeepAlive() {
         },
         body: JSON.stringify({ session_id: sessionId }),
       });
-      if (!response.ok) {
-        throw new Error(`Keep-alive failed: ${response.status} ${response.statusText}`);
-      }
       logger.debug('Keep-alive sent successfully');
     } catch (error) {
-      logger.error('Error sending keep-alive:', error);
+      logger.warn('Error sending keep-alive:', error);
     }
   }, 30000); // Send keep-alive every 30 seconds
 }
+
 
 function stopKeepAlive() {
   if (keepAliveInterval) {
@@ -523,8 +543,6 @@ async function startStreaming(assistantReply) {
           fluent: true,
           pad_audio: 0.5,
           stitch: true,
-          sharpen: true,
-          motion_factor: 0.8,
         },
         driver_url: 'bank://lively/',
         session_id: sessionId,
@@ -540,7 +558,7 @@ async function startStreaming(assistantReply) {
       logger.warn('Unexpected response status:', playResponseData.status);
     }
   } catch (error) {
-    logger.error('Error during streaming:', error.message);
+    logger.error('Error during streaming:', error);
     if (isRecording) {
       await reinitializeConnection();
     }
