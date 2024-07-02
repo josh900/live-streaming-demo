@@ -333,8 +333,7 @@ Directions
 Straight: Moving from south to north.
 Left: Moving from west to east(if facing north) or east to west(if facing south) depending on the current facing direction.
 Right: Moving from east to west(if facing south) or west to east(if facing north) depending on the current facing direction.
-Prompt:
-Customer is at the "ENTER" and wants to find the "Fruits" aisle. Guide the customer with step-by-step directions using map references and directional guidance.
+
 store layout:
 +--------------------+--------------------+--------+-----+----------+----------+------+--------------+
 |       DAIRY       |  ALCOHOLIC DRINKS  | SNACKS | FISH| SOFTDRINK| COSMETICS| TOYS |PAPER PRODUCTS|
