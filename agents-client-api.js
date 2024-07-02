@@ -37,8 +37,28 @@ let audioDelay = 0.2; // 200ms delay
 let streamVideoElement;
 let idleVideoElement;
 
+const avatars = {
+  brad: {
+    idleImage: 'brad_idle.png',
+    idleVideo: 'brad_idle.mp4',
+    voice: 'en-US-ChristopherNeural'
+  },
+  emma: {
+    idleImage: 'emma_idle.png',
+    idleVideo: 'emma_idle.mp4',
+    voice: 'en-US-AvaNeural'
+  }
+};
 
+let currentAvatar = 'brad';
 
+const avatarSelect = document.getElementById('avatar-select');
+avatarSelect.addEventListener('change', handleAvatarChange);
+
+async function handleAvatarChange() {
+  currentAvatar = avatarSelect.value;
+  await reinitializeConnection();
+}
 
 
 const maxRetryCount = 3;
@@ -776,7 +796,7 @@ function playIdleVideo() {
     return;
   }
   idleVideoElement.classList.add("animated");
-  idleVideoElement.src = 'brad_idle.mp4';
+  idleVideoElement.src = avatars[currentAvatar].idleVideo;
   idleVideoElement.loop = true;
 
   setTimeout(() => {
@@ -859,7 +879,7 @@ async function initializeConnection() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        source_url: 'https://skoop-general.s3.amazonaws.com/brad_idle.png',
+        source_url: `https://skoop-general.s3.amazonaws.com/${avatars[currentAvatar].idleImage}`,
         driver_url: 'bank://lively/',
         stream_warmup: true,
         config: {
@@ -957,7 +977,7 @@ async function startStreaming(assistantReply) {
           input: assistantReply,
           provider: {
             type: 'microsoft',
-            voice_id: 'en-US-ChristopherNeural'
+            voice_id: avatars[currentAvatar].voice
           }
         },
         config: {
