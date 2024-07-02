@@ -29,8 +29,6 @@ let transcriptionTimer;
 let keepAliveInterval;
 let socket;
 let transcriptionStartTime;
-let didWebSocket;
-
 
 
 const context = `You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentence unless absolutely needed.`;
@@ -89,43 +87,6 @@ function initializeWebSocket() {
     setTimeout(initializeWebSocket, 5000);
   };
 }
-
-function initializeDIDWebSocket() {
-  didWebSocket = new WebSocket(`wss://api.d-id.com`);
-
-  didWebSocket.onopen = () => {
-    console.log('D-ID WebSocket connected');
-    startKeepAlive();
-  };
-
-  didWebSocket.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    handleDIDWebSocketMessage(data);
-  };
-
-  didWebSocket.onerror = (error) => {
-    console.error('D-ID WebSocket error:', error);
-  };
-
-  didWebSocket.onclose = () => {
-    console.log('D-ID WebSocket closed');
-    setTimeout(initializeDIDWebSocket, 5000);
-  };
-}
-
-function handleDIDWebSocketMessage(data) {
-  // Handle different message types from D-ID
-  switch (data.type) {
-    case 'streamCreated':
-      handleStreamCreated(data);
-      break;
-    case 'iceCandidateReceived':
-      handleICECandidate(data);
-      break;
-    // Add more cases as needed
-  }
-}
-
 
 function updateTranscription(text) {
   document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User (interim):</u> ${text}</span><br>`;
@@ -313,99 +274,49 @@ function onVideoStatusChange(videoIsPlaying, stream) {
 
 function onTrack(event) {
   logger.debug('onTrack event:', event);
-  if (!event.track) {
-    logger.warn('No track in onTrack event');
-    return;
+  if (!event.track) return;
+
+  if (statsIntervalId) {
+    clearInterval(statsIntervalId);
   }
 
-  const { stream: streamVideoElement, idle: idleVideoElement } = getVideoElements();
-  if (!streamVideoElement || !idleVideoElement) {
-    logger.error('Video elements not found');
-    return;
-  }
+  statsIntervalId = setInterval(async () => {
+    if (peerConnection && peerConnection.connectionState === 'connected') {
+      try {
+        const stats = await peerConnection.getStats(event.track);
+        let videoStatsFound = false;
+        stats.forEach((report) => {
+          if (report.type === 'inbound-rtp' && report.kind === 'video') {
+            videoStatsFound = true;
+            const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
 
-  if (event.track.kind === 'video') {
-    const videoTrack = event.track;
-    const stream = new MediaStream([videoTrack]);
-    
-    streamVideoElement.srcObject = stream;
-    streamVideoElement.style.opacity = '1';
-    idleVideoElement.style.opacity = '0';
+            logger.debug('Video stats:', {
+              bytesReceived: report.bytesReceived,
+              lastBytesReceived,
+              videoIsPlaying,
+              videoStatusChanged
+            });
 
-    streamVideoElement.play().then(() => {
-      logger.info('Video playback started');
-    }).catch(e => {
-      logger.error('Error playing video:', e);
-      playIdleVideo();
-    });
-
-    videoTrack.onended = () => {
-      logger.info('Video track ended');
-      playIdleVideo();
-    };
-
-    // Monitor video status
-    if (statsIntervalId) {
-      clearInterval(statsIntervalId);
-    }
-
-    statsIntervalId = setInterval(async () => {
-      if (peerConnection && peerConnection.connectionState === 'connected') {
-        try {
-          const stats = await peerConnection.getStats(videoTrack);
-          let videoStatsFound = false;
-          stats.forEach((report) => {
-            if (report.type === 'inbound-rtp' && report.kind === 'video') {
-              videoStatsFound = true;
-              const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
-
-              logger.debug('Video stats:', {
-                bytesReceived: report.bytesReceived,
-                lastBytesReceived,
-                videoIsPlaying,
-                videoStatusChanged
-              });
-
-              if (videoStatusChanged) {
-                videoIsPlaying = report.bytesReceived > lastBytesReceived;
-                logger.info('Video status changed:', videoIsPlaying);
-                onVideoStatusChange(videoIsPlaying, stream);
-              }
-              lastBytesReceived = report.bytesReceived;
+            if (videoStatusChanged) {
+              videoIsPlaying = report.bytesReceived > lastBytesReceived;
+              logger.info('Video status changed:', videoIsPlaying);
+              onVideoStatusChange(videoIsPlaying, event.streams[0]);
             }
-          });
-          if (!videoStatsFound) {
-            logger.debug('No video stats found');
+            lastBytesReceived = report.bytesReceived;
           }
-        } catch (error) {
-          logger.error('Error getting stats:', error);
+        });
+        if (!videoStatsFound) {
+          logger.debug('No video stats found yet.');
         }
-      } else {
-        logger.debug('Peer connection not ready for stats');
+      } catch (error) {
+        logger.error('Error getting stats:', error);
       }
-    }, 1000);
-  } else if (event.track.kind === 'audio') {
-    logger.info('Audio track received');
-    const audioTrack = event.track;
-    const stream = new MediaStream([audioTrack]);
-    
-    // If you have a separate audio element, you can set it up here
-    // const audioElement = document.getElementById('audio-element');
-    // audioElement.srcObject = stream;
-    // audioElement.play().catch(e => logger.error('Error playing audio:', e));
-
-    // If you want to add the audio track to the video element
-    const existingStream = streamVideoElement.srcObject;
-    if (existingStream) {
-      existingStream.addTrack(audioTrack);
     } else {
-      streamVideoElement.srcObject = stream;
+      logger.debug('Peer connection not ready for stats.');
     }
+  }, 1000);
 
-    audioTrack.onended = () => {
-      logger.info('Audio track ended');
-    };
-  }
+  setVideoElement(event.streams[0]);
 }
 
 function setVideoElement(stream) {
@@ -480,24 +391,24 @@ function closePC(pc = peerConnection) {
   }
 }
 
-async function fetchWithRetries(url, options, retries = 0) {
-  const maxRetries = 3;
-  const baseDelay = 1000;
-
+async function fetchWithRetries(url, options, retries = 1) {
+  const maxRetryCount = 3;
+  const maxDelaySec = 4;
   try {
     const response = await fetch(url, options);
     if (!response.ok) {
-      throw new Error(`HTTP error ${response.status}`);
+      throw new Error(`HTTP error ${response.status}: ${await response.text()}`);
     }
     return response;
-  } catch (error) {
-    if (retries >= maxRetries) {
-      throw error;
+  } catch (err) {
+    if (retries <= maxRetryCount) {
+      const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 1000;
+      logger.warn(`Request failed, retrying ${retries}/${maxRetryCount} in ${delay}ms. Error: ${err.message}`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return fetchWithRetries(url, options, retries + 1);
+    } else {
+      throw new Error(`Max retries exceeded. Error: ${err.message}`);
     }
-    const delay = baseDelay * Math.pow(2, retries);
-    console.log(`Retrying in ${delay}ms...`);
-    await new Promise(resolve => setTimeout(resolve, delay));
-    return fetchWithRetries(url, options, retries + 1);
   }
 }
 
@@ -506,11 +417,6 @@ async function initializeConnection() {
   closePC();
 
   logger.info('Initializing connection...');
-
-  if (!didWebSocket || didWebSocket.readyState !== WebSocket.OPEN) {
-    initializeDIDWebSocket();
-  }
-
   const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
     method: 'POST',
     headers: {
@@ -565,11 +471,27 @@ async function initializeConnection() {
 }
 
 function startKeepAlive() {
-  setInterval(() => {
-    if (didWebSocket.readyState === WebSocket.OPEN) {
-      didWebSocket.send(JSON.stringify({ type: 'keepAlive', streamId, sessionId }));
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval);
+  }
+  keepAliveInterval = setInterval(async () => {
+    try {
+      const response = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/keepalive`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      if (!response.ok) {
+        throw new Error(`Keep-alive failed: ${response.status} ${response.statusText}`);
+      }
+      logger.debug('Keep-alive sent successfully');
+    } catch (error) {
+      logger.error('Error sending keep-alive:', error);
     }
-  }, 30000);
+  }, 30000); // Send keep-alive every 30 seconds
 }
 
 function stopKeepAlive() {
@@ -853,11 +775,6 @@ startButton.onclick = async () => {
 
 // Initialize WebSocket connection
 initializeWebSocket();
-
-
-// Initialize the D-ID WebSocket connection
-initializeDIDWebSocket();
-
 
 // Initialize the connection when the page loads
 initializeConnection().catch(error => {
