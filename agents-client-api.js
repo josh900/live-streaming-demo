@@ -686,30 +686,15 @@ function onVideoStatusChange(videoIsPlaying, stream) {
 }
 
 function setStreamVideoElement(stream) {
-  if (!stream) return;
-  
-  const videoTrack = stream.getVideoTracks()[0];
-  const audioTrack = stream.getAudioTracks()[0];
-  
-  // Set up video
-  streamVideoElement.srcObject = new MediaStream([videoTrack]);
-  streamVideoElement.play().catch(e => logger.error('Error playing video:', e));
-  
-  // Set up audio with Web Audio API
-  if (audioContext && audioTrack) {
-    const audioSource = audioContext.createMediaStreamSource(new MediaStream([audioTrack]));
-    const delayNode = audioContext.createDelay(audioDelay);
-    delayNode.delayTime.value = audioDelay;
-    
-    audioSource.connect(delayNode);
-    delayNode.connect(audioContext.destination);
+  const { stream: streamVideoElement } = getVideoElements();
+  if (!streamVideoElement) {
+    logger.error('Stream video element not found');
+    return;
   }
 
   // Start the transition
   smoothTransition();
 }
-
-
 
 
 function onTrack(event) {
@@ -892,31 +877,7 @@ async function initializeConnection() {
     logger.info('Stream created:', { streamId, sessionId });
 
     try {
-      // Create and set up the peer connection
-      peerConnection = new RTCPeerConnection({ iceServers });
-      peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
-      peerConnection.addEventListener('icecandidate', onIceCandidate, true);
-      peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
-      peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
-      peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
-      peerConnection.addEventListener('track', onTrack, true);
-
-      // Set the remote description (offer from the server)
-      await peerConnection.setRemoteDescription(offer);
-      logger.info('Remote description set');
-
-      // Create and set the local description (answer)
-      const answer = await peerConnection.createAnswer();
-      await peerConnection.setLocalDescription(answer);
-      logger.info('Local description set');
-
-      // Preload the avatar stream
-      const preloadStream = peerConnection.getRemoteStreams()[0];
-      if (preloadStream) {
-        setStreamVideoElement(preloadStream);
-      }
-
-      sessionClientAnswer = peerConnection.localDescription;
+      sessionClientAnswer = await createPeerConnection(offer, iceServers);
     } catch (e) {
       logger.error('Error during streaming setup:', e);
       stopAllStreams();
@@ -945,10 +906,6 @@ async function initializeConnection() {
 
     logger.info('Connection initialized successfully');
     startKeepAlive();
-
-    // Initialize audio context for better synchronization
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-
   } catch (error) {
     logger.error('Failed to initialize connection:', error);
     throw error;
