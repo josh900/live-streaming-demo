@@ -31,6 +31,10 @@ let socket;
 let transcriptionStartTime;
 let sdpExchangeComplete = false;
 let isInitializing = false;
+let audioContext;
+let audioSource;
+let audioDelay = 0.2; // 200ms delay
+
 
 
 
@@ -282,18 +286,27 @@ function onVideoStatusChange(videoIsPlaying, stream) {
 }
 
 function setStreamVideoElement(stream) {
-  const { stream: streamVideoElement } = getVideoElements();
-  if (!streamVideoElement) {
-    logger.error('Stream video element not found');
-    return;
-  }
-  if (!stream) {
-    logger.warn('No stream available to set video element');
-    return;
-  }
-  streamVideoElement.srcObject = stream;
+  if (!stream) return;
+  
+  const videoTrack = stream.getVideoTracks()[0];
+  const audioTrack = stream.getAudioTracks()[0];
+  
+  // Set up video
+  streamVideoElement.srcObject = new MediaStream([videoTrack]);
   streamVideoElement.play().catch(e => logger.error('Error playing video:', e));
+  
+  // Set up audio with Web Audio API
+  if (audioContext && audioTrack) {
+    const audioSource = audioContext.createMediaStreamSource(new MediaStream([audioTrack]));
+    const delayNode = audioContext.createDelay(audioDelay);
+    delayNode.delayTime.value = audioDelay;
+    
+    audioSource.connect(delayNode);
+    delayNode.connect(audioContext.destination);
+  }
 }
+
+
 
 
 
@@ -474,7 +487,31 @@ async function initializeConnection() {
     logger.info('Stream created:', { streamId, sessionId });
 
     try {
-      sessionClientAnswer = await createPeerConnection(offer, iceServers);
+      // Create and set up the peer connection
+      peerConnection = new RTCPeerConnection({ iceServers });
+      peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
+      peerConnection.addEventListener('icecandidate', onIceCandidate, true);
+      peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
+      peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
+      peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
+      peerConnection.addEventListener('track', onTrack, true);
+
+      // Set the remote description (offer from the server)
+      await peerConnection.setRemoteDescription(offer);
+      logger.info('Remote description set');
+
+      // Create and set the local description (answer)
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      logger.info('Local description set');
+
+      // Preload the avatar stream
+      const preloadStream = peerConnection.getRemoteStreams()[0];
+      if (preloadStream) {
+        setStreamVideoElement(preloadStream);
+      }
+
+      sessionClientAnswer = peerConnection.localDescription;
     } catch (e) {
       logger.error('Error during streaming setup:', e);
       stopAllStreams();
@@ -503,6 +540,10 @@ async function initializeConnection() {
 
     logger.info('Connection initialized successfully');
     startKeepAlive();
+
+    // Initialize audio context for better synchronization
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
   } catch (error) {
     logger.error('Failed to initialize connection:', error);
     throw error;
@@ -627,7 +668,7 @@ async function startRecording() {
         transcript = '';
         transcriptionStartTime = Date.now();
       }
-    }, 5000); // Send transcription every 5 seconds
+    }, 2000); // Send transcription every 5 seconds
   };
 
   deepgramSocket.onmessage = (message) => {
