@@ -1078,7 +1078,7 @@ async function stopRecording() {
 async function sendChatToGroq() {
   try {
     const startTime = Date.now();
-    const response = await fetch('https://avatar.skoop.digital/chat', {
+    const response = await fetch('https://avatar-stage.skoop.digital/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
