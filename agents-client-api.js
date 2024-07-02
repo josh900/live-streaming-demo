@@ -167,7 +167,7 @@ function showErrorMessage(message) {
   if (connectButton) connectButton.style.display = 'inline-block';
 }
 
-javascriptCopyasync function createPeerConnection(offer, iceServers) {
+async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
     peerConnection = new RTCPeerConnection({ iceServers });
     peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
