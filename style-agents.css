@@ -156,8 +156,7 @@ h4 {
 }
 
 #idle-video-element,
-#stream-video-element,
-#transition-canvas {
+#stream-video-element {
   position: absolute;
   top: 0;
   left: 0;
@@ -165,11 +164,7 @@ h4 {
   height: 100%;
   border-radius: 50%;
   object-fit: cover;
-}
-
-#transition-canvas {
-  z-index: 2;
-
+  transition: opacity 0.3s ease-in-out;
 }
 
 #idle-video-element {
