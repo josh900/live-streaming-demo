@@ -491,6 +491,9 @@ async function initializeConnection() {
     throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
   }
 
+  sdpExchangeComplete = true;
+
+
   logger.info('Connection initialized successfully');
   startKeepAlive();
 }
