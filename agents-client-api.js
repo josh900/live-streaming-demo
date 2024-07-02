@@ -30,6 +30,13 @@ let keepAliveInterval;
 let socket;
 let transcriptionStartTime;
 let sdpExchangeComplete = false;
+let isInitializing = false;
+
+
+
+const maxRetryCount = 3;
+const maxDelaySec = 4;
+
 
 
 
@@ -109,6 +116,7 @@ async function initialize() {
   showLoadingSymbol();
   try {
     await initializeConnection();
+    startKeepAlive();
     hideLoadingSymbol();
   } catch (error) {
     logger.error('Error during initialization:', error);
@@ -159,23 +167,15 @@ function showErrorMessage(message) {
   if (connectButton) connectButton.style.display = 'inline-block';
 }
 
-async function createPeerConnection(offer, iceServers) {
+javascriptCopyasync function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
-    const config = { 
-      iceServers,
-      sdpSemantics: 'unified-plan'
-    };
-
-    peerConnection = new RTCPeerConnection(config);
+    peerConnection = new RTCPeerConnection({ iceServers });
     peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
     peerConnection.addEventListener('icecandidate', onIceCandidate, true);
     peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
     peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
     peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
     peerConnection.addEventListener('track', onTrack, true);
-
-    peerConnection.addTransceiver('audio', {direction: 'recvonly'});
-    peerConnection.addTransceiver('video', {direction: 'recvonly'});
   }
 
   await peerConnection.setRemoteDescription(offer);
@@ -190,6 +190,7 @@ async function createPeerConnection(offer, iceServers) {
   return sessionClientAnswer;
 }
 
+
 function onIceGatheringStateChange() {
   const { iceGathering: iceGatheringStatusLabel } = getStatusLabels();
   if (iceGatheringStatusLabel) {
@@ -200,11 +201,11 @@ function onIceGatheringStateChange() {
 }
 
 function onIceCandidate(event) {
-  if (event.candidate && sdpExchangeComplete) {
+  if (event.candidate) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
     logger.debug('New ICE candidate:', candidate);
 
-    fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
+    fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -216,15 +217,12 @@ function onIceCandidate(event) {
         sdpMLineIndex,
         session_id: sessionId,
       }),
-    }).then(response => {
-      if (!response.ok) {
-        logger.error('Failed to send ICE candidate:', response.status, response.statusText);
-      }
     }).catch(error => {
       logger.error('Error sending ICE candidate:', error);
     });
   }
 }
+
 
 function onIceConnectionStateChange() {
   const { ice: iceStatusLabel } = getStatusLabels();
@@ -408,6 +406,7 @@ function closePC(pc = peerConnection) {
   pc.removeEventListener('track', onTrack, true);
   clearInterval(statsIntervalId);
   const labels = getStatusLabels();
+  stopKeepAlive();
   if (labels.iceGathering) labels.iceGathering.innerText = '';
   if (labels.signaling) labels.signaling.innerText = '';
   if (labels.ice) labels.ice.innerText = '';
@@ -419,12 +418,11 @@ function closePC(pc = peerConnection) {
 }
 
 async function fetchWithRetries(url, options, retries = 1) {
-  const maxRetryCount = 3;
-  const maxDelaySec = 4;
   try {
     const response = await fetch(url, options);
     if (!response.ok) {
-      throw new Error(`HTTP error ${response.status}: ${await response.text()}`);
+      const errorText = await response.text();
+      throw new Error(`HTTP error ${response.status}: ${errorText}`);
     }
     return response;
   } catch (err) {
@@ -439,65 +437,79 @@ async function fetchWithRetries(url, options, retries = 1) {
   }
 }
 
+
 async function initializeConnection() {
-  stopAllStreams();
-  closePC();
+  if (isInitializing) {
+    logger.warn('Connection initialization already in progress. Skipping initialize.');
+    return;
+  }
 
+  isInitializing = true;
   logger.info('Initializing connection...');
-  const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      source_url: 'https://skoop-general.s3.amazonaws.com/brad_idle.png',
-      driver_url: 'bank://lively/',
-      config: {
-        stitch: true,
-        fluent: true,
-        pad_audio: 0.5,
-      }
-    }),
-  });
-
-  const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
-  streamId = newStreamId;
-  sessionId = newSessionId;
-  logger.info('Stream created:', { streamId, sessionId });
 
   try {
-    sessionClientAnswer = await createPeerConnection(offer, iceServers);
-  } catch (e) {
-    logger.error('Error during streaming setup:', e);
     stopAllStreams();
     closePC();
-    throw e;
+
+    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        source_url: 'https://skoop-general.s3.amazonaws.com/brad_idle.png',
+        driver_url: 'bank://lively/',
+        config: {
+          stitch: true,
+          fluent: true,
+          pad_audio: 0.5,
+        }
+      }),
+    });
+
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+    streamId = newStreamId;
+    sessionId = newSessionId;
+    logger.info('Stream created:', { streamId, sessionId });
+
+    try {
+      sessionClientAnswer = await createPeerConnection(offer, iceServers);
+    } catch (e) {
+      logger.error('Error during streaming setup:', e);
+      stopAllStreams();
+      closePC();
+      throw e;
+    }
+
+    // Add a small delay here to ensure the server has processed the new session
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        answer: sessionClientAnswer,
+        session_id: sessionId,
+      }),
+    });
+
+    if (!sdpResponse.ok) {
+      throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
+    }
+
+    logger.info('Connection initialized successfully');
+    startKeepAlive();
+  } catch (error) {
+    logger.error('Failed to initialize connection:', error);
+    throw error;
+  } finally {
+    isInitializing = false;
   }
-
-  const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      answer: sessionClientAnswer,
-      session_id: sessionId,
-    }),
-  });
-
-  if (!sdpResponse.ok) {
-    throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
-  }
-
-  sdpExchangeComplete = true;
-
-
-  logger.info('Connection initialized successfully');
-  startKeepAlive();
 }
-
 
 function startKeepAlive() {
   if (keepAliveInterval) {
@@ -505,7 +517,7 @@ function startKeepAlive() {
   }
   keepAliveInterval = setInterval(async () => {
     try {
-      const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/keepalive`, {
+      await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/keepalive`, {
         method: 'POST',
         headers: {
           Authorization: `Basic ${DID_API.key}`,
@@ -743,21 +755,40 @@ async function sendChatToGroq() {
 }
 
 async function reinitializeConnection() {
+  if (isInitializing) {
+    logger.warn('Connection initialization already in progress. Skipping reinitialize.');
+    return;
+  }
+
+  isInitializing = true;
   logger.info('Reinitializing connection...');
-  stopAllStreams();
-  closePC();
 
-  clearInterval(transcriptionTimer);
-  clearTimeout(inactivityTimeout);
+  try {
+    stopAllStreams();
+    closePC();
 
-  transcript = '';
-  chatHistory = chatHistory.slice(0, -1); // Remove the last incomplete transcription from the chat history
+    clearInterval(transcriptionTimer);
+    clearTimeout(inactivityTimeout);
 
-  const msgHistory = document.getElementById('msgHistory');
-  msgHistory.innerHTML = msgHistory.innerHTML.slice(0, msgHistory.innerHTML.lastIndexOf('<span style=\'opacity:0.5\'><u>User:</u>'));
+    transcript = '';
+    chatHistory = chatHistory.slice(0, -1); // Remove the last incomplete transcription from the chat history
 
-  await initializeConnection();
-  await startRecording();
+    const msgHistory = document.getElementById('msgHistory');
+    msgHistory.innerHTML = msgHistory.innerHTML.slice(0, msgHistory.innerHTML.lastIndexOf('<span style=\'opacity:0.5\'><u>User:</u>'));
+
+    if (peerConnection && peerConnection.connectionState === 'connected') {
+      logger.info('Existing connection is still active. Reusing connection.');
+      await startRecording();
+    } else {
+      await initializeConnection();
+      await startRecording();
+    }
+  } catch (error) {
+    logger.error('Error during reinitialization:', error);
+    showErrorMessage('Failed to reinitialize connection. Please try again.');
+  } finally {
+    isInitializing = false;
+  }
 }
 
 const connectButton = document.getElementById('connect-button');
