@@ -508,29 +508,6 @@ async function initializeConnection() {
   startKeepAlive();
 }
 
-function startKeepAlive() {
-  if (keepAliveInterval) {
-    clearInterval(keepAliveInterval);
-  }
-  keepAliveInterval = setInterval(async () => {
-    try {
-      const response = await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}/keepalive`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${DID_API.key}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ session_id: sessionId }),
-      });
-      if (!response.ok) {
-        throw new Error(`Keep-alive failed: ${response.status} ${response.statusText}`);
-      }
-      logger.debug('Keep-alive sent successfully');
-    } catch (error) {
-      logger.error('Error sending keep-alive:', error);
-    }
-  }, 30000); // Send keep-alive every 30 seconds
-}
 
 function startKeepAlive() {
   setInterval(() => {
@@ -816,10 +793,7 @@ startButton.onclick = async () => {
 // Initialize WebSocket connection
 initializeWebSocket();
 
-// Call this function when initializing the application
 initializeDIDWebSocket();
-
-
 
 // Initialize the connection when the page loads
 initializeConnection().catch(error => {
