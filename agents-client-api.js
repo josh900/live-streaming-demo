@@ -55,15 +55,23 @@ setLogLevel('INFO');
 
 function blendFrames(idleFrame, talkingFrame, progress) {
   const canvas = document.createElement('canvas');
-  canvas.width = idleFrame.width || 400;  // Adjust if your video size is different
-  canvas.height = idleFrame.height || 400;
+  canvas.width = idleFrame.videoWidth || 400;
+  canvas.height = idleFrame.videoHeight || 400;
   const ctx = canvas.getContext('2d');
   
+  // Draw idle frame
   ctx.globalAlpha = 1 - progress;
   ctx.drawImage(idleFrame, 0, 0, canvas.width, canvas.height);
   
+  // Draw talking frame
   ctx.globalAlpha = progress;
   ctx.drawImage(talkingFrame, 0, 0, canvas.width, canvas.height);
+  
+  // Apply circular mask
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.beginPath();
+  ctx.arc(canvas.width / 2, canvas.height / 2, canvas.width / 2, 0, Math.PI * 2);
+  ctx.fill();
   
   return canvas;
 }
@@ -84,6 +92,7 @@ function initTransitionCanvas() {
   transitionCanvas.style.top = '0';
   transitionCanvas.style.left = '0';
   transitionCanvas.style.zIndex = '3';  // Ensure it's on top
+  transitionCanvas.style.borderRadius = '50%';  // Make the canvas circular
   document.querySelector('#video-wrapper').appendChild(transitionCanvas);
 }
 
@@ -556,7 +565,7 @@ async function initializeConnection() {
         config: {
           stitch: true,
           fluent: true,
-          pad_audio: 1,
+          pad_audio: 0.5,
         }
       }),
     });
@@ -681,7 +690,7 @@ async function startStreaming(assistantReply) {
         },
         config: {
           fluent: true,
-          pad_audio: 1,
+          pad_audio: 0.5,
           stitch: true,
         },
         driver_url: 'bank://lively/',
