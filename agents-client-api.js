@@ -1,6 +1,8 @@
 'use strict';
 import DID_API from './api.js';
 import logger from './logger.js';
+import { avatars } from './avatars.js';
+
 
 const GROQ_API_KEY = DID_API.groqKey;
 const DEEPGRAM_API_KEY = DID_API.deepgramKey;
@@ -36,6 +38,7 @@ let audioSource;
 let audioDelay = 0.2; // 200ms delay
 let streamVideoElement;
 let idleVideoElement;
+let currentAvatar = avatars[0];
 
 
 
@@ -366,6 +369,28 @@ You are a helpful, harmless, and honest assistant. Please answer the users quest
 
 setLogLevel('INFO');
 
+
+
+
+function populateAvatarDropdown() {
+  const dropdown = document.getElementById('avatar-dropdown');
+  avatars.forEach((avatar, index) => {
+    const option = document.createElement('option');
+    option.value = index;
+    option.textContent = avatar.name;
+    dropdown.appendChild(option);
+  });
+
+  dropdown.addEventListener('change', handleAvatarChange);
+}
+
+async function handleAvatarChange(event) {
+  const newAvatarIndex = event.target.value;
+  currentAvatar = avatars[newAvatarIndex];
+
+  await destroyButton.onclick();
+  await initializeConnection();
+}
 
 
 function blendFrames(idleFrame, talkingFrame, progress) {
@@ -776,7 +801,7 @@ function playIdleVideo() {
     return;
   }
   idleVideoElement.classList.add("animated");
-  idleVideoElement.src = 'brad_idle.mp4';
+  idleVideoElement.src = currentAvatar.idleVideo;
   idleVideoElement.loop = true;
 
   setTimeout(() => {
@@ -859,7 +884,7 @@ async function initializeConnection() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        source_url: 'https://skoop-general.s3.amazonaws.com/brad_idle.png',
+        source_url: `https://skoop-general.s3.amazonaws.com/${currentAvatar.idleImage}`,
         driver_url: 'bank://lively/',
         stream_warmup: true,
         config: {
@@ -884,7 +909,6 @@ async function initializeConnection() {
       throw e;
     }
 
-    // Add a small delay here to ensure the server has processed the new session
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
@@ -942,6 +966,118 @@ function stopKeepAlive() {
   }
 }
 
+javascriptCopyimport { avatars } from './avatars.js';
+
+let currentAvatar = avatars[0];
+
+function populateAvatarDropdown() {
+  const dropdown = document.getElementById('avatar-dropdown');
+  avatars.forEach((avatar, index) => {
+    const option = document.createElement('option');
+    option.value = index;
+    option.textContent = avatar.name;
+    dropdown.appendChild(option);
+  });
+
+  dropdown.addEventListener('change', handleAvatarChange);
+}
+
+async function handleAvatarChange(event) {
+  const newAvatarIndex = event.target.value;
+  currentAvatar = avatars[newAvatarIndex];
+
+  await destroyButton.onclick();
+  await initializeConnection();
+}
+
+async function initializeConnection() {
+  if (isInitializing) {
+    logger.warn('Connection initialization already in progress. Skipping initialize.');
+    return;
+  }
+
+  isInitializing = true;
+  logger.info('Initializing connection...');
+
+  try {
+    stopAllStreams();
+    closePC();
+
+    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        source_url: `https://skoop-general.s3.amazonaws.com/${currentAvatar.idleImage}`,
+        driver_url: 'bank://lively/',
+        stream_warmup: true,
+        config: {
+          stitch: true,
+          fluent: true,
+          pad_audio: 0.5,
+        }
+      }),
+    });
+
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+    streamId = newStreamId;
+    sessionId = newSessionId;
+    logger.info('Stream created:', { streamId, sessionId });
+
+    try {
+      sessionClientAnswer = await createPeerConnection(offer, iceServers);
+    } catch (e) {
+      logger.error('Error during streaming setup:', e);
+      stopAllStreams();
+      closePC();
+      throw e;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        answer: sessionClientAnswer,
+        session_id: sessionId,
+      }),
+    });
+
+    if (!sdpResponse.ok) {
+      throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
+    }
+
+    logger.info('Connection initialized successfully');
+    startKeepAlive();
+  } catch (error) {
+    logger.error('Failed to initialize connection:', error);
+    throw error;
+  } finally {
+    isInitializing = false;
+  }
+}
+
+function playIdleVideo() {
+  const { idle: idleVideoElement } = getVideoElements();
+  if (!idleVideoElement) {
+    logger.error('Idle video element not found');
+    return;
+  }
+  idleVideoElement.classList.add("animated");
+  idleVideoElement.src = currentAvatar.idleVideo;
+  idleVideoElement.loop = true;
+
+  setTimeout(() => {
+    idleVideoElement.classList.remove("animated");
+  }, 300);
+}
+
 async function startStreaming(assistantReply) {
   try {
     logger.info('Starting streaming with reply:', assistantReply);
@@ -957,7 +1093,7 @@ async function startStreaming(assistantReply) {
           input: assistantReply,
           provider: {
             type: 'microsoft',
-            voice_id: 'en-US-ChristopherNeural'
+            voice_id: currentAvatar.voice
           }
         },
         config: {
@@ -986,11 +1122,15 @@ async function startStreaming(assistantReply) {
   }
 }
 
+let lastTranscriptTime = 0;
+const TRANSCRIPT_DELAY = 1000; // 1 second delay
+
+
+
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   mediaRecorder = new MediaRecorder(stream);
   transcriptionStartTime = Date.now();
-
 
   deepgramSocket = new WebSocket('wss://api.deepgram.com/v1/listen', [
     'token',
@@ -1006,7 +1146,6 @@ async function startRecording() {
     });
     mediaRecorder.start(1000);
 
-    // Send KeepAlive message every 3 seconds
     setInterval(() => {
       if (deepgramSocket.readyState === WebSocket.OPEN) {
         const keepAliveMsg = JSON.stringify({ type: "KeepAlive" });
@@ -1015,9 +1154,8 @@ async function startRecording() {
       }
     }, 3000);
 
-    // Start transcription timer
     transcriptionTimer = setInterval(() => {
-      if (transcript.trim() !== '') {
+      if (transcript.trim() !== '' && Date.now() - lastTranscriptTime > TRANSCRIPT_DELAY) {
         const transcriptionTime = Date.now() - transcriptionStartTime;
         logger.info(`Transcription completed in ${transcriptionTime}ms`);
         document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User:</u> ${transcript}</span><br>`;
@@ -1029,7 +1167,7 @@ async function startRecording() {
         transcript = '';
         transcriptionStartTime = Date.now();
       }
-    }, 500); // Send transcription every .5 seconds
+    }, 100); // Check every 100ms
   };
 
   deepgramSocket.onmessage = (message) => {
@@ -1039,10 +1177,11 @@ async function startRecording() {
       if (partialTranscript) {
         transcript += partialTranscript;
         document.getElementById('msgHistory').innerHTML = document.getElementById('msgHistory').innerHTML.replace(/<span style='opacity:0.5'><u>User \(interim\):<\/u>.*<\/span><br>/, `<span style='opacity:0.5'><u>User (interim):</u> ${transcript}</span><br>`);
+        
+        lastTranscriptTime = Date.now();
       }
     }
   };
-  
   
   deepgramSocket.onclose = async () => {
     logger.info('Deepgram WebSocket connection closed');
@@ -1051,7 +1190,6 @@ async function startRecording() {
     }
   };
 
-  // Start inactivity timeout
   inactivityTimeout = setTimeout(() => {
     if (isRecording) {
       logger.info('Inactivity timeout reached. Stopping recording.');
@@ -1075,6 +1213,39 @@ async function stopRecording() {
   clearTimeout(inactivityTimeout);
 }
 
+let additionalContext = '';
+
+
+function initializeContextInput() {
+  const saveContextButton = document.getElementById('save-context-button');
+  saveContextButton.addEventListener('click', () => {
+    const contextInput = document.getElementById('context-input');
+    additionalContext = contextInput.value;
+    showToast('Context saved successfully!');
+  });
+}
+
+function showToast(message) {
+  const toast = document.createElement('div');
+  toast.textContent = message;
+  toast.style.position = 'fixed';
+  toast.style.bottom = '20px';
+  toast.style.left = '50%';
+  toast.style.transform = 'translateX(-50%)';
+  toast.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+  toast.style.color = 'white';
+  toast.style.padding = '10px 20px';
+  toast.style.borderRadius = '5px';
+  toast.style.zIndex = '1000';
+  document.body.appendChild(toast);
+
+  setTimeout(() => {
+    document.body.removeChild(toast);
+  }, 3000);
+}
+
+
+
 async function sendChatToGroq() {
   try {
     const startTime = Date.now();
@@ -1087,7 +1258,7 @@ async function sendChatToGroq() {
         messages: [
           {
             role: 'system',
-            content: context,
+            content: context + (additionalContext ? '\n\nAdditional context: ' + additionalContext : ''),
           },
           ...chatHistory,
         ],
