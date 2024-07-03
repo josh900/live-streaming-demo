@@ -38,6 +38,8 @@ let audioSource;
 let audioDelay = 0.2; // 200ms delay
 let streamVideoElement;
 let idleVideoElement;
+let deepgramConnection;
+
 
 const avatars = {
   brad: {
@@ -1049,9 +1051,9 @@ async function startStreaming(assistantReply) {
 }
 
 async function startRecording() {
-  const deepgram = createClient(DEEPGRAM_API_KEY);
+  const deepgram = new Deepgram.Deepgram(DEEPGRAM_API_KEY);
 
-  const connection = deepgram.listen.live({
+  const connection = await deepgram.transcription.live({
     model: "nova-2",
     language: "en-US",
     smart_format: true,
@@ -1060,7 +1062,7 @@ async function startRecording() {
     punctuate: true,
   });
 
-  connection.on(LiveTranscriptionEvents.Open, () => {
+  connection.addListener('open', () => {
     logger.info('Deepgram WebSocket Connection opened');
 
     // Start capturing audio and sending it to Deepgram
@@ -1075,7 +1077,9 @@ async function startRecording() {
 
         processor.onaudioprocess = (e) => {
           const audioData = e.inputBuffer.getChannelData(0);
-          connection.send(audioData);
+          if (connection.getReadyState() === WebSocket.OPEN) {
+            connection.send(audioData);
+          }
         };
       })
       .catch(err => {
@@ -1085,9 +1089,9 @@ async function startRecording() {
 
   let currentTranscript = '';
 
-  connection.on(LiveTranscriptionEvents.Transcript, (data) => {
-    const transcriptData = data.channel.alternatives[0];
-    if (transcriptData.transcript && !data.is_final) {
+  connection.addListener('transcriptReceived', (transcription) => {
+    const transcriptData = transcription.channel.alternatives[0];
+    if (transcriptData.transcript && !transcription.is_final) {
       // Update the interim transcript
       currentTranscript = transcriptData.transcript;
       document.getElementById('msgHistory').innerHTML = document.getElementById('msgHistory').innerHTML.replace(
@@ -1097,7 +1101,7 @@ async function startRecording() {
     }
   });
 
-  connection.on(LiveTranscriptionEvents.UtteranceEnd, () => {
+  connection.addListener('utteranceEnd', () => {
     if (currentTranscript.trim() !== '') {
       document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User:</u> ${currentTranscript}</span><br>`;
       chatHistory.push({
@@ -1109,13 +1113,16 @@ async function startRecording() {
     }
   });
 
-  connection.on(LiveTranscriptionEvents.Error, (err) => {
+  connection.addListener('error', (err) => {
     logger.error('Deepgram error:', err);
   });
 
-  connection.on(LiveTranscriptionEvents.Close, () => {
+  connection.addListener('close', () => {
     logger.info('Deepgram WebSocket connection closed');
   });
+
+  // Store the connection for later use
+  deepgramConnection = connection;
 
   // Start inactivity timeout
   inactivityTimeout = setTimeout(() => {
@@ -1126,7 +1133,6 @@ async function startRecording() {
   }, 45000); // 45 seconds
 }
 
-// Update the stopRecording function
 async function stopRecording() {
   if (deepgramConnection) {
     deepgramConnection.finish();
