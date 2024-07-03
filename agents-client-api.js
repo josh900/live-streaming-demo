@@ -50,8 +50,7 @@ let processor;
 let audioWorkletNode;
 let microphoneStream;
 let audioChunks = [];
-
-
+let deepgramSource;
 
 
 const avatars = {
@@ -1098,10 +1097,44 @@ function setupAudioVisualizer() {
 
 async function startRecording() {
   logger.info('Starting recording process...');
+  
   try {
-    await startAudioCapture();
-    logger.info('Audio capture started successfully');
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    
+    // Set up MediaRecorder for saving audio
+    mediaRecorder = new MediaRecorder(stream);
+    
+    mediaRecorder.ondataavailable = event => {
+      audioChunks.push(event.data);
+    };
 
+    mediaRecorder.onstop = () => {
+      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const link = document.createElement('a');
+      link.href = audioUrl;
+      link.download = 'recorded_audio.webm';
+      link.click();
+      
+      // Reset for next recording
+      audioChunks = [];
+    };
+
+    mediaRecorder.start();
+    logger.info('MediaRecorder started');
+
+    // Set up AudioContext and AudioWorklet for Deepgram
+    audioContext = new AudioContext();
+    await audioContext.audioWorklet.addModule('audio-processor.js');
+
+    const source = audioContext.createMediaStreamSource(stream);
+    audioWorkletNode = new AudioWorkletNode(audioContext, 'audio-processor');
+
+    source.connect(audioWorkletNode);
+    // We don't need to connect to destination as we're not playing the audio
+    // audioWorkletNode.connect(audioContext.destination);
+
+    // Set up Deepgram connection
     deepgramConnection = deepgramClient.listen.live({
       model: "general",
       language: "en-US",
@@ -1112,69 +1145,69 @@ async function startRecording() {
       encoding: "linear16",
       sample_rate: audioContext.sampleRate,
     });
-    logger.info('Deepgram connection created with options:', {
-      model: "general",
-      language: "en-US",
-      smart_format: true,
-      interim_results: true,
-      utterance_end_ms: 1000,
-      punctuate: true,
-      encoding: "linear16",
-      sample_rate: audioContext.sampleRate,
-    });
+
+    logger.info('Deepgram connection created');
 
     deepgramConnection.addListener('open', () => {
       logger.info('Deepgram WebSocket Connection opened');
-      startSendingAudioData();
-      startKeepAlive();
-
-    });
-
-    let currentTranscript = '';
-
-
-
-    deepgramConnection.addListener('transcriptReceived', (message) => {
-      logger.info('Received transcription:', JSON.stringify(message));
       
-      if (message.is_final) {
-        const transcriptData = message.channel.alternatives[0];
-        if (transcriptData && transcriptData.transcript) {
-          currentTranscript += transcriptData.transcript + ' ';
-          logger.info('Updated transcript:', currentTranscript);
-          updateTranscript(currentTranscript, true);
+      audioWorkletNode.port.onmessage = (event) => {
+        const audioData = event.data;
+        if (deepgramConnection.getReadyState() === WebSocket.OPEN) {
+          deepgramConnection.send(audioData);
         }
-      } else {
-        const transcriptData = message.channel.alternatives[0];
-        if (transcriptData && transcriptData.transcript) {
-          updateTranscript(transcriptData.transcript, false);
-        }
-      }
+      };
     });
 
-    deepgramConnection.addListener('error', (err) => {
-      logger.error('Deepgram error:', err);
-      logger.error('Error details:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
+    deepgramConnection.addListener('transcriptReceived', (transcription) => {
+      logger.info('Received transcription:', JSON.stringify(transcription));
+      handleTranscription(transcription);
+    });
+
+    deepgramConnection.addListener('error', (error) => {
+      logger.error('Deepgram error:', error);
     });
 
     deepgramConnection.addListener('warning', (warning) => {
       logger.warn('Deepgram warning:', warning);
     });
-    
 
-    
     deepgramConnection.addListener('close', () => {
       logger.info('Deepgram WebSocket connection closed');
-      finalizeTranscript(currentTranscript);
     });
 
-    startInactivityTimeout();
-    logger.info('Recording process started successfully');
-
+    logger.info('Recording and transcription started successfully');
   } catch (error) {
-    logger.error('Error in startRecording:', error);
+    logger.error('Error starting recording:', error);
   }
 }
+
+function handleTranscription(transcription) {
+  // Extract the transcript from the transcription object
+  const transcript = transcription.channel.alternatives[0].transcript;
+
+  if (transcription.is_final) {
+    logger.info('Final transcript:', transcript);
+    // Update UI with final transcript
+    document.getElementById('msgHistory').innerHTML += `<span><u>User:</u> ${transcript}</span><br>`;
+  } else {
+    logger.info('Interim transcript:', transcript);
+    // Update UI with interim transcript
+    updateInterimTranscript(transcript);
+  }
+}
+
+function updateInterimTranscript(text) {
+  const msgHistory = document.getElementById('msgHistory');
+  const interimSpan = msgHistory.querySelector('span[data-interim]');
+  
+  if (interimSpan) {
+    interimSpan.textContent = `User (interim): ${text}`;
+  } else {
+    msgHistory.innerHTML += `<span data-interim style='opacity:0.5'><u>User (interim):</u> ${text}</span><br>`;
+  }
+}
+
 
 function updateTranscript(text, isFinal) {
   if (isFinal) {
@@ -1189,16 +1222,6 @@ function updateTranscript(text, isFinal) {
   }
 }
 
-function updateInterimTranscript(text) {
-  const msgHistory = document.getElementById('msgHistory');
-  const interimSpan = msgHistory.querySelector('span[data-interim]');
-  
-  if (interimSpan) {
-    interimSpan.textContent = `User (interim): ${text}`;
-  } else {
-    msgHistory.innerHTML += `<span data-interim style='opacity:0.5'><u>User (interim):</u> ${text}</span><br>`;
-  }
-}
 
 function finalizeTranscript(text) {
   if (text.trim()) {
@@ -1330,54 +1353,25 @@ function saveAudioFile() {
 }
 
 
-async function stopRecording() {
-
-
-  logger.info('Stopping recording...');
-
-  
-  saveAudioFile();
-  audioChunks = []; // Clear the chunks for the next recording
-  
-
-
-  if (deepgramConnection) {
-    logger.info('Finishing Deepgram connection');
-    deepgramConnection.finish();
-    deepgramConnection = null;
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+    logger.info('MediaRecorder stopped');
   }
-
+  
   if (audioContext) {
-    logger.info('Closing audio context');
-    await audioContext.close();
-    audioContext = null;
+    audioContext.close();
+    logger.info('AudioContext closed');
   }
-
-  if (mediaStreamSource) {
-    logger.info('Disconnecting media stream source');
-    mediaStreamSource.disconnect();
-    mediaStreamSource = null;
+  
+  if (deepgramConnection) {
+    deepgramConnection.finish();
+    logger.info('Deepgram connection finished');
   }
-
-  if (audioWorkletNode) {
-    logger.info('Disconnecting audio worklet node');
-    audioWorkletNode.disconnect();
-    audioWorkletNode = null;
-  }
-
-  if (microphoneStream) {
-    logger.info('Stopping microphone stream tracks');
-    microphoneStream.getTracks().forEach(track => {
-      track.stop();
-      logger.info(`Stopped track: ${track.kind}`);
-    });
-    microphoneStream = null;
-  }
-
-  clearTimeout(inactivityTimeout);
-  logger.info('Recording stopped and resources cleaned up');
-
+  
+  logger.info('Recording and transcription stopped');
 }
+
 
 async function sendChatToGroq() {
   logger.info('Sending chat to Groq...');
