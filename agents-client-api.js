@@ -649,6 +649,8 @@ async function initialize() {
     avatarSelect.appendChild(option);
   }
 
+  currentAvatar = avatarSelect.value;
+
   const contextInput = document.getElementById('context-input');
   contextInput.value = context.trim();
 
