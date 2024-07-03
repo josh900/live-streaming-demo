@@ -240,16 +240,22 @@ function initializeWebSocket() {
 
 function updateTranscript(text, isFinal) {
   const msgHistory = document.getElementById('msgHistory');
+  const interimSpan = msgHistory.querySelector('span[data-interim]');
+  
   if (isFinal) {
+    if (interimSpan) {
+      interimSpan.remove();
+    }
     msgHistory.innerHTML += `<span><u>User:</u> ${text}</span><br>`;
     logger.info('Final transcript added to chat history:', text);
   } else {
-    const interimSpan = msgHistory.querySelector('span[data-interim]');
     if (interimSpan) {
       interimSpan.innerHTML = `<u>User (interim):</u> ${text}`;
     } else {
       msgHistory.innerHTML += `<span data-interim style='opacity:0.5'><u>User (interim):</u> ${text}</span><br>`;
     }
+    // Scroll to the bottom of the chat history
+    msgHistory.scrollTop = msgHistory.scrollHeight;
   }
 }
 
@@ -778,7 +784,7 @@ async function startRecording() {
       language: "en-US",
       smart_format: true,
       interim_results: true,
-      utterance_end_ms: 1000,
+      utterance_end_ms: 500,
       punctuate: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate,
@@ -789,7 +795,7 @@ async function startRecording() {
       language: "en-US",
       smart_format: true,
       interim_results: true,
-      utterance_end_ms: 1000,
+      utterance_end_ms: 500,
       punctuate: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate,
@@ -870,14 +876,16 @@ function handleTranscription(data) {
     updateTranscript(currentUtterance, false);
   } else {
     logger.info('Interim transcript:', transcript);
-    updateInterimTranscript(currentUtterance + transcript);
+    updateTranscript(currentUtterance + transcript, false);
   }
 }
+
+
 
 function handleUtteranceEnd(data) {
   logger.info('Utterance end detected:', data);
   if (currentUtterance.trim()) {
-    updateTranscript(currentUtterance, true);
+    updateTranscript(currentUtterance.trim(), true);
     chatHistory.push({
       role: 'user',
       content: currentUtterance.trim(),
@@ -887,11 +895,6 @@ function handleUtteranceEnd(data) {
   }
 }
 
-
-
-function updateInterimTranscript(text) {
-  updateTranscript(text, false);
-}
 
 function stopRecording() {
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
@@ -986,7 +989,9 @@ async function sendChatToGroq() {
     });
 
     logger.info('Updating chat history in UI');
-    document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${assistantReply}</span><br>`;
+    const msgHistory = document.getElementById('msgHistory');
+    msgHistory.innerHTML += `<span><u>Assistant:</u> ${assistantReply}</span><br>`;
+    msgHistory.scrollTop = msgHistory.scrollHeight;
 
     logger.info('Assistant reply:', assistantReply);
 
