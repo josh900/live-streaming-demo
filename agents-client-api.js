@@ -72,13 +72,13 @@ const avatars = {
     voice: 'en-US-AvaNeural'
   },
   JoshC: {
-    idleImage: 'https://skoop-general.s3.amazonaws.com/Joshc_idle.png',
-    idleVideo: 'Joshc_idle.mp4',
+    idleImage: 'https://skoop-general.s3.amazonaws.com/joshc_idle.png',
+    idleVideo: 'joshc_idle.mp4',
     voice: 'en-US-GuyNeural'
   },
   Aric: {
-    idleImage: 'https://skoop-general.s3.amazonaws.com/Aric_idle.png',
-    idleVideo: 'Aric_idle.mp4',
+    idleImage: 'https://skoop-general.s3.amazonaws.com/aric_idle.png',
+    idleVideo: 'aric_idle.mp4',
     voice: 'en-US-GuyNeural'
   }
 };
