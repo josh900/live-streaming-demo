@@ -181,7 +181,7 @@ function initTransitionCanvas() {
   document.querySelector('#video-wrapper').appendChild(transitionCanvas);
 }
 
-function smoothTransition(duration = 100) {
+function smoothTransition(duration = 300) {
   const { idle: idleVideoElement, stream: streamVideoElement } = getVideoElements();
   
   if (!idleVideoElement || !streamVideoElement) {
@@ -750,7 +750,7 @@ async function startStreaming(assistantReply) {
         },
         config: {
           fluent: true,
-          pad_audio: 0,
+          pad_audio: 0.5,
           stitch: true,
         },
         driver_url: 'bank://lively/',
@@ -764,30 +764,27 @@ async function startStreaming(assistantReply) {
     if (playResponseData.status === 'started') {
       logger.debug('Stream started successfully');
       
-      // Pre-buffer the audio
-      const audioResponse = await fetch(playResponseData.audio_url);
-      const audioArrayBuffer = await audioResponse.arrayBuffer();
+      // Prepare the stream video element
+      const { stream: streamVideoElement } = getVideoElements();
+      if (streamVideoElement.srcObject) {
+        streamVideoElement.srcObject.getTracks().forEach(track => track.stop());
+      }
+      streamVideoElement.srcObject = null;
+      streamVideoElement.src = ''; // Clear any previous source
       
-      // Set up AudioContext
-      audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const audioBuffer = await audioContext.decodeAudioData(audioArrayBuffer);
+      // Set up event listeners for the stream video
+      streamVideoElement.oncanplay = () => {
+        logger.debug('Stream video can play, starting transition');
+        smoothTransition(300);
+        streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
+      };
       
-      // Create a buffer source
-      audioBufferSource = audioContext.createBufferSource();
-      audioBufferSource.buffer = audioBuffer;
-      audioBufferSource.connect(audioContext.destination);
-      
-      // Schedule the audio to start playing in 100ms
-      const startTime = audioContext.currentTime + 0.1;
-      audioBufferSource.start(startTime);
-      
-      // Trigger the video transition slightly before the audio starts
-      setTimeout(() => {
-        smoothTransition(100);
-      }, 50);
+      streamVideoElement.onerror = (e) => {
+        logger.error('Error with stream video:', e);
+      };
       
       // Calculate the duration of the audio
-      const audioDuration = audioBuffer.duration * 1000;
+      const audioDuration = playResponseData.audio_duration * 1000;
       
       // Set a timeout to start speaking mode when the avatar finishes
       if (autoSpeakMode) {
