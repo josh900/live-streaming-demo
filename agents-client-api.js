@@ -53,6 +53,8 @@ let currentUtterance = '';
 let interimMessageAdded = false;
 let autoSpeakMode = true;
 let speakTimeout;
+let autoSpeakInProgress = false;
+
 
 
 
@@ -756,13 +758,18 @@ async function startStreaming(assistantReply) {
       const audioDuration = playResponseData.audio_duration * 1000; // Convert to milliseconds
       
       // Set a timeout to start speaking mode when the avatar finishes
-      if (autoSpeakMode) {
+      if (autoSpeakMode && !autoSpeakInProgress) {
         clearTimeout(speakTimeout);
-        speakTimeout = setTimeout(() => {
+        autoSpeakInProgress = true;
+        speakTimeout = setTimeout(async () => {
           if (!isRecording) {
-            startRecording().catch(error => {
+            try {
+              await startRecording();
+            } catch (error) {
               logger.error('Failed to auto-start recording:', error);
-            });
+            } finally {
+              autoSpeakInProgress = false;
+            }
           }
         }, audioDuration - 200); // Start 200ms before the end
       }
@@ -817,13 +824,15 @@ function handleTranscription(data) {
   const transcript = data.channel.alternatives[0].transcript;
   if (data.is_final) {
     logger.info('Final transcript:', transcript);
-    currentUtterance += transcript + ' ';
-    updateTranscript(currentUtterance.trim(), true);
-    chatHistory.push({
-      role: 'user',
-      content: currentUtterance.trim(),
-    });
-    sendChatToGroq();
+    if (transcript.trim()) {  // Only add non-empty transcripts
+      currentUtterance += transcript + ' ';
+      updateTranscript(currentUtterance.trim(), true);
+      chatHistory.push({
+        role: 'user',
+        content: currentUtterance.trim(),
+      });
+      sendChatToGroq();
+    }
     currentUtterance = '';
     interimMessageAdded = false;
   } else {
@@ -962,6 +971,7 @@ async function stopRecording() {
     }
     
     isRecording = false;
+    autoSpeakInProgress = false;
     const startButton = document.getElementById('start-button');
     startButton.textContent = 'Speak';
     
@@ -969,7 +979,13 @@ async function stopRecording() {
   }
 }
 
+
 async function sendChatToGroq() {
+  if (chatHistory.length === 0 || chatHistory[chatHistory.length - 1].content.trim() === '') {
+    logger.debug('No new content to send to Groq. Skipping request.');
+    return;
+  }
+
   logger.debug('Sending chat to Groq...');
   try {
     const startTime = Date.now();
@@ -1066,8 +1082,11 @@ async function sendChatToGroq() {
     const startButton = document.getElementById('start-button');
     startButton.textContent = 'Speak';
     isRecording = false;
+    autoSpeakInProgress = false;
   }
 }
+
+
 
 function toggleAutoSpeak() {
   autoSpeakMode = !autoSpeakMode;
