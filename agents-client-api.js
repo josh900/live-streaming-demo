@@ -81,7 +81,7 @@ avatarSelect.addEventListener('change', handleAvatarChange);
 const maxRetryCount = 3;
 const maxDelaySec = 4;
 
-const context = `
+let context = `
 You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise, not more than 1 sentance unless absolutely needed.
 `;
 
@@ -299,7 +299,7 @@ function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
 }
 
-async function initialize() {
+function initialize() {
   const { idle, stream } = getVideoElements();
   idleVideoElement = idle;
   streamVideoElement = stream;
@@ -331,7 +331,6 @@ async function initialize() {
   replaceContextButton.addEventListener('click', () => updateContext('replace'));
 }
 
-
 function updateContext(action) {
   const contextInput = document.getElementById('context-input');
   const newContext = contextInput.value.trim();
@@ -344,10 +343,34 @@ function updateContext(action) {
     }
     logger.info('Context updated:', context);
     contextInput.value = ''; // Clear the input field
-    showToast('Context updated successfully');
+    showToast('Context saved successfully');
   } else {
     showToast('Please enter some text before updating the context');
   }
+}
+
+function showToast(message) {
+  const toast = document.createElement('div');
+  toast.textContent = message;
+  toast.style.position = 'fixed';
+  toast.style.bottom = '20px';
+  toast.style.left = '50%';
+  toast.style.transform = 'translateX(-50%)';
+  toast.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+  toast.style.color = 'white';
+  toast.style.padding = '10px 20px';
+  toast.style.borderRadius = '5px';
+  toast.style.zIndex = '1000';
+
+  document.body.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity 0.5s ease-out';
+    setTimeout(() => {
+      document.body.removeChild(toast);
+    }, 500);
+  }, 3000);
 }
 
 
