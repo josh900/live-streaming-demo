@@ -113,7 +113,6 @@ async function handleAvatarChange() {
 }
 
 
-
 async function destroyConnection() {
   if (streamId) {
     try {
@@ -760,6 +759,56 @@ async function startStreaming(assistantReply) {
   }
 }
 
+
+
+function startSendingAudioData() {
+  logger.debug('Starting to send audio data...');
+
+  let packetCount = 0;
+  let totalBytesSent = 0;
+
+  audioWorkletNode.port.onmessage = (event) => {
+    const audioData = event.data;
+    
+    if (!(audioData instanceof ArrayBuffer)) {
+      logger.warn('Received non-ArrayBuffer data from AudioWorklet:', typeof audioData);
+      return;
+    }
+
+    if (deepgramConnection && deepgramConnection.getReadyState() === WebSocket.OPEN) {
+      try {
+        deepgramConnection.send(audioData);
+        packetCount++;
+        totalBytesSent += audioData.byteLength;
+        
+        if (packetCount % 100 === 0) {
+          logger.debug(`Sent ${packetCount} audio packets to Deepgram. Total bytes: ${totalBytesSent}`);
+        }
+      } catch (error) {
+        logger.error('Error sending audio data to Deepgram:', error);
+      }
+    } else {
+      logger.warn('Deepgram connection not open, cannot send audio data. ReadyState:', deepgramConnection ? deepgramConnection.getReadyState() : 'undefined');
+    }
+  };
+
+  logger.debug('Audio data sending setup complete');
+}
+
+function handleTranscription(data) {
+  if (!isRecording) return;  // Ignore transcriptions if we're not recording
+  
+  const transcript = data.channel.alternatives[0].transcript;
+  if (data.is_final) {
+    logger.info('Final transcript:', transcript);
+    currentUtterance += transcript + ' ';
+  } else {
+    logger.info('Interim transcript:', transcript);
+  }
+  updateTranscript(currentUtterance + transcript, false);
+}
+
+
 async function startRecording() {
   if (isRecording) {
     logger.warn('Recording is already in progress. Stopping current recording.');
@@ -857,56 +906,6 @@ async function startRecording() {
     throw error;
   }
 }
-
-function startSendingAudioData() {
-  logger.debug('Starting to send audio data...');
-
-  let packetCount = 0;
-  let totalBytesSent = 0;
-
-  audioWorkletNode.port.onmessage = (event) => {
-    const audioData = event.data;
-    
-    if (!(audioData instanceof ArrayBuffer)) {
-      logger.warn('Received non-ArrayBuffer data from AudioWorklet:', typeof audioData);
-      return;
-    }
-
-    if (deepgramConnection && deepgramConnection.getReadyState() === WebSocket.OPEN) {
-      try {
-        deepgramConnection.send(audioData);
-        packetCount++;
-        totalBytesSent += audioData.byteLength;
-        
-        if (packetCount % 100 === 0) {
-          logger.debug(`Sent ${packetCount} audio packets to Deepgram. Total bytes: ${totalBytesSent}`);
-        }
-      } catch (error) {
-        logger.error('Error sending audio data to Deepgram:', error);
-      }
-    } else {
-      logger.warn('Deepgram connection not open, cannot send audio data. ReadyState:', deepgramConnection ? deepgramConnection.getReadyState() : 'undefined');
-    }
-  };
-
-  logger.debug('Audio data sending setup complete');
-}
-
-function handleTranscription(data) {
-  if (!isRecording) return;  // Ignore transcriptions if we're not recording
-  
-  const transcript = data.channel.alternatives[0].transcript;
-  if (data.is_final) {
-    logger.info('Final transcript:', transcript);
-    currentUtterance += transcript + ' ';
-  } else {
-    logger.info('Interim transcript:', transcript);
-  }
-  updateTranscript(currentUtterance + transcript, false);
-}
-
-
-
 
 
 function handleUtteranceEnd(data) {
