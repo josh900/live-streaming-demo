@@ -94,9 +94,25 @@ async function handleAvatarChange() {
     streamVideoElement.srcObject = null;
   }
 
+  // Stop the current recording and reset states
+  await stopRecording();
+  
+  // Reset transcription-related variables
+  currentUtterance = '';
+  interimMessageAdded = false;
+  
+  // Clear the message history
+  const msgHistory = document.getElementById('msgHistory');
+  msgHistory.innerHTML = '';
+  
+  // Reset chat history
+  chatHistory = [];
+
   await destroyConnection();
   await initializeConnection();
 }
+
+
 
 async function destroyConnection() {
   if (streamId) {
@@ -745,10 +761,15 @@ async function startStreaming(assistantReply) {
 }
 
 async function startRecording() {
-  logger.debug('Starting recording process...');
+  logger.info('Starting recording process...');
+  
+  // Reset states
+  currentUtterance = '';
+  interimMessageAdded = false;
+  
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    logger.debug('Microphone stream obtained');
+    logger.info('Microphone stream obtained');
     
     // Set up MediaRecorder for saving audio
     mediaRecorder = new MediaRecorder(stream);
@@ -776,7 +797,7 @@ async function startRecording() {
     audioContext = new AudioContext();
     logger.debug('Audio context created. Sample rate:', audioContext.sampleRate);
     
-    logger.debug('Adding audio worklet module...');
+    logger.info('Adding audio worklet module...');
     await audioContext.audioWorklet.addModule('audio-processor.js');
     logger.debug('Audio worklet module added successfully');
     
@@ -787,7 +808,7 @@ async function startRecording() {
     logger.debug('Audio worklet node created');
     
     source.connect(audioWorkletNode);
-    logger.debug('Media stream source connected to audio worklet node');
+    logger.indebugfo('Media stream source connected to audio worklet node');
 
     // Set up Deepgram connection
     deepgramConnection = deepgramClient.listen.live({
@@ -832,20 +853,24 @@ async function startRecording() {
     });
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
-      logger.debug('Deepgram error:', err);
+      logger.error('Deepgram error:', err);
     });
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Warning, (warning) => {
       logger.warn('Deepgram warning:', warning);
     });
 
-    // Reset flags and variables
-    currentUtterance = '';
-    interimMessageAdded = false;
+    // Set recording state
+    isRecording = true;
+    const startButton = document.getElementById('start-button');
+    startButton.textContent = 'Stop';
 
-    logger.info('Recording and transcription started successfully');
+    logger.debug('Recording and transcription started successfully');
   } catch (error) {
     logger.error('Error starting recording:', error);
+    isRecording = false;
+    const startButton = document.getElementById('start-button');
+    startButton.textContent = 'Speak';
     throw error;
   }
 }
@@ -885,12 +910,14 @@ function startSendingAudioData() {
 }
 
 function handleTranscription(data) {
+  if (!isRecording) return;  // Ignore transcriptions if we're not recording
+  
   const transcript = data.channel.alternatives[0].transcript;
   if (data.is_final) {
-    logger.debug('Final transcript:', transcript);
+    logger.info('Final transcript:', transcript);
     currentUtterance += transcript + ' ';
   } else {
-    logger.debug('Interim transcript:', transcript);
+    logger.info('Interim transcript:', transcript);
   }
   updateTranscript(currentUtterance + transcript, false);
 }
@@ -900,7 +927,9 @@ function handleTranscription(data) {
 
 
 function handleUtteranceEnd(data) {
-  logger.debug('Utterance end detected:', data);
+  if (!isRecording) return;  // Ignore utterance end if we're not recording
+  
+  logger.info('Utterance end detected:', data);
   if (currentUtterance.trim()) {
     updateTranscript(currentUtterance.trim(), true);
     chatHistory.push({
@@ -914,23 +943,31 @@ function handleUtteranceEnd(data) {
 }
 
 
-function stopRecording() {
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    mediaRecorder.stop();
-    logger.debug('MediaRecorder stopped');
+async function stopRecording() {
+  if (isRecording) {
+    logger.info('Stopping recording...');
+    
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+      logger.info('MediaRecorder stopped');
+    }
+    
+    if (audioContext) {
+      await audioContext.close();
+      logger.info('AudioContext closed');
+    }
+    
+    if (deepgramConnection) {
+      deepgramConnection.finish();
+      logger.info('Deepgram connection finished');
+    }
+    
+    isRecording = false;
+    const startButton = document.getElementById('start-button');
+    startButton.textContent = 'Speak';
+    
+    logger.info('Recording and transcription stopped');
   }
-  
-  if (audioContext) {
-    audioContext.close();
-    logger.debug('AudioContext closed');
-  }
-  
-  if (deepgramConnection) {
-    deepgramConnection.finish();
-    logger.debug('Deepgram connection finished');
-  }
-  
-  logger.debug('Recording and transcription stopped');
 }
 
 async function sendChatToGroq() {
@@ -1106,21 +1143,19 @@ destroyButton.onclick = async () => {
 const startButton = document.getElementById('start-button');
 
 startButton.onclick = async () => {
-  logger.debug('Start button clicked. Current state:', isRecording ? 'Recording' : 'Not recording');
+  logger.info('Start button clicked. Current state:', isRecording ? 'Recording' : 'Not recording');
   if (!isRecording) {
-    startButton.textContent = 'Stop';
-    logger.debug('Starting recording...');
-    await startRecording();
-    isRecording = true;
-    logger.debug('Recording started');
+    try {
+      await startRecording();
+    } catch (error) {
+      logger.error('Failed to start recording:', error);
+      showErrorMessage('Failed to start recording. Please try again.');
+    }
   } else {
-    startButton.textContent = 'Speak';
-    logger.debug('Stopping recording...');
-    stopRecording();
-    isRecording = false;
-    logger.debug('Recording stopped');
+    await stopRecording();
   }
 };
+
 
 document.getElementById('save-context').addEventListener('click', () => {
   const contextInput = document.getElementById('context-input');
