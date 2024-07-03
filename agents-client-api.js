@@ -1136,19 +1136,6 @@ async function stopRecording() {
   clearTimeout(inactivityTimeout);
 }
 
-async function stopRecording() {
-  if (mediaRecorder && mediaRecorder.state === 'recording') {
-    mediaRecorder.stop();
-    const closeMsg = JSON.stringify({ type: "CloseStream" });
-    deepgramSocket.send(closeMsg);
-    deepgramSocket.close();
-    mediaRecorder = null;
-  }
-
-  clearInterval(transcriptionTimer);
-  clearTimeout(inactivityTimeout);
-}
-
 async function sendChatToGroq() {
   try {
     const startTime = Date.now();
