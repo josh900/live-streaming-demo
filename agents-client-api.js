@@ -348,13 +348,13 @@ async function createPeerConnection(offer, iceServers) {
   }
 
   await peerConnection.setRemoteDescription(offer);
-  logger.info('Set remote SDP');
+  logger.debug('Set remote SDP');
 
   const sessionClientAnswer = await peerConnection.createAnswer();
-  logger.info('Created local SDP');
+  logger.debug('Created local SDP');
 
   await peerConnection.setLocalDescription(sessionClientAnswer);
-  logger.info('Set local SDP');
+  logger.debug('Set local SDP');
 
   return sessionClientAnswer;
 }
@@ -365,7 +365,7 @@ function onIceGatheringStateChange() {
     iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
     iceGatheringStatusLabel.className = 'iceGatheringState-' + peerConnection.iceGatheringState;
   }
-  logger.info('ICE gathering state changed:', peerConnection.iceGatheringState);
+  logger.debug('ICE gathering state changed:', peerConnection.iceGatheringState);
 }
 
 function onIceCandidate(event) {
@@ -397,7 +397,7 @@ function onIceConnectionStateChange() {
     iceStatusLabel.innerText = peerConnection.iceConnectionState;
     iceStatusLabel.className = 'iceConnectionState-' + peerConnection.iceConnectionState;
   }
-  logger.info('ICE connection state changed:', peerConnection.iceConnectionState);
+  logger.debug('ICE connection state changed:', peerConnection.iceConnectionState);
 
   if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'closed') {
     stopAllStreams();
@@ -412,7 +412,7 @@ function onConnectionStateChange() {
     peerStatusLabel.innerText = peerConnection.connectionState;
     peerStatusLabel.className = 'peerConnectionState-' + peerConnection.connectionState;
   }
-  logger.info('Peer connection state changed:', peerConnection.connectionState);
+  logger.debug('Peer connection state changed:', peerConnection.connectionState);
 }
 
 function onSignalingStateChange() {
@@ -421,7 +421,7 @@ function onSignalingStateChange() {
     signalingStatusLabel.innerText = peerConnection.signalingState;
     signalingStatusLabel.className = 'signalingState-' + peerConnection.signalingState;
   }
-  logger.info('Signaling state changed:', peerConnection.signalingState);
+  logger.debug('Signaling state changed:', peerConnection.signalingState);
 }
 
 function onVideoStatusChange(videoIsPlaying, stream) {
@@ -445,7 +445,7 @@ function onVideoStatusChange(videoIsPlaying, stream) {
     streamingStatusLabel.innerText = status;
     streamingStatusLabel.className = 'streamingState-' + status;
   }
-  logger.info('Video status changed:', status);
+  logger.debug('Video status changed:', status);
 }
 
 function setStreamVideoElement(stream) {
@@ -485,7 +485,7 @@ function onTrack(event) {
 
             if (videoStatusChanged) {
               videoIsPlaying = report.bytesReceived > lastBytesReceived;
-              logger.info('Video status changed:', videoIsPlaying);
+              logger.debug('Video status changed:', videoIsPlaying);
               onVideoStatusChange(videoIsPlaying, event.streams[0]);
             }
             lastBytesReceived = report.bytesReceived;
@@ -526,7 +526,7 @@ function setVideoElement(stream) {
 
   if (streamVideoElement.paused) {
     streamVideoElement.play().then(() => {
-      logger.info('Video playback started');
+      logger.debug('Video playback started');
     }).catch(e => logger.error('Error playing video:', e));
   }
 }
@@ -548,7 +548,7 @@ function playIdleVideo() {
 
 function stopAllStreams() {
   if (streamVideoElement && streamVideoElement.srcObject) {
-    logger.info('Stopping video streams');
+    logger.debug('Stopping video streams');
     streamVideoElement.srcObject.getTracks().forEach((track) => track.stop());
     streamVideoElement.srcObject = null;
     
@@ -558,7 +558,7 @@ function stopAllStreams() {
 
 function closePC(pc = peerConnection) {
   if (!pc) return;
-  logger.info('Stopping peer connection');
+  logger.debug('Stopping peer connection');
   pc.close();
   pc.removeEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
   pc.removeEventListener('icecandidate', onIceCandidate, true);
@@ -573,7 +573,7 @@ function closePC(pc = peerConnection) {
   if (labels.signaling) labels.signaling.innerText = '';
   if (labels.ice) labels.ice.innerText = '';
   if (labels.peer) labels.peer.innerText = '';
-  logger.info('Stopped peer connection');
+  logger.debug('Stopped peer connection');
   if (pc === peerConnection) {
     peerConnection = null;
   }
@@ -702,7 +702,7 @@ function stopKeepAlive() {
 
 async function startStreaming(assistantReply) {
   try {
-    logger.info('Starting streaming with reply:', assistantReply);
+    logger.debug('Starting streaming with reply:', assistantReply);
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'POST',
       headers: {
@@ -729,10 +729,10 @@ async function startStreaming(assistantReply) {
     });
 
     const playResponseData = await playResponse.json();
-    logger.info('Streaming response:', playResponseData);
+    logger.debug('Streaming response:', playResponseData);
 
     if (playResponseData.status === 'started') {
-      logger.info('Stream started successfully');
+      logger.debug('Stream started successfully');
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
     }
@@ -745,10 +745,10 @@ async function startStreaming(assistantReply) {
 }
 
 async function startRecording() {
-  logger.info('Starting recording process...');
+  logger.debug('Starting recording process...');
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    logger.info('Microphone stream obtained');
+    logger.debug('Microphone stream obtained');
     
     // Set up MediaRecorder for saving audio
     mediaRecorder = new MediaRecorder(stream);
@@ -770,24 +770,24 @@ async function startRecording() {
     };
 
     mediaRecorder.start();
-    logger.info('MediaRecorder started');
+    logger.debug('MediaRecorder started');
 
     // Set up AudioContext and AudioWorklet for Deepgram
     audioContext = new AudioContext();
-    logger.info('Audio context created. Sample rate:', audioContext.sampleRate);
+    logger.debug('Audio context created. Sample rate:', audioContext.sampleRate);
     
-    logger.info('Adding audio worklet module...');
+    logger.debug('Adding audio worklet module...');
     await audioContext.audioWorklet.addModule('audio-processor.js');
-    logger.info('Audio worklet module added successfully');
+    logger.debug('Audio worklet module added successfully');
     
     const source = audioContext.createMediaStreamSource(stream);
-    logger.info('Media stream source created');
+    logger.debug('Media stream source created');
     
     audioWorkletNode = new AudioWorkletNode(audioContext, 'audio-processor');
-    logger.info('Audio worklet node created');
+    logger.debug('Audio worklet node created');
     
     source.connect(audioWorkletNode);
-    logger.info('Media stream source connected to audio worklet node');
+    logger.debug('Media stream source connected to audio worklet node');
 
     // Set up Deepgram connection
     deepgramConnection = deepgramClient.listen.live({
@@ -801,7 +801,7 @@ async function startRecording() {
       sample_rate: audioContext.sampleRate,
     });
 
-    logger.info('Deepgram connection created with options:', {
+    logger.debug('Deepgram connection created with options:', {
       model: "general",
       language: "en-US",
       smart_format: true,
@@ -813,26 +813,26 @@ async function startRecording() {
     });
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
-      logger.info('Deepgram WebSocket Connection opened');
+      logger.debug('Deepgram WebSocket Connection opened');
       startSendingAudioData();
     });
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Close, () => {
-      logger.info('Deepgram WebSocket connection closed');
+      logger.debug('Deepgram WebSocket connection closed');
     });
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
-      logger.info('Received transcription:', JSON.stringify(data));
+      logger.debug('Received transcription:', JSON.stringify(data));
       handleTranscription(data);
     });
 
     deepgramConnection.addListener(LiveTranscriptionEvents.UtteranceEnd, (data) => {
-      logger.info('Utterance end event received:', data);
+      logger.debug('Utterance end event received:', data);
       handleUtteranceEnd(data);
     });
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
-      logger.error('Deepgram error:', err);
+      logger.debug('Deepgram error:', err);
     });
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Warning, (warning) => {
@@ -851,7 +851,7 @@ async function startRecording() {
 }
 
 function startSendingAudioData() {
-  logger.info('Starting to send audio data...');
+  logger.debug('Starting to send audio data...');
 
   let packetCount = 0;
   let totalBytesSent = 0;
@@ -871,7 +871,7 @@ function startSendingAudioData() {
         totalBytesSent += audioData.byteLength;
         
         if (packetCount % 100 === 0) {
-          logger.info(`Sent ${packetCount} audio packets to Deepgram. Total bytes: ${totalBytesSent}`);
+          logger.debug(`Sent ${packetCount} audio packets to Deepgram. Total bytes: ${totalBytesSent}`);
         }
       } catch (error) {
         logger.error('Error sending audio data to Deepgram:', error);
@@ -881,16 +881,16 @@ function startSendingAudioData() {
     }
   };
 
-  logger.info('Audio data sending setup complete');
+  logger.debug('Audio data sending setup complete');
 }
 
 function handleTranscription(data) {
   const transcript = data.channel.alternatives[0].transcript;
   if (data.is_final) {
-    logger.info('Final transcript:', transcript);
+    logger.debug('Final transcript:', transcript);
     currentUtterance += transcript + ' ';
   } else {
-    logger.info('Interim transcript:', transcript);
+    logger.debug('Interim transcript:', transcript);
   }
   updateTranscript(currentUtterance + transcript, false);
 }
@@ -900,7 +900,7 @@ function handleTranscription(data) {
 
 
 function handleUtteranceEnd(data) {
-  logger.info('Utterance end detected:', data);
+  logger.debug('Utterance end detected:', data);
   if (currentUtterance.trim()) {
     updateTranscript(currentUtterance.trim(), true);
     chatHistory.push({
@@ -917,24 +917,24 @@ function handleUtteranceEnd(data) {
 function stopRecording() {
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
     mediaRecorder.stop();
-    logger.info('MediaRecorder stopped');
+    logger.debug('MediaRecorder stopped');
   }
   
   if (audioContext) {
     audioContext.close();
-    logger.info('AudioContext closed');
+    logger.debug('AudioContext closed');
   }
   
   if (deepgramConnection) {
     deepgramConnection.finish();
-    logger.info('Deepgram connection finished');
+    logger.debug('Deepgram connection finished');
   }
   
-  logger.info('Recording and transcription stopped');
+  logger.debug('Recording and transcription stopped');
 }
 
 async function sendChatToGroq() {
-  logger.info('Sending chat to Groq...');
+  logger.debug('Sending chat to Groq...');
   try {
     const startTime = Date.now();
     const requestBody = {
@@ -947,7 +947,7 @@ async function sendChatToGroq() {
       ],
       model: 'mixtral-8x7b-32768',
     };
-    logger.info('Request body:', JSON.stringify(requestBody));
+    logger.debug('Request body:', JSON.stringify(requestBody));
 
     const response = await fetch('/chat', {
       method: 'POST',
@@ -957,7 +957,7 @@ async function sendChatToGroq() {
       body: JSON.stringify(requestBody),
     });
 
-    logger.info('Groq response status:', response.status);
+    logger.debug('Groq response status:', response.status);
 
     if (!response.ok) {
       throw new Error(`HTTP error ${response.status}`);
@@ -1009,19 +1009,19 @@ async function sendChatToGroq() {
 
     const endTime = Date.now();
     const processingTime = endTime - startTime;
-    logger.info(`Groq processing completed in ${processingTime}ms`);
+    logger.debug(`Groq processing completed in ${processingTime}ms`);
 
     chatHistory.push({
       role: 'assistant',
       content: assistantReply,
     });
 
-    logger.info('Assistant reply:', assistantReply);
+    logger.debug('Assistant reply:', assistantReply);
 
     clearTimeout(inactivityTimeout);
     inactivityTimeout = setTimeout(() => {
       if (isRecording) {
-        logger.info('Inactivity timeout reached. Stopping recording.');
+        logger.debug('Inactivity timeout reached. Stopping recording.');
         startButton.click();
       }
     }, 45000); // 45 seconds
@@ -1049,7 +1049,7 @@ async function reinitializeConnection() {
   }
 
   isInitializing = true;
-  logger.info('Reinitializing connection...');
+  logger.debug('Reinitializing connection...');
 
   try {
     stopAllStreams();
@@ -1065,7 +1065,7 @@ async function reinitializeConnection() {
     msgHistory.innerHTML = msgHistory.innerHTML.slice(0, msgHistory.innerHTML.lastIndexOf('<span style=\'opacity:0.5\'><u>User:</u>'));
 
     if (peerConnection && peerConnection.connectionState === 'connected') {
-      logger.info('Existing connection is still active. Reusing connection.');
+      logger.debug('Existing connection is still active. Reusing connection.');
       await startRecording();
     } else {
       await initializeConnection();
@@ -1094,7 +1094,7 @@ destroyButton.onclick = async () => {
       body: JSON.stringify({ session_id: sessionId }),
     });
 
-    logger.info('Stream destroyed successfully');
+    logger.debug('Stream destroyed successfully');
   } catch (error) {
     logger.error('Error destroying stream:', error);
   } finally {
@@ -1106,19 +1106,19 @@ destroyButton.onclick = async () => {
 const startButton = document.getElementById('start-button');
 
 startButton.onclick = async () => {
-  logger.info('Start button clicked. Current state:', isRecording ? 'Recording' : 'Not recording');
+  logger.debug('Start button clicked. Current state:', isRecording ? 'Recording' : 'Not recording');
   if (!isRecording) {
     startButton.textContent = 'Stop';
-    logger.info('Starting recording...');
+    logger.debug('Starting recording...');
     await startRecording();
     isRecording = true;
-    logger.info('Recording started');
+    logger.debug('Recording started');
   } else {
     startButton.textContent = 'Speak';
-    logger.info('Stopping recording...');
+    logger.debug('Stopping recording...');
     stopRecording();
     isRecording = false;
-    logger.info('Recording stopped');
+    logger.debug('Recording stopped');
   }
 };
 
