@@ -45,6 +45,8 @@ let streamVideoElement;
 let idleVideoElement;
 let deepgramConnection;
 let isRecording = false;
+let mediaStreamSource;
+let processor;
 
 
 
@@ -1070,7 +1072,7 @@ async function startRecording() {
 
     deepgramConnection.addListener('open', () => {
       logger.info('Deepgram WebSocket Connection opened');
-      startAudioCapture(deepgramConnection);
+      startAudioCapture();
     });
 
     let currentTranscript = '';
@@ -1106,7 +1108,51 @@ async function startRecording() {
   }
 }
 
-// The rest of your functions (startAudioCapture, updateInterimTranscript, etc.) remain the same
+function startAudioCapture() {
+  navigator.mediaDevices.getUserMedia({ audio: true })
+    .then(stream => {
+      audioContext = new AudioContext();
+      mediaStreamSource = audioContext.createMediaStreamSource(stream);
+      processor = audioContext.createScriptProcessor(1024, 1, 1);
+
+      mediaStreamSource.connect(processor);
+      processor.connect(audioContext.destination);
+
+      processor.onaudioprocess = (e) => {
+        const audioData = e.inputBuffer.getChannelData(0);
+        if (deepgramConnection.getReadyState() === WebSocket.OPEN) {
+          deepgramConnection.send(audioData);
+        }
+      };
+    })
+    .catch(err => {
+      logger.error('Error accessing microphone:', err);
+    });
+}
+
+function updateInterimTranscript(transcript) {
+  document.getElementById('msgHistory').innerHTML = document.getElementById('msgHistory').innerHTML.replace(
+    /<span style='opacity:0.5'><u>User \(interim\):<\/u>.*<\/span><br>/,
+    `<span style='opacity:0.5'><u>User (interim):</u> ${transcript}</span><br>`
+  );
+}
+
+function finalizeTranscript(transcript) {
+  document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User:</u> ${transcript}</span><br>`;
+  chatHistory.push({
+    role: 'user',
+    content: transcript,
+  });
+}
+
+function startInactivityTimeout() {
+  inactivityTimeout = setTimeout(() => {
+    if (isRecording) {
+      logger.info('Inactivity timeout reached. Stopping recording.');
+      startButton.click();
+    }
+  }, 45000); // 45 seconds
+}
 
 async function stopRecording() {
   if (deepgramConnection) {
@@ -1114,9 +1160,23 @@ async function stopRecording() {
     deepgramConnection = null;
   }
 
+  if (audioContext) {
+    await audioContext.close();
+    audioContext = null;
+  }
+
+  if (mediaStreamSource) {
+    mediaStreamSource.disconnect();
+    mediaStreamSource = null;
+  }
+
+  if (processor) {
+    processor.disconnect();
+    processor = null;
+  }
+
   clearTimeout(inactivityTimeout);
 }
-
 
 async function sendChatToGroq() {
   try {
