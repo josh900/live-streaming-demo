@@ -1100,7 +1100,7 @@ async function startRecording() {
     await startAudioCapture();
     logger.info('Audio capture started successfully');
 
-    javascriptCopydeepgramConnection = deepgramClient.listen.live({
+    deepgramConnection = deepgramClient.listen.live({
       model: "nova-2",
       language: "en-US",
       smart_format: true,
