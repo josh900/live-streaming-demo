@@ -135,7 +135,7 @@ h4 {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-
+  margin-top: 10px;
 }
 
 #auto-speak-toggle {
@@ -156,8 +156,10 @@ h4 {
 
 #video-wrapper {
   position: relative;
-  width: 400px;
-  height: 400px;
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+  aspect-ratio: 1 / 1;
   overflow: hidden;
   border-radius: 50%;
 }
@@ -187,7 +189,6 @@ select {
   outline: none;
   border-color: #7459fe;
 }
-
 
 #idle-video-element,
 #stream-video-element {
@@ -309,6 +310,15 @@ select {
   }
 
   #video-wrapper {
+    max-width: 300px; /* Adjust this value as needed */
     margin-bottom: 20px;
+  }
+}
+
+
+
+@media (max-width: 480px) {
+  #video-wrapper {
+    max-width: 250px; /* Further reduce size for very small screens */
   }
 }
