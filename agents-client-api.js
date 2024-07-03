@@ -1119,7 +1119,6 @@ async function startRecording() {
   }
 }
 
-
 function updateInterimTranscript(transcript) {
   document.getElementById('msgHistory').innerHTML = document.getElementById('msgHistory').innerHTML.replace(
     /<span style='opacity:0.5'><u>User \(interim\):<\/u>.*<\/span><br>/,
@@ -1213,7 +1212,6 @@ function startSendingAudioData() {
 
   logger.info('Audio data sending setup complete');
 }
-
 
 
 async function stopRecording() {
