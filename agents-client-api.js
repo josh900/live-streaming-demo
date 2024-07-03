@@ -180,31 +180,36 @@ function initTransitionCanvas() {
   document.querySelector('#video-wrapper').appendChild(transitionCanvas);
 }
 
-function smoothTransition(duration = 500) {
-  if (!transitionCanvas) {
-    initTransitionCanvas();
+function smoothTransition(duration = 300) {
+  const { idle: idleVideoElement, stream: streamVideoElement } = getVideoElements();
+  
+  if (!idleVideoElement || !streamVideoElement) {
+    logger.warn('Video elements not found for transition');
+    return;
   }
 
-  const startTime = performance.now();
+  // Ensure both videos are visible and positioned correctly
+  idleVideoElement.style.opacity = '1';
+  streamVideoElement.style.opacity = '0';
   
-  function animate() {
-    const now = performance.now();
-    const progress = Math.min((now - startTime) / duration, 1);
-    
-    const blendedFrame = blendFrames(idleVideoElement, streamVideoElement, progress);
-    transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
-    transitionCtx.drawImage(blendedFrame, 0, 0);
-    
-    if (progress < 1) {
-      requestAnimationFrame(animate);
-    } else {
-      transitionCanvas.style.display = 'none';
-    }
-  }
+  // Force a reflow to ensure the initial state is applied
+  void idleVideoElement.offsetWidth;
   
-  transitionCanvas.style.display = 'block';
-  requestAnimationFrame(animate);
+  // Apply transition to both elements
+  idleVideoElement.style.transition = `opacity ${duration}ms ease-in-out`;
+  streamVideoElement.style.transition = `opacity ${duration}ms ease-in-out`;
+  
+  // Trigger the transition
+  idleVideoElement.style.opacity = '0';
+  streamVideoElement.style.opacity = '1';
+  
+  // Remove transitions after they complete
+  setTimeout(() => {
+    idleVideoElement.style.transition = '';
+    streamVideoElement.style.transition = '';
+  }, duration);
 }
+
 
 function getVideoElements() {
   const idle = document.getElementById('idle-video-element');
@@ -475,8 +480,12 @@ function setStreamVideoElement(stream) {
     return;
   }
 
+  streamVideoElement.srcObject = stream;
+  streamVideoElement.play().catch(e => logger.error('Error playing video:', e));
   smoothTransition();
 }
+
+
 
 function onTrack(event) {
   logger.debug('onTrack event:', event);
