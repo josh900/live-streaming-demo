@@ -808,7 +808,7 @@ async function startRecording() {
     logger.debug('Audio worklet node created');
     
     source.connect(audioWorkletNode);
-    logger.indebugfo('Media stream source connected to audio worklet node');
+    logger.debug('Media stream source connected to audio worklet node');
 
     // Set up Deepgram connection
     deepgramConnection = deepgramClient.listen.live({
