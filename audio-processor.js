@@ -14,19 +14,3 @@ class AudioProcessor extends AudioWorkletProcessor {
 }
 
 registerProcessor('audio-processor', AudioProcessor);
-
-
-
-class DeepgramProcessor extends AudioWorkletProcessor {
-  process(inputs, outputs) {
-    const input = inputs[0];
-    if (input.length > 0) {
-      const audioData = input[0];
-      const int16Array = Int16Array.from(audioData.map(n => n * 32767));
-      this.port.postMessage(int16Array.buffer, [int16Array.buffer]);
-    }
-    return true;
-  }
-}
-
-registerProcessor('deepgram-processor', DeepgramProcessor);
