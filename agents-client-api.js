@@ -677,7 +677,6 @@ async function initialize() {
   // Add event listeners for context buttons
   const replaceContextButton = document.getElementById('replace-context-button');
 
-  appendContextButton.addEventListener('click', () => updateContext('append'));
   replaceContextButton.addEventListener('click', () => updateContext('replace'));
 
   currentAvatar = avatarSelect.value;
