@@ -104,7 +104,12 @@ async function handleAvatarChange() {
   const idleVideoElement = document.getElementById('idle-video-element');
   if (idleVideoElement) {
     idleVideoElement.src = avatars[currentAvatar].idleVideo;
-    idleVideoElement.load();
+    try {
+      await idleVideoElement.load();
+      logger.info(`Idle video loaded for ${currentAvatar}`);
+    } catch (error) {
+      logger.error(`Error loading idle video for ${currentAvatar}:`, error);
+    }
   }
 
   const streamVideoElement = document.getElementById('stream-video-element');
@@ -329,6 +334,7 @@ async function initialize() {
     option.textContent = key.charAt(0).toUpperCase() + key.slice(1); // Capitalize first letter
     avatarSelect.appendChild(option);
   }
+  currentAvatar = avatarSelect.value;
 
   playIdleVideo();
   showLoadingSymbol();
@@ -662,10 +668,20 @@ function playIdleVideo() {
   idleVideoElement.src = avatars[currentAvatar].idleVideo;
   idleVideoElement.loop = true;
 
+  idleVideoElement.onloadeddata = () => {
+    logger.info(`Idle video loaded successfully for ${currentAvatar}`);
+  };
+
+  idleVideoElement.onerror = (e) => {
+    logger.error(`Error loading idle video for ${currentAvatar}:`, e);
+  };
+
   setTimeout(() => {
     idleVideoElement.classList.remove("animated");
   }, 300);
 }
+
+
 
 function stopAllStreams() {
   if (streamVideoElement && streamVideoElement.srcObject) {
