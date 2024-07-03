@@ -648,7 +648,16 @@ async function initialize() {
     option.textContent = key.charAt(0).toUpperCase() + key.slice(1); // Capitalize first letter
     avatarSelect.appendChild(option);
   }
-  currentAvatar = avatarSelect.value;
+
+  const contextInput = document.getElementById('context-input');
+  contextInput.value = context.trim();
+
+  contextInput.addEventListener('input', () => {
+    // Only update the context when user is actively typing
+    if (!contextInput.value.includes('Original Context:')) {
+      context = contextInput.value.trim();
+    }
+  });
 
   playIdleVideo();
   showLoadingSymbol();
@@ -666,33 +675,48 @@ async function initialize() {
   // Add event listeners for context buttons
   const appendContextButton = document.getElementById('append-context-button');
   const replaceContextButton = document.getElementById('replace-context-button');
-  const contextInput = document.getElementById('context-input');
-
-  contextInput.value = context.trim();
-
 
   appendContextButton.addEventListener('click', () => updateContext('append'));
   replaceContextButton.addEventListener('click', () => updateContext('replace'));
+
+  currentAvatar = avatarSelect.value;
+  logger.info('Initial avatar:', currentAvatar);
 }
-
-
 
 function updateContext(action) {
   const contextInput = document.getElementById('context-input');
   const newContext = contextInput.value.trim();
 
   if (newContext) {
+    const originalContext = context;
     if (action === 'append') {
       context += '\n' + newContext;
     } else if (action === 'replace') {
       context = newContext;
     }
-    logger.debug('Context updated:', context);
-    contextInput.value = ''; // Clear the input field
+    logger.info('Context updated:', context);
     showToast('Context saved successfully');
+
+    // Display both contexts temporarily
+    displayBothContexts(originalContext, context);
   } else {
     showToast('Please enter some text before updating the context');
   }
+}
+
+function resetContextInput() {
+  const contextInput = document.getElementById('context-input');
+  contextInput.value = context.trim();
+}
+
+function displayBothContexts(original, updated) {
+  const contextInput = document.getElementById('context-input');
+  contextInput.value = `Original Context:\n${original}\n\nNew Context:\n${updated}`;
+  
+  // After 5 seconds, reset to just the new context
+  setTimeout(() => {
+    contextInput.value = updated;
+  }, 5000);
 }
 
 function showToast(message) {
@@ -1462,11 +1486,11 @@ async function sendChatToGroq() {
       messages: [
         {
           role: 'system',
-          content: currentContext || context,
+          content: currentContext || context, // Use the textarea content, fallback to default if empty
         },
         ...chatHistory,
       ],
-      model: 'llama3-8b-8192',
+      model: 'mixtral-8x7b-32768',
     };
     logger.debug('Request body:', JSON.stringify(requestBody));
 
