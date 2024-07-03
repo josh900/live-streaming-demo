@@ -675,7 +675,6 @@ async function initialize() {
   }
 
   // Add event listeners for context buttons
-  const appendContextButton = document.getElementById('append-context-button');
   const replaceContextButton = document.getElementById('replace-context-button');
 
   appendContextButton.addEventListener('click', () => updateContext('append'));

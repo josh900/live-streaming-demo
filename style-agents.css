@@ -227,7 +227,6 @@ select {
   resize: vertical;
 }
 
-#append-context-button,
 #replace-context-button {
   margin-right: 10px;
 }
