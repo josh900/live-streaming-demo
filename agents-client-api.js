@@ -74,6 +74,16 @@ const avatars = {
   JoshC: {
     idleImage: 'https://skoop-general.s3.amazonaws.com/joshc_idle.png',
     idleVideo: 'joshc_idle.mp4',
+    voice: 'en-US-AvaNeural'
+  },
+  Ava: {
+    idleImage: 'https://skoop-general.s3.amazonaws.com/ava_idle.png',
+    idleVideo: 'ava_idle.mp4',
+    voice: 'en-US-AvaNeural'
+  },
+  JoshC: {
+    idleImage: 'https://skoop-general.s3.amazonaws.com/joshc_idle.png',
+    idleVideo: 'joshc_idle.mp4',
     voice: 'en-US-GuyNeural'
   },
   Aric: {
