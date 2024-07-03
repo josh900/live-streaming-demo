@@ -49,6 +49,8 @@ let microphoneStream;
 let audioChunks = [];
 let deepgramSource;
 let additionalContext = '';
+let currentUtterance = '';
+
 
 const avatars = {
   brad: {
@@ -236,8 +238,19 @@ function initializeWebSocket() {
   };
 }
 
-function updateTranscription(text) {
-  document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User (interim):</u> ${text}</span><br>`;
+function updateTranscript(text, isFinal) {
+  const msgHistory = document.getElementById('msgHistory');
+  if (isFinal) {
+    msgHistory.innerHTML += `<span><u>User:</u> ${text}</span><br>`;
+    logger.info('Final transcript added to chat history:', text);
+  } else {
+    const interimSpan = msgHistory.querySelector('span[data-interim]');
+    if (interimSpan) {
+      interimSpan.innerHTML = `<u>User (interim):</u> ${text}`;
+    } else {
+      msgHistory.innerHTML += `<span data-interim style='opacity:0.5'><u>User (interim):</u> ${text}</span><br>`;
+    }
+  }
 }
 
 function updateAssistantReply(text) {
@@ -770,7 +783,7 @@ async function startRecording() {
       encoding: "linear16",
       sample_rate: audioContext.sampleRate,
     });
-
+    
     logger.info('Deepgram connection created with options:', {
       model: "general",
       language: "en-US",
@@ -802,6 +815,11 @@ async function startRecording() {
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Warning, (warning) => {
       logger.warn('Deepgram warning:', warning);
+    });
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.UtteranceEnd, (data) => {
+      logger.info('Utterance end event received:', data);
+      handleUtteranceEnd(data);
     });
 
     logger.info('Recording and transcription started successfully');
@@ -848,27 +866,31 @@ function handleTranscription(data) {
   const transcript = data.channel.alternatives[0].transcript;
   if (data.is_final) {
     logger.info('Final transcript:', transcript);
-    document.getElementById('msgHistory').innerHTML += `<span><u>User:</u> ${transcript}</span><br>`;
-    chatHistory.push({
-      role: 'user',
-      content: transcript,
-    });
-    sendChatToGroq();
+    currentUtterance += transcript + ' ';
+    updateTranscript(currentUtterance, false);
   } else {
     logger.info('Interim transcript:', transcript);
-    updateInterimTranscript(transcript);
+    updateInterimTranscript(currentUtterance + transcript);
   }
 }
 
-function updateInterimTranscript(text) {
-  const msgHistory = document.getElementById('msgHistory');
-  const interimSpan = msgHistory.querySelector('span[data-interim]');
-  
-  if (interimSpan) {
-    interimSpan.textContent = `User (interim): ${text}`;
-  } else {
-    msgHistory.innerHTML += `<span data-interim style='opacity:0.5'><u>User (interim):</u> ${text}</span><br>`;
+function handleUtteranceEnd(data) {
+  logger.info('Utterance end detected:', data);
+  if (currentUtterance.trim()) {
+    updateTranscript(currentUtterance, true);
+    chatHistory.push({
+      role: 'user',
+      content: currentUtterance.trim(),
+    });
+    sendChatToGroq();
+    currentUtterance = '';
   }
+}
+
+
+
+function updateInterimTranscript(text) {
+  updateTranscript(text, false);
 }
 
 function stopRecording() {
