@@ -299,7 +299,7 @@ function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
 }
 
-function initialize() {
+async function initialize() {
   const { idle, stream } = getVideoElements();
   idleVideoElement = idle;
   streamVideoElement = stream;
@@ -375,10 +375,19 @@ function showToast(message) {
 
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initialize);
+  document.addEventListener('DOMContentLoaded', () => {
+    initialize().catch(error => {
+      logger.error('Error during initialization:', error);
+      showErrorMessage('Failed to initialize. Please refresh the page and try again.');
+    });
+  });
 } else {
-  initialize();
+  initialize().catch(error => {
+    logger.error('Error during initialization:', error);
+    showErrorMessage('Failed to initialize. Please refresh the page and try again.');
+  });
 }
+
 
 function showLoadingSymbol() {
   const loadingSymbol = document.createElement('div');
