@@ -232,22 +232,25 @@ h4 {
   }
 }
 
+/*
 #video-wrapper::after {
   content: '';
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  height: 100px; /* Adjust this value to control the fade height */
+  height: 100px;
   background: linear-gradient(to bottom, 
                 rgba(255,255,255,0) 0%,
-                rgba(255,255,255,0.7) 50%,
-                rgba(255,255,255,1) 100%);
+                rgba(255,255,255,0.7) 70%,
+                rgba(255,255,255,1) 90%);
   z-index: 3;
-  pointer-events: none; /* Allows clicks to pass through to the video */
+  pointer-events: none; 
   border-bottom-left-radius: 50%;
   border-bottom-right-radius: 50%;
 }
+
+*/
 
 
 

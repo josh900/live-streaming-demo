@@ -48,8 +48,13 @@
     <h3>Click the button below to start speaking:</h3>
     <button id="start-button" type="button">Speak</button>
     <button id="auto-speak-toggle" type="button">Auto-Speak: On</button>
+  </div>
 
-
+  <div id="context-wrapper">
+    <h3>Context:</h3>
+    <textarea id="context-input" rows="4" cols="50"></textarea>
+    <button id="append-context-button" type="button">Append</button>
+    <button id="replace-context-button" type="button">Replace</button>
   </div>
   
   <script>
@@ -88,10 +93,8 @@
     }).catch(err => console.error('Error loading AudioWorklet:', err));
   </script>
 
-
 <script src="https://cdn.jsdelivr.net/npm/@deepgram/sdk"></script>
 <script type="module" src="./agents-client-api.js"></script>
-
 
 </body>
 

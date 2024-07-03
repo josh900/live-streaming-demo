@@ -321,7 +321,35 @@ async function initialize() {
     hideLoadingSymbol();
     showErrorMessage('Failed to connect. Please try again.');
   }
+
+  // Add event listeners for context buttons
+  const appendContextButton = document.getElementById('append-context-button');
+  const replaceContextButton = document.getElementById('replace-context-button');
+  const contextInput = document.getElementById('context-input');
+
+  appendContextButton.addEventListener('click', () => updateContext('append'));
+  replaceContextButton.addEventListener('click', () => updateContext('replace'));
 }
+
+
+function updateContext(action) {
+  const contextInput = document.getElementById('context-input');
+  const newContext = contextInput.value.trim();
+
+  if (newContext) {
+    if (action === 'append') {
+      context += '\n' + newContext;
+    } else if (action === 'replace') {
+      context = newContext;
+    }
+    logger.info('Context updated:', context);
+    contextInput.value = ''; // Clear the input field
+    showToast('Context updated successfully');
+  } else {
+    showToast('Please enter some text before updating the context');
+  }
+}
+
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initialize);
@@ -364,6 +392,7 @@ function showErrorMessage(message) {
   if (destroyButton) destroyButton.style.display = 'inline-block';
   if (connectButton) connectButton.style.display = 'inline-block';
 }
+
 
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
@@ -1044,7 +1073,7 @@ async function sendChatToGroq() {
       messages: [
         {
           role: 'system',
-          content: context + (additionalContext ? ' ' + additionalContext : ''),
+          content: context,
         },
         ...chatHistory,
       ],
