@@ -83,14 +83,6 @@ const avatars = {
   }
 };
 
-
-
-alex: {
-  idleImage: 'https://skoop-general.s3.amazonaws.com/alex_idle.png',
-  idleVideo: 'alex_idle.mp4',
-  voice: 'en-US-GuyNeural'
-}
-
 let currentAvatar = 'brad';
 
 const avatarSelect = document.getElementById('avatar-select');
