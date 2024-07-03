@@ -1,12 +1,75 @@
+.peerConnectionState-new {
+  color: cornflowerblue;
+}
+.peerConnectionState-connecting {
+  color: orange;
+}
+.peerConnectionState-connected {
+  color: green;
+}
+.peerConnectionState-disconnected,
+.peerConnectionState-closed,
+.peerConnectionState-failed {
+  color: red;
+}
+
+.iceConnectionState-new {
+  color: cornflowerblue;
+}
+.iceConnectionState-checking {
+  color: orange;
+}
+.iceConnectionState-connected,
+.iceConnectionState-completed {
+  color: green;
+}
+.peerConnectionState-disconnected,
+.peerConnectionState-closed,
+.peerConnectionState-failed {
+  color: red;
+}
+
+.iceGatheringState-new {
+  color: cornflowerblue;
+}
+.iceGatheringState-gathering {
+  color: orange;
+}
+.iceGatheringState-complete {
+  color: black;
+}
+
+.signalingState-stable {
+  color: green;
+}
+.signalingState-have-local-offer,
+.signalingState-have-remote-offer,
+.signalingState-have-local-pranswer,
+.signalingState-have-remote-pranswer {
+  color: cornflowerblue;
+}
+.signalingState-closed {
+  color: red;
+}
+
+.streamingState-streaming {
+  color: green;
+}
+
+.streamingState-empty {
+  color: grey;
+}
+
 body * {
   font-family: 'Mulish', sans-serif;
   text-align: center;
 }
 
 #content {
-  width: 820px;
-  position: relative;
-  margin: 0 auto;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-evenly;
+  margin-top: 50px;
 }
 
 #buttons {
@@ -23,22 +86,56 @@ button {
   margin: 0 5px;
   background-color: #7459fe;
   color: #fff;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
 }
 
 button:hover {
-  background-color: #9480ff;
-  cursor: pointer;
-  transition: all 0.2s ease-out;
+  filter: brightness(110%);
+}
+
+button#connect-button {
+  background-color: #4CAF50;
+}
+
+button#destroy-button {
+  background-color: #f44336;
+}
+
+button#start-button {
+  margin: 1em;
+  font-size: 18px;
+  padding: 15px 30px;
+  background-color: #2196F3;
+}
+
+h4 {
+  margin: 0;
+  margin-bottom: 10px;
+}
+
+#destroy-button, #connect-button {
+  display: inline-block;
+}
+
+#msgHistory {
+  overflow-y: auto;
+  line-break: loose;
+  max-height: 300px;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  margin-bottom: 20px;
+  text-align: left;
 }
 
 #status {
-  clear: both;
-  padding: 20px 0 0 0;
-  text-align: left;
   display: inline-block;
   zoom: 1;
   line-height: 140%;
   font-size: 15px;
+  width: 400px;
+  text-align: left;
 }
 
 #status div {
@@ -46,100 +143,99 @@ button:hover {
 }
 
 #video-wrapper {
-  background: url(bg.png);
-  height: 500px;
-  background-position: top;
-}
-
-#video-wrapper div {
+  position: relative;
   width: 400px;
-  margin: 0 auto;
-  padding: 50px 0 0 0;
+  height: 400px;
+  background-position: center;
+  overflow: hidden;
+
 }
 
-video {
-  display: block;
-  border-radius: 50%;
-  background-color: #fff;
+.chat {
+  width: 400px;
 }
 
-.peerConnectionState-new { color: cornflowerblue; }
-.peerConnectionState-connecting { color: orange; }
-.peerConnectionState-connected { color: green; }
-.peerConnectionState-disconnected,
-.peerConnectionState-closed,
-.peerConnectionState-failed { color: red; }
 
-.iceConnectionState-new { color: cornflowerblue; }
-.iceConnectionState-checking { color: orange; }
-.iceConnectionState-connected,
-.iceConnectionState-completed { color: green; }
-.iceConnectionState-disconnected,
-.iceConnectionState-closed,
-.iceConnectionState-failed { color: red; }
-
-.iceGatheringState-new { color: cornflowerblue; }
-.iceGatheringState-gathering { color: orange; }
-.iceGatheringState-complete { color: black; }
-
-.signalingState-stable { color: green; }
-.signalingState-have-local-offer,
-.signalingState-have-remote-offer,
-.signalingState-have-local-pranswer,
-.signalingState-have-remote-pranswer { color: cornflowerblue; }
-.signalingState-closed { color: red; }
-
-.streamingState-streaming { color: green; }
-.streamingState-empty { color: grey; }
-
-#context-injection {
-  margin-top: 20px;
-  text-align: center;
+#avatar-select {
+  padding: 10px;
+  margin-right: 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  font-size: 16px;
+  cursor: pointer;
 }
 
-#context-input {
+#avatar-select:focus {
+  outline: none;
+  border-color: #7459fe;
+}
+
+
+#idle-video-element,
+#stream-video-element {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
-  max-width: 400px;
-  margin-bottom: 10px;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  transition: opacity 0.3s ease-in-out;
 }
 
-.toast {
-  visibility: hidden;
-  min-width: 250px;
-  margin-left: -125px;
-  background-color: #333;
-  color: #fff;
-  text-align: center;
-  border-radius: 2px;
-  padding: 16px;
-  position: fixed;
+#idle-video-element {
   z-index: 1;
+}
+
+#stream-video-element {
+  z-index: 2;
+  opacity: 0;
+}
+
+.animated {
+  animation: fadeInOut 0.3s ease-in-out;
+}
+
+@keyframes fadeInOut {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.error-message {
+  color: #ff0000;
+  font-weight: bold;
+  margin-top: 10px;
+}
+
+.loading-symbol {
+  position: absolute;
+  top: 50%;
   left: 50%;
-  bottom: 30px;
+  transform: translate(-50%, -50%);
+  font-size: 24px;
+  color: #333;
+  background-color: rgba(255, 255, 255, 0.8);
+  padding: 10px;
+  border-radius: 5px;
+  z-index: 1000;
 }
 
-.toast.show {
-  visibility: visible;
-  -webkit-animation: fadein 0.5s, fadeout 0.5s 2.5s;
-  animation: fadein 0.5s, fadeout 0.5s 2.5s;
+@media (max-width: 768px) {
+  #content {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  #video-wrapper,
+  #status,
+  .chat {
+    width: 90%;
+    margin-bottom: 20px;
+  }
 }
 
-@-webkit-keyframes fadein {
-  from {bottom: 0; opacity: 0;}
-  to {bottom: 30px; opacity: 1;}
-}
 
-@keyframes fadein {
-  from {bottom: 0; opacity: 0;}
-  to {bottom: 30px; opacity: 1;}
-}
-
-@-webkit-keyframes fadeout {
-  from {bottom: 30px; opacity: 1;}
-  to {bottom: 0; opacity: 0;}
-}
-
-@keyframes fadeout {
-  from {bottom: 30px; opacity: 1;}
-  to {bottom: 0; opacity: 0;}
+#idle-video-element,
+#stream-video-element {
+  background: transparent;
 }
