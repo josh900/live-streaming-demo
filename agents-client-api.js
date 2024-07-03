@@ -189,6 +189,8 @@ function smoothTransition(duration = 300) {
     return;
   }
 
+  logger.debug('Starting smooth transition');
+
   // Ensure both videos are visible and positioned correctly
   idleVideoElement.style.opacity = '1';
   streamVideoElement.style.opacity = '0';
@@ -208,6 +210,7 @@ function smoothTransition(duration = 300) {
   setTimeout(() => {
     idleVideoElement.style.transition = '';
     streamVideoElement.style.transition = '';
+    logger.debug('Smooth transition completed');
   }, duration);
 }
 
@@ -474,6 +477,7 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   logger.debug('Video status changed:', status);
 }
 
+
 function setStreamVideoElement(stream) {
   const { stream: streamVideoElement } = getVideoElements();
   if (!streamVideoElement) {
@@ -481,9 +485,12 @@ function setStreamVideoElement(stream) {
     return;
   }
 
+  logger.debug('Setting stream video element');
   streamVideoElement.srcObject = stream;
-  streamVideoElement.play().catch(e => logger.error('Error playing video:', e));
-  smoothTransition();
+  streamVideoElement.play().then(() => {
+    logger.debug('Stream video playback started');
+    smoothTransition();
+  }).catch(e => logger.error('Error playing video:', e));
 }
 
 
@@ -764,19 +771,27 @@ async function startStreaming(assistantReply) {
     if (playResponseData.status === 'started') {
       logger.debug('Stream started successfully');
       
-      // Prepare the stream video element
-      const { stream: streamVideoElement } = getVideoElements();
-      if (streamVideoElement.srcObject) {
-        streamVideoElement.srcObject.getTracks().forEach(track => track.stop());
-      }
-      streamVideoElement.srcObject = null;
-      streamVideoElement.src = ''; // Clear any previous source
+      // Get video elements
+      const { idle: idleVideoElement, stream: streamVideoElement } = getVideoElements();
+      
+      // Ensure the stream video element is visible
+      streamVideoElement.style.display = 'block';
+      
+      // Log the current state of video elements
+      logger.debug('Idle video element:', idleVideoElement.src);
+      logger.debug('Stream video element:', streamVideoElement.srcObject);
       
       // Set up event listeners for the stream video
-      streamVideoElement.oncanplay = () => {
-        logger.debug('Stream video can play, starting transition');
+      streamVideoElement.onloadedmetadata = () => {
+        logger.debug('Stream video metadata loaded');
         smoothTransition(300);
-        streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
+        streamVideoElement.play().then(() => {
+          logger.debug('Stream video playback started');
+        }).catch(e => logger.error('Error playing stream video:', e));
+      };
+      
+      streamVideoElement.oncanplay = () => {
+        logger.debug('Stream video can play');
       };
       
       streamVideoElement.onerror = (e) => {
