@@ -1063,18 +1063,6 @@ async function startStreaming(assistantReply) {
 }
 
 
-function startKeepAlive() {
-  setInterval(() => {
-    if (deepgramConnection && deepgramConnection.getReadyState() === WebSocket.OPEN) {
-      deepgramConnection.keepAlive();
-      logger.debug('Sent keepalive to Deepgram');
-    }
-  }, 10000); // Send keepalive every 10 seconds
-}
-
-// Call this function after creating the Deepgram connection
-startKeepAlive();
-
 
 function setupAudioVisualizer() {
   const canvas = document.createElement('canvas');
