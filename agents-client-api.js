@@ -1063,13 +1063,44 @@ async function startStreaming(assistantReply) {
 }
 
 
+function setupAudioVisualizer() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 300;
+  canvas.height = 50;
+  document.body.appendChild(canvas);
+  const canvasCtx = canvas.getContext('2d');
+
+  const analyser = audioContext.createAnalyser();
+  mediaStreamSource.connect(analyser);
+  analyser.fftSize = 256;
+  const bufferLength = analyser.frequencyBinCount;
+  const dataArray = new Uint8Array(bufferLength);
+
+  function draw() {
+    requestAnimationFrame(draw);
+    analyser.getByteFrequencyData(dataArray);
+    canvasCtx.fillStyle = 'rgb(200, 200, 200)';
+    canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+    const barWidth = (canvas.width / bufferLength) * 2.5;
+    let barHeight;
+    let x = 0;
+    for(let i = 0; i < bufferLength; i++) {
+      barHeight = dataArray[i] / 2;
+      canvasCtx.fillStyle = `rgb(50,50,${Math.min(barHeight + 100, 255)})`;
+      canvasCtx.fillRect(x, canvas.height - barHeight / 2, barWidth, barHeight);
+      x += barWidth + 1;
+    }
+  }
+  draw();
+}
+
 async function startRecording() {
   logger.info('Starting recording process...');
   try {
     await startAudioCapture();
     logger.info('Audio capture started successfully');
 
-    deepgramConnection = deepgramClient.listen.live({
+    javascriptCopydeepgramConnection = deepgramClient.listen.live({
       model: "nova-2",
       language: "en-US",
       smart_format: true,
@@ -1079,7 +1110,16 @@ async function startRecording() {
       encoding: "linear16",
       sample_rate: audioContext.sampleRate,
     });
-    logger.info('Deepgram connection created');
+    logger.info('Deepgram connection created with options:', {
+      model: "nova-2",
+      language: "en-US",
+      smart_format: true,
+      interim_results: true,
+      utterance_end_ms: 1000,
+      punctuate: true,
+      encoding: "linear16",
+      sample_rate: audioContext.sampleRate,
+    });
 
     deepgramConnection.addListener('open', () => {
       logger.info('Deepgram WebSocket Connection opened');
@@ -1183,7 +1223,9 @@ async function startAudioCapture() {
     
     mediaStreamSource = audioContext.createMediaStreamSource(microphoneStream);
     logger.info('Media stream source created');
-    
+
+    setupAudioVisualizer(); // Add this line
+
     audioWorkletNode = new AudioWorkletNode(audioContext, 'audio-processor');
     logger.info('Audio worklet node created');
     
@@ -1216,26 +1258,43 @@ function startSendingAudioData() {
       return;
     }
 
-    if (deepgramConnection && deepgramConnection.getReadyState() === WebSocket.OPEN) {
-      try {
-        deepgramConnection.send(audioData);
-        packetCount++;
-        totalBytesSent += audioData.byteLength;
-        
-        if (packetCount % 100 === 0) {
-          logger.info(`Sent ${packetCount} audio packets to Deepgram. Total bytes: ${totalBytesSent}`);
-        }
-      } catch (error) {
-        logger.error('Error sending audio data to Deepgram:', error);
-      }
-    } else {
-      logger.warn('Deepgram connection not open, cannot send audio data. ReadyState:', deepgramConnection ? deepgramConnection.getReadyState() : 'undefined');
+    // Log a sample of the audio data
+    if (packetCount % 100 === 0) {
+      const sampleInt16Array = new Int16Array(audioData.slice(0, 10));
+      logger.debug('Audio data sample:', Array.from(sampleInt16Array));
     }
+    if (!isSilent(audioData)) {
+      deepgramConnection.send(audioData);
+      if (deepgramConnection && deepgramConnection.getReadyState() === WebSocket.OPEN) {
+        try {
+          deepgramConnection.send(audioData);
+          packetCount++;
+          totalBytesSent += audioData.byteLength;
+          
+          if (packetCount % 100 === 0) {
+            logger.info(`Sent ${packetCount} audio packets to Deepgram. Total bytes: ${totalBytesSent}`);
+          }
+        } catch (error) {
+          logger.error('Error sending audio data to Deepgram:', error);
+        }
+      } else {
+        logger.warn('Deepgram connection not open, cannot send audio data. ReadyState:', deepgramConnection ? deepgramConnection.getReadyState() : 'undefined');
+      }
+        } else {
+      logger.debug('Skipping silent audio packet');
+    }
+    
+   
   };
 
   logger.info('Audio data sending setup complete');
 }
 
+function isSilent(audioData) {
+  const int16Array = new Int16Array(audioData);
+  const threshold = 500; // Adjust this value as needed
+  return int16Array.every(sample => Math.abs(sample) < threshold);
+}
 
 async function stopRecording() {
   logger.info('Stopping recording...');
