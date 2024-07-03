@@ -758,27 +758,20 @@ async function startStreaming(assistantReply) {
       const audioDuration = playResponseData.audio_duration * 1000; // Convert to milliseconds
       
       // Set a timeout to start speaking mode when the avatar finishes
-      if (autoSpeakMode) {
+      if (autoSpeakMode && !autoSpeakInProgress) {
         clearTimeout(speakTimeout);
         autoSpeakInProgress = true;
-        const startButton = document.getElementById('start-button');
-        startButton.textContent = 'Stop';
-        
         speakTimeout = setTimeout(async () => {
           if (!isRecording) {
             try {
               await startRecording();
             } catch (error) {
               logger.error('Failed to auto-start recording:', error);
+            } finally {
+              autoSpeakInProgress = false;
             }
           }
         }, audioDuration - 200); // Start 200ms before the end
-      } else {
-        // If auto-speak is off, change button text after 1 second
-        setTimeout(() => {
-          const startButton = document.getElementById('start-button');
-          startButton.textContent = 'Speak';
-        }, 1000);
       }
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
@@ -1094,17 +1087,14 @@ async function sendChatToGroq() {
 }
 
 
+
 function toggleAutoSpeak() {
   autoSpeakMode = !autoSpeakMode;
   const toggleButton = document.getElementById('auto-speak-toggle');
-  const startButton = document.getElementById('start-button');
   toggleButton.textContent = `Auto-Speak: ${autoSpeakMode ? 'On' : 'Off'}`;
-  if (autoSpeakMode) {
-    startButton.textContent = 'Stop';
-  } else {
-    startButton.textContent = isRecording ? 'Stop' : 'Speak';
-  }
 }
+
+
 
 async function reinitializeConnection() {
   if (isInitializing) {
