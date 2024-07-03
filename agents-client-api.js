@@ -51,6 +51,10 @@ let deepgramSource;
 let additionalContext = '';
 let currentUtterance = '';
 let interimMessageAdded = false;
+let autoSpeakMode = true;
+let speakTimeout;
+
+
 
 
 const avatars = {
@@ -747,6 +751,21 @@ async function startStreaming(assistantReply) {
 
     if (playResponseData.status === 'started') {
       logger.debug('Stream started successfully');
+      
+      // Calculate the duration of the audio
+      const audioDuration = playResponseData.audio_duration * 1000; // Convert to milliseconds
+      
+      // Set a timeout to start speaking mode when the avatar finishes
+      if (autoSpeakMode) {
+        clearTimeout(speakTimeout);
+        speakTimeout = setTimeout(() => {
+          if (!isRecording) {
+            startRecording().catch(error => {
+              logger.error('Failed to auto-start recording:', error);
+            });
+          }
+        }, audioDuration - 200); // Start 200ms before the end
+      }
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
     }
@@ -757,7 +776,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
 
 function startSendingAudioData() {
   logger.debug('Starting to send audio data...');
@@ -1051,6 +1069,14 @@ async function sendChatToGroq() {
   }
 }
 
+function toggleAutoSpeak() {
+  autoSpeakMode = !autoSpeakMode;
+  const toggleButton = document.getElementById('auto-speak-toggle');
+  toggleButton.textContent = `Auto-Speak: ${autoSpeakMode ? 'On' : 'Off'}`;
+}
+
+
+
 async function reinitializeConnection() {
   if (isInitializing) {
     logger.warn('Connection initialization already in progress. Skipping reinitialize.');
@@ -1129,12 +1155,10 @@ startButton.onclick = async () => {
 };
 
 
-document.getElementById('save-context').addEventListener('click', () => {
-  const contextInput = document.getElementById('context-input');
-  additionalContext = contextInput.value.trim();
-  contextInput.value = '';
-  showToast('Context saved successfully!');
-});
+
+
+
+
 
 function showToast(message) {
   const toast = document.getElementById('toast');
@@ -1152,6 +1176,8 @@ initializeWebSocket();
 initializeConnection().catch(error => {
   logger.error('Failed to initialize connection:', error);
   showErrorMessage('Failed to initialize connection. Please try again.');
+  document.getElementById('auto-speak-toggle').addEventListener('click', toggleAutoSpeak);
+
 });
 
 export function setLogLevel(level) {
