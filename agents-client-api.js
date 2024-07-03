@@ -1082,7 +1082,6 @@ async function startRecording() {
 
     deepgramConnection.addListener('open', () => {
       logger.info('Deepgram WebSocket Connection opened');
-      // Start sending audio data here
       startSendingAudioData();
     });
 
@@ -1094,22 +1093,7 @@ async function startRecording() {
       if (transcriptData.transcript && !transcription.is_final) {
         currentTranscript = transcriptData.transcript;
         updateInterimTranscript(currentTranscript);
-      }
-    });
-
-    deepgramConnection.addListener('open', () => {
-      logger.info('Deepgram WebSocket Connection opened');
-      startSendingAudioData();
-      
-      // Send a test audio snippet
-      const testAudio = new Int16Array([0, 100, 200, 300, 400, 500]).buffer;
-      deepgramConnection.send(testAudio);
-      logger.info('Sent test audio snippet to Deepgram');
-    });
-
-    deepgramConnection.addListener('utteranceEnd', () => {
-      logger.info('Utterance end detected');
-      if (currentTranscript.trim() !== '') {
+      } else if (transcription.is_final) {
         finalizeTranscript(currentTranscript);
         sendChatToGroq();
         currentTranscript = '';
@@ -1144,6 +1128,7 @@ function finalizeTranscript(transcript) {
     role: 'user',
     content: transcript,
   });
+  sendChatToGroq();
 }
 
 function startInactivityTimeout() {
@@ -1187,14 +1172,6 @@ function startSendingAudioData() {
     return;
   }
 
-  if (!deepgramConnection) {
-    logger.error('Deepgram connection not initialized');
-    return;
-  }
-
-  let totalBytesSent = 0;
-  let packetsSent = 0;
-
   audioWorkletNode.port.onmessage = (event) => {
     const audioData = event.data;
     
@@ -1203,55 +1180,19 @@ function startSendingAudioData() {
       return;
     }
 
-    logger.debug(`Received audio data from worklet. Length: ${audioData.byteLength} bytes`);
-
-    if (deepgramConnection.getReadyState() === WebSocket.OPEN) {
+    if (deepgramConnection && deepgramConnection.getReadyState() === WebSocket.OPEN) {
       try {
         deepgramConnection.send(audioData);
-        totalBytesSent += audioData.byteLength;
-        packetsSent++;
-
-        if (packetsSent % 100 === 0) {  // Log every 100 packets
-          logger.info(`Sent ${packetsSent} audio packets to Deepgram. Total data sent: ${totalBytesSent} bytes`);
-        }
-
         logger.debug(`Sent audio data to Deepgram. Packet size: ${audioData.byteLength} bytes`);
       } catch (error) {
         logger.error('Error sending audio data to Deepgram:', error);
       }
     } else {
-      logger.warn('Deepgram connection not open, cannot send audio data. ReadyState:', deepgramConnection.getReadyState());
+      logger.warn('Deepgram connection not open, cannot send audio data.');
     }
-  };
-
-  // Set up an interval to log stats every 5 seconds
-  const statsInterval = setInterval(() => {
-    logger.info(`Audio sending stats - Packets sent: ${packetsSent}, Total bytes sent: ${totalBytesSent}`);
-  }, 5000);
-
-  // Set up a check to ensure we're still receiving audio data
-  let lastPacketTime = Date.now();
-  const audioCheckInterval = setInterval(() => {
-    const timeSinceLastPacket = Date.now() - lastPacketTime;
-    if (timeSinceLastPacket > 5000) {  // If no packet for 5 seconds
-      logger.warn(`No audio data received for ${timeSinceLastPacket}ms`);
-    }
-  }, 5000);
-
-  // Update lastPacketTime whenever we receive data
-  audioWorkletNode.port.addEventListener('message', () => {
-    lastPacketTime = Date.now();
-  });
-
-  logger.info('Audio data sending setup complete');
-
-  // Return a function to clean up the intervals when needed
-  return () => {
-    clearInterval(statsInterval);
-    clearInterval(audioCheckInterval);
-    logger.info('Audio data sending stopped');
   };
 }
+
 
 async function stopRecording() {
   if (deepgramConnection) {
@@ -1283,10 +1224,11 @@ async function stopRecording() {
   logger.info('Recording stopped and resources cleaned up');
 }
 
+
 async function sendChatToGroq() {
   try {
     const startTime = Date.now();
-    const response = await fetch('https://avatar-stage.skoop.digital/chat', {
+    const response = await fetch('/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1299,7 +1241,7 @@ async function sendChatToGroq() {
           },
           ...chatHistory,
         ],
-        model: 'llama3-8b-8192',
+        model: 'mixtral-8x7b-32768',
       }),
     });
 
@@ -1327,8 +1269,12 @@ async function sendChatToGroq() {
               break;
             }
 
-            const parsed = JSON.parse(data);
-            assistantReply += parsed.choices[0]?.delta?.content || '';
+            try {
+              const parsed = JSON.parse(data);
+              assistantReply += parsed.choices[0]?.delta?.content || '';
+            } catch (error) {
+              logger.error('Error parsing JSON:', error);
+            }
           }
         }
       }
@@ -1357,12 +1303,14 @@ async function sendChatToGroq() {
 
     await startStreaming(assistantReply);
   } catch (error) {
-    logger.error('Error:', error);
+    logger.error('Error in sendChatToGroq:', error);
     if (isRecording) {
       await reinitializeConnection();
     }
   }
 }
+
+
 
 async function reinitializeConnection() {
   if (isInitializing) {
@@ -1431,11 +1379,12 @@ startButton.onclick = async () => {
   if (!isRecording) {
     startButton.textContent = 'Stop';
     await startRecording();
+    isRecording = true;
   } else {
     startButton.textContent = 'Speak';
     await stopRecording();
+    isRecording = false;
   }
-  isRecording = !isRecording;
 };
 
 // Initialize WebSocket connection
