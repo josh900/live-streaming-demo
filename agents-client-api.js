@@ -764,14 +764,22 @@ async function startStreaming(assistantReply) {
         speakTimeout = setTimeout(async () => {
           if (!isRecording) {
             try {
-              await startRecording();
+              await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
+              await startRecording(true); // Pass true to indicate auto-speak mode
             } catch (error) {
               logger.error('Failed to auto-start recording:', error);
             } finally {
               autoSpeakInProgress = false;
             }
           }
-        }, audioDuration - 200); // Start 200ms before the end
+        }, audioDuration);
+      } else if (!autoSpeakMode) {
+        // If auto-speak is off, enable the speak button after 1 second
+        setTimeout(() => {
+          const startButton = document.getElementById('start-button');
+          startButton.textContent = 'Speak';
+          startButton.disabled = false;
+        }, 1000);
       }
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
@@ -841,7 +849,7 @@ function handleTranscription(data) {
   }
 }
 
-async function startRecording() {
+async function startRecording(isAutoSpeak = false) {
   if (isRecording) {
     logger.warn('Recording is already in progress. Stopping current recording.');
     await stopRecording();
@@ -927,14 +935,18 @@ async function startRecording() {
     // Set recording state
     isRecording = true;
     const startButton = document.getElementById('start-button');
-    startButton.textContent = 'Stop';
+    if (!isAutoSpeak || !autoSpeakMode) {
+      startButton.textContent = 'Stop';
+    }
 
     logger.debug('Recording and transcription started successfully');
   } catch (error) {
     logger.error('Error starting recording:', error);
     isRecording = false;
     const startButton = document.getElementById('start-button');
-    startButton.textContent = 'Speak';
+    if (!autoSpeakMode) {
+      startButton.textContent = 'Speak';
+    }
     throw error;
   }
 }
@@ -973,7 +985,9 @@ async function stopRecording() {
     isRecording = false;
     autoSpeakInProgress = false;
     const startButton = document.getElementById('start-button');
-    startButton.textContent = 'Speak';
+    if (!autoSpeakMode) {
+      startButton.textContent = 'Speak';
+    }
     
     logger.info('Recording and transcription stopped');
   }
