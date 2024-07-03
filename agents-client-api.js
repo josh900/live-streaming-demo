@@ -61,17 +61,35 @@ let videoStartTimeout;
 
 
 const avatars = {
-  brad: {
+  Brad: {
     idleImage: 'https://skoop-general.s3.amazonaws.com/brad_idle.png',
     idleVideo: 'brad_idle.mp4',
     voice: 'en-US-ChristopherNeural'
   },
-  emma: {
-    idleImage: 'https://skoop-general.s3.amazonaws.com/emma_idle.png',
-    idleVideo: 'emma_idle.mp4',
+  Ava: {
+    idleImage: 'https://skoop-general.s3.amazonaws.com/ava_idle.png',
+    idleVideo: 'ava_idle.mp4',
     voice: 'en-US-AvaNeural'
+  },
+  JoshC: {
+    idleImage: 'https://skoop-general.s3.amazonaws.com/Joshc_idle.png',
+    idleVideo: 'Joshc_idle.mp4',
+    voice: 'en-US-GuyNeural'
+  },
+  Aric: {
+    idleImage: 'https://skoop-general.s3.amazonaws.com/Aric_idle.png',
+    idleVideo: 'Aric_idle.mp4',
+    voice: 'en-US-GuyNeural'
   }
 };
+
+
+
+alex: {
+  idleImage: 'https://skoop-general.s3.amazonaws.com/alex_idle.png',
+  idleVideo: 'alex_idle.mp4',
+  voice: 'en-US-GuyNeural'
+}
 
 let currentAvatar = 'brad';
 
