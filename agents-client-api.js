@@ -1136,7 +1136,6 @@ function updateTranscript(text, isFinal) {
   }
 }
 
-
 function updateInterimTranscript(text) {
   const msgHistory = document.getElementById('msgHistory');
   const interimSpan = msgHistory.querySelector('span[data-interim]');
