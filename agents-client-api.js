@@ -47,6 +47,8 @@ let deepgramConnection;
 let isRecording = false;
 let mediaStreamSource;
 let processor;
+let audioWorkletNode;
+
 
 
 
@@ -1108,26 +1110,28 @@ async function startRecording() {
   }
 }
 
-function startAudioCapture() {
-  navigator.mediaDevices.getUserMedia({ audio: true })
-    .then(stream => {
-      audioContext = new AudioContext();
-      mediaStreamSource = audioContext.createMediaStreamSource(stream);
-      processor = audioContext.createScriptProcessor(1024, 1, 1);
+async function startAudioCapture() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioContext = new AudioContext();
+    
+    await audioContext.audioWorklet.addModule('audio-processor.js');
+    
+    mediaStreamSource = audioContext.createMediaStreamSource(stream);
+    audioWorkletNode = new AudioWorkletNode(audioContext, 'audio-processor');
+    
+    mediaStreamSource.connect(audioWorkletNode);
+    audioWorkletNode.connect(audioContext.destination);
 
-      mediaStreamSource.connect(processor);
-      processor.connect(audioContext.destination);
-
-      processor.onaudioprocess = (e) => {
-        const audioData = e.inputBuffer.getChannelData(0);
-        if (deepgramConnection.getReadyState() === WebSocket.OPEN) {
-          deepgramConnection.send(audioData);
-        }
-      };
-    })
-    .catch(err => {
-      logger.error('Error accessing microphone:', err);
-    });
+    audioWorkletNode.port.onmessage = (event) => {
+      const audioData = event.data;
+      if (deepgramConnection.getReadyState() === WebSocket.OPEN) {
+        deepgramConnection.send(audioData);
+      }
+    };
+  } catch (err) {
+    logger.error('Error accessing microphone:', err);
+  }
 }
 
 function updateInterimTranscript(transcript) {
@@ -1170,9 +1174,9 @@ async function stopRecording() {
     mediaStreamSource = null;
   }
 
-  if (processor) {
-    processor.disconnect();
-    processor = null;
+  if (audioWorkletNode) {
+    audioWorkletNode.disconnect();
+    audioWorkletNode = null;
   }
 
   clearTimeout(inactivityTimeout);
@@ -1332,6 +1336,7 @@ startButton.onclick = async () => {
   }
   isRecording = !isRecording;
 };
+
 
 // Initialize WebSocket connection
 initializeWebSocket();
