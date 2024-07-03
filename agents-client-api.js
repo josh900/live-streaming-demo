@@ -761,6 +761,13 @@ async function startStreaming(assistantReply) {
 }
 
 async function startRecording() {
+
+  if (isRecording) {
+    logger.warn('Recording is already in progress');
+    return;
+  }
+
+  
   logger.info('Starting recording process...');
   
   // Reset states
@@ -771,33 +778,10 @@ async function startRecording() {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     logger.info('Microphone stream obtained');
     
-    // Set up MediaRecorder for saving audio
-    mediaRecorder = new MediaRecorder(stream);
-    
-    mediaRecorder.ondataavailable = event => {
-      audioChunks.push(event.data);
-    };
-
-    mediaRecorder.onstop = () => {
-      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-      const audioUrl = URL.createObjectURL(audioBlob);
-      const link = document.createElement('a');
-      link.href = audioUrl;
-      link.download = 'recorded_audio.webm';
-      link.click();
-      
-      // Reset for next recording
-      audioChunks = [];
-    };
-
-    mediaRecorder.start();
-    logger.debug('MediaRecorder started');
-
     // Set up AudioContext and AudioWorklet for Deepgram
     audioContext = new AudioContext();
     logger.debug('Audio context created. Sample rate:', audioContext.sampleRate);
     
-    logger.info('Adding audio worklet module...');
     await audioContext.audioWorklet.addModule('audio-processor.js');
     logger.debug('Audio worklet module added successfully');
     
@@ -946,11 +930,6 @@ function handleUtteranceEnd(data) {
 async function stopRecording() {
   if (isRecording) {
     logger.info('Stopping recording...');
-    
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-      mediaRecorder.stop();
-      logger.info('MediaRecorder stopped');
-    }
     
     if (audioContext) {
       await audioContext.close();
