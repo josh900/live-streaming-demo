@@ -1075,8 +1075,6 @@ async function startRecording() {
       interim_results: true,
       utterance_end_ms: "1000",
       punctuate: true,
-      encoding: "linear16",
-      sample_rate: audioContext.sampleRate,
     });
 
     deepgramConnection.addListener('open', () => {
