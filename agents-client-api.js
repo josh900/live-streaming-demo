@@ -51,10 +51,6 @@ let deepgramSource;
 let additionalContext = '';
 let currentUtterance = '';
 let interimMessageAdded = false;
-let isProcessingTranscription = false;
-let transcriptionDebounceTimer;
-
-
 
 
 const avatars = {
@@ -84,17 +80,6 @@ You are a helpful, harmless, and honest assistant. Please answer the users quest
 
 setLogLevel('INFO');
 
-function debounce(func, delay) {
-  return function() {
-    const context = this;
-    const args = arguments;
-    clearTimeout(transcriptionDebounceTimer);
-    transcriptionDebounceTimer = setTimeout(() => func.apply(context, args), delay);
-  };
-}
-
-const debouncedHandleTranscription = debounce(handleTranscription, 300);
-
 async function handleAvatarChange() {
   currentAvatar = avatarSelect.value;
   
@@ -115,7 +100,6 @@ async function handleAvatarChange() {
   // Reset transcription-related variables
   currentUtterance = '';
   interimMessageAdded = false;
-  isProcessingTranscription = false;
   
   // Clear the message history
   const msgHistory = document.getElementById('msgHistory');
@@ -127,6 +111,7 @@ async function handleAvatarChange() {
   await destroyConnection();
   await initializeConnection();
 }
+
 
 
 async function destroyConnection() {
@@ -147,14 +132,8 @@ async function destroyConnection() {
     } finally {
       stopAllStreams();
       closePC();
-      if (deepgramConnection) {
-        deepgramConnection.finish();
-      }
       streamId = null;
       sessionId = null;
-      isProcessingTranscription = false;
-      currentUtterance = '';
-      interimMessageAdded = false;
     }
   }
 }
@@ -784,15 +763,9 @@ async function startStreaming(assistantReply) {
 async function startRecording() {
   logger.info('Starting recording process...');
   
-  if (deepgramConnection) {
-    logger.info('Closing existing Deepgram connection');
-    deepgramConnection.finish();
-  }
-
   // Reset states
   currentUtterance = '';
   interimMessageAdded = false;
-  isProcessingTranscription = false;
   
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -871,7 +844,7 @@ async function startRecording() {
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
       logger.debug('Received transcription:', JSON.stringify(data));
-      debouncedHandleTranscription(data);
+      handleTranscription(data);
     });
 
     deepgramConnection.addListener(LiveTranscriptionEvents.UtteranceEnd, (data) => {
@@ -937,25 +910,18 @@ function startSendingAudioData() {
 }
 
 function handleTranscription(data) {
-  if (!isRecording || isProcessingTranscription) return;
+  if (!isRecording) return;  // Ignore transcriptions if we're not recording
   
-  isProcessingTranscription = true;
-  
-  try {
-    const transcript = data.channel.alternatives[0].transcript;
-    if (data.is_final) {
-      logger.info('Final transcript:', transcript);
-      currentUtterance += transcript + ' ';
-    } else {
-      logger.info('Interim transcript:', transcript);
-    }
-    updateTranscript(currentUtterance + transcript, data.is_final);
-  } catch (error) {
-    logger.error('Error processing transcription:', error);
-  } finally {
-    isProcessingTranscription = false;
+  const transcript = data.channel.alternatives[0].transcript;
+  if (data.is_final) {
+    logger.info('Final transcript:', transcript);
+    currentUtterance += transcript + ' ';
+  } else {
+    logger.info('Interim transcript:', transcript);
   }
+  updateTranscript(currentUtterance + transcript, false);
 }
+
 
 
 
@@ -996,13 +962,7 @@ async function stopRecording() {
       logger.info('Deepgram connection finished');
     }
     
-    if (audioWorkletNode) {
-      audioWorkletNode.disconnect();
-      logger.info('AudioWorkletNode disconnected');
-    }
-    
     isRecording = false;
-    isProcessingTranscription = false;
     const startButton = document.getElementById('start-button');
     startButton.textContent = 'Speak';
     
