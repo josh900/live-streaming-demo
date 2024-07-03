@@ -1063,6 +1063,19 @@ async function startStreaming(assistantReply) {
 }
 
 
+function startKeepAlive() {
+  setInterval(() => {
+    if (deepgramConnection && deepgramConnection.getReadyState() === WebSocket.OPEN) {
+      deepgramConnection.keepAlive();
+      logger.debug('Sent keepalive to Deepgram');
+    }
+  }, 10000); // Send keepalive every 10 seconds
+}
+
+// Call this function after creating the Deepgram connection
+startKeepAlive();
+
+
 function setupAudioVisualizer() {
   const canvas = document.createElement('canvas');
   canvas.width = 300;
@@ -1101,7 +1114,7 @@ async function startRecording() {
     logger.info('Audio capture started successfully');
 
     deepgramConnection = deepgramClient.listen.live({
-      model: "nova-2",
+      model: "general",
       language: "en-US",
       smart_format: true,
       interim_results: true,
@@ -1111,7 +1124,7 @@ async function startRecording() {
       sample_rate: audioContext.sampleRate,
     });
     logger.info('Deepgram connection created with options:', {
-      model: "nova-2",
+      model: "general",
       language: "en-US",
       smart_format: true,
       interim_results: true,
@@ -1124,9 +1137,13 @@ async function startRecording() {
     deepgramConnection.addListener('open', () => {
       logger.info('Deepgram WebSocket Connection opened');
       startSendingAudioData();
+      startKeepAlive();
+
     });
 
     let currentTranscript = '';
+
+
 
     deepgramConnection.addListener('transcriptReceived', (message) => {
       logger.info('Received transcription:', JSON.stringify(message));
@@ -1148,6 +1165,7 @@ async function startRecording() {
 
     deepgramConnection.addListener('error', (err) => {
       logger.error('Deepgram error:', err);
+      logger.error('Error details:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
     });
 
     deepgramConnection.addListener('close', () => {
@@ -1293,7 +1311,9 @@ function startSendingAudioData() {
 function isSilent(audioData) {
   const int16Array = new Int16Array(audioData);
   const threshold = 500; // Adjust this value as needed
-  return int16Array.every(sample => Math.abs(sample) < threshold);
+  const maxLevel = Math.max(...int16Array.map(Math.abs));
+  logger.debug(`Max audio level: ${maxLevel}`);
+  return maxLevel < threshold;
 }
 
 async function stopRecording() {
