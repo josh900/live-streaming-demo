@@ -54,7 +54,8 @@ let interimMessageAdded = false;
 let autoSpeakMode = true;
 let speakTimeout;
 let autoSpeakInProgress = false;
-
+let audioBufferSource;
+let videoStartTimeout;
 
 
 
@@ -180,7 +181,7 @@ function initTransitionCanvas() {
   document.querySelector('#video-wrapper').appendChild(transitionCanvas);
 }
 
-function smoothTransition(duration = 300) {
+function smoothTransition(duration = 100) {
   const { idle: idleVideoElement, stream: streamVideoElement } = getVideoElements();
   
   if (!idleVideoElement || !streamVideoElement) {
@@ -749,7 +750,7 @@ async function startStreaming(assistantReply) {
         },
         config: {
           fluent: true,
-          pad_audio: 0.5,
+          pad_audio: 0,
           stitch: true,
         },
         driver_url: 'bank://lively/',
@@ -763,8 +764,30 @@ async function startStreaming(assistantReply) {
     if (playResponseData.status === 'started') {
       logger.debug('Stream started successfully');
       
+      // Pre-buffer the audio
+      const audioResponse = await fetch(playResponseData.audio_url);
+      const audioArrayBuffer = await audioResponse.arrayBuffer();
+      
+      // Set up AudioContext
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const audioBuffer = await audioContext.decodeAudioData(audioArrayBuffer);
+      
+      // Create a buffer source
+      audioBufferSource = audioContext.createBufferSource();
+      audioBufferSource.buffer = audioBuffer;
+      audioBufferSource.connect(audioContext.destination);
+      
+      // Schedule the audio to start playing in 100ms
+      const startTime = audioContext.currentTime + 0.1;
+      audioBufferSource.start(startTime);
+      
+      // Trigger the video transition slightly before the audio starts
+      setTimeout(() => {
+        smoothTransition(100);
+      }, 50);
+      
       // Calculate the duration of the audio
-      const audioDuration = playResponseData.audio_duration * 1000; // Convert to milliseconds
+      const audioDuration = audioBuffer.duration * 1000;
       
       // Set a timeout to start speaking mode when the avatar finishes
       if (autoSpeakMode) {
@@ -781,13 +804,13 @@ async function startStreaming(assistantReply) {
               logger.error('Failed to auto-start recording:', error);
             }
           }
-        }, audioDuration - 200); // Start 200ms before the end
+        }, audioDuration - 200);
       } else {
-        // If auto-speak is off, change button text after 1 second
+        // If auto-speak is off, change button text after audio finishes
         setTimeout(() => {
           const startButton = document.getElementById('start-button');
           startButton.textContent = 'Speak';
-        }, 1000);
+        }, audioDuration);
       }
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
