@@ -462,7 +462,7 @@ async function destroyConnection() {
         body: JSON.stringify({ session_id: sessionId }),
       });
 
-      logger.info('Stream destroyed successfully');
+      logger.debug('Stream destroyed successfully');
     } catch (error) {
       logger.error('Error destroying stream:', error);
     } finally {
@@ -608,7 +608,7 @@ function updateTranscript(text, isFinal) {
       interimSpan.remove();
     }
     msgHistory.innerHTML += `<span><u>User:</u> ${text}</span><br>`;
-    logger.info('Final transcript added to chat history:', text);
+    logger.debug('Final transcript added to chat history:', text);
     interimMessageAdded = false;
   } else {
     if (text.trim()) {
@@ -687,7 +687,7 @@ function updateContext(action) {
     } else if (action === 'replace') {
       context = newContext;
     }
-    logger.info('Context updated:', context);
+    logger.debug('Context updated:', context);
     contextInput.value = ''; // Clear the input field
     showToast('Context saved successfully');
   } else {
@@ -986,7 +986,7 @@ function playIdleVideo() {
   idleVideoElement.loop = true;
 
   idleVideoElement.onloadeddata = () => {
-    logger.info(`Idle video loaded successfully for ${currentAvatar}`);
+    logger.debug(`Idle video loaded successfully for ${currentAvatar}`);
   };
 
   idleVideoElement.onerror = (e) => {
@@ -1291,7 +1291,7 @@ function handleTranscription(data) {
   
   const transcript = data.channel.alternatives[0].transcript;
   if (data.is_final) {
-    logger.info('Final transcript:', transcript);
+    logger.debug('Final transcript:', transcript);
     if (transcript.trim()) {  // Only add non-empty transcripts
       currentUtterance += transcript + ' ';
       updateTranscript(currentUtterance.trim(), true);
@@ -1304,7 +1304,7 @@ function handleTranscription(data) {
     currentUtterance = '';
     interimMessageAdded = false;
   } else {
-    logger.info('Interim transcript:', transcript);
+    logger.debug('Interim transcript:', transcript);
     updateTranscript(currentUtterance + transcript, false);
   }
 }
@@ -1316,7 +1316,7 @@ async function startRecording() {
     return;
   }
 
-  logger.info('Starting recording process...');
+  logger.debug('Starting recording process...');
   
   // Reset states
   currentUtterance = '';
@@ -1411,7 +1411,7 @@ async function startRecording() {
 function handleUtteranceEnd(data) {
   if (!isRecording) return;  // Ignore utterance end if we're not recording
   
-  logger.info('Utterance end detected:', data);
+  logger.debug('Utterance end detected:', data);
   if (currentUtterance.trim()) {
     updateTranscript(currentUtterance.trim(), true);
     chatHistory.push({
@@ -1430,12 +1430,12 @@ async function stopRecording() {
     
     if (audioContext) {
       await audioContext.close();
-      logger.info('AudioContext closed');
+      logger.debug('AudioContext closed');
     }
     
     if (deepgramConnection) {
       deepgramConnection.finish();
-      logger.info('Deepgram connection finished');
+      logger.debug('Deepgram connection finished');
     }
     
     isRecording = false;
@@ -1443,7 +1443,7 @@ async function stopRecording() {
     const startButton = document.getElementById('start-button');
     startButton.textContent = 'Speak';
     
-    logger.info('Recording and transcription stopped');
+    logger.debug('Recording and transcription stopped');
   }
 }
 
