@@ -60,6 +60,7 @@ let videoStartTimeout;
 
 
 
+
 const avatars = {
   Brad: {
     idleImage: 'https://skoop-general.s3.amazonaws.com/brad_idle.png',
