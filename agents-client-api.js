@@ -1064,11 +1064,11 @@ async function startStreaming(assistantReply) {
 
 
 async function startRecording() {
+  logger.info('Starting recording process...');
   try {
-    // First, set up audio capture
     await startAudioCapture();
+    logger.info('Audio capture started successfully');
 
-    // Then initialize Deepgram connection
     deepgramConnection = deepgramClient.listen.live({
       model: "nova-2",
       language: "en-US",
@@ -1079,6 +1079,7 @@ async function startRecording() {
       encoding: "linear16",
       sample_rate: audioContext.sampleRate,
     });
+    logger.info('Deepgram connection created');
 
     deepgramConnection.addListener('open', () => {
       logger.info('Deepgram WebSocket Connection opened');
@@ -1088,12 +1089,14 @@ async function startRecording() {
     let currentTranscript = '';
 
     deepgramConnection.addListener('transcriptReceived', (transcription) => {
-      logger.info('Transcript received:', transcription);
+      logger.info('Received transcription:', JSON.stringify(transcription));
       const transcriptData = transcription.channel.alternatives[0];
       if (transcriptData.transcript && !transcription.is_final) {
         currentTranscript = transcriptData.transcript;
+        logger.info('Updating interim transcript:', currentTranscript);
         updateInterimTranscript(currentTranscript);
       } else if (transcription.is_final) {
+        logger.info('Finalizing transcript:', currentTranscript);
         finalizeTranscript(currentTranscript);
         sendChatToGroq();
         currentTranscript = '';
@@ -1109,11 +1112,13 @@ async function startRecording() {
     });
 
     startInactivityTimeout();
+    logger.info('Recording process started successfully');
 
   } catch (error) {
     logger.error('Error in startRecording:', error);
   }
 }
+
 
 function updateInterimTranscript(transcript) {
   document.getElementById('msgHistory').innerHTML = document.getElementById('msgHistory').innerHTML.replace(
@@ -1142,22 +1147,28 @@ function startInactivityTimeout() {
 }
 
 async function startAudioCapture() {
+  logger.info('Starting audio capture...');
   try {
-    logger.info('Starting audio capture...');
     microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     logger.info('Microphone stream obtained');
+    
     audioContext = new AudioContext();
+    logger.info('Audio context created. Sample rate:', audioContext.sampleRate);
     
     logger.info('Adding audio worklet module...');
     await audioContext.audioWorklet.addModule('audio-processor.js');
-    logger.info('Audio worklet module added');
+    logger.info('Audio worklet module added successfully');
     
     mediaStreamSource = audioContext.createMediaStreamSource(microphoneStream);
+    logger.info('Media stream source created');
+    
     audioWorkletNode = new AudioWorkletNode(audioContext, 'audio-processor');
+    logger.info('Audio worklet node created');
     
     mediaStreamSource.connect(audioWorkletNode);
+    logger.info('Media stream source connected to audio worklet node');
 
-    logger.info('Audio capture started. Sample rate:', audioContext.sampleRate);
+    logger.info('Audio capture setup completed successfully');
   } catch (err) {
     logger.error('Error in startAudioCapture:', err);
     throw err;
@@ -1172,6 +1183,9 @@ function startSendingAudioData() {
     return;
   }
 
+  let packetCount = 0;
+  let totalBytesSent = 0;
+
   audioWorkletNode.port.onmessage = (event) => {
     const audioData = event.data;
     
@@ -1183,40 +1197,57 @@ function startSendingAudioData() {
     if (deepgramConnection && deepgramConnection.getReadyState() === WebSocket.OPEN) {
       try {
         deepgramConnection.send(audioData);
-        logger.debug(`Sent audio data to Deepgram. Packet size: ${audioData.byteLength} bytes`);
+        packetCount++;
+        totalBytesSent += audioData.byteLength;
+        
+        if (packetCount % 100 === 0) {
+          logger.info(`Sent ${packetCount} audio packets to Deepgram. Total bytes: ${totalBytesSent}`);
+        }
       } catch (error) {
         logger.error('Error sending audio data to Deepgram:', error);
       }
     } else {
-      logger.warn('Deepgram connection not open, cannot send audio data.');
+      logger.warn('Deepgram connection not open, cannot send audio data. ReadyState:', deepgramConnection ? deepgramConnection.getReadyState() : 'undefined');
     }
   };
+
+  logger.info('Audio data sending setup complete');
 }
 
 
+
 async function stopRecording() {
+  logger.info('Stopping recording...');
   if (deepgramConnection) {
+    logger.info('Finishing Deepgram connection');
     deepgramConnection.finish();
     deepgramConnection = null;
   }
 
   if (audioContext) {
+    logger.info('Closing audio context');
     await audioContext.close();
     audioContext = null;
   }
 
   if (mediaStreamSource) {
+    logger.info('Disconnecting media stream source');
     mediaStreamSource.disconnect();
     mediaStreamSource = null;
   }
 
   if (audioWorkletNode) {
+    logger.info('Disconnecting audio worklet node');
     audioWorkletNode.disconnect();
     audioWorkletNode = null;
   }
 
   if (microphoneStream) {
-    microphoneStream.getTracks().forEach(track => track.stop());
+    logger.info('Stopping microphone stream tracks');
+    microphoneStream.getTracks().forEach(track => {
+      track.stop();
+      logger.info(`Stopped track: ${track.kind}`);
+    });
     microphoneStream = null;
   }
 
@@ -1224,26 +1255,31 @@ async function stopRecording() {
   logger.info('Recording stopped and resources cleaned up');
 }
 
-
 async function sendChatToGroq() {
+  logger.info('Sending chat to Groq...');
   try {
     const startTime = Date.now();
+    const requestBody = {
+      messages: [
+        {
+          role: 'system',
+          content: context,
+        },
+        ...chatHistory,
+      ],
+      model: 'mixtral-8x7b-32768',
+    };
+    logger.info('Request body:', JSON.stringify(requestBody));
+
     const response = await fetch('/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        messages: [
-          {
-            role: 'system',
-            content: context,
-          },
-          ...chatHistory,
-        ],
-        model: 'mixtral-8x7b-32768',
-      }),
+      body: JSON.stringify(requestBody),
     });
+
+    logger.info('Groq response status:', response.status);
 
     if (!response.ok) {
       throw new Error(`HTTP error ${response.status}`);
@@ -1259,6 +1295,7 @@ async function sendChatToGroq() {
 
       if (value) {
         const chunk = new TextDecoder().decode(value);
+        logger.debug('Received chunk:', chunk);
         const lines = chunk.split('\n');
 
         for (const line of lines) {
@@ -1271,7 +1308,9 @@ async function sendChatToGroq() {
 
             try {
               const parsed = JSON.parse(data);
-              assistantReply += parsed.choices[0]?.delta?.content || '';
+              const content = parsed.choices[0]?.delta?.content || '';
+              assistantReply += content;
+              logger.debug('Parsed content:', content);
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
@@ -1289,6 +1328,7 @@ async function sendChatToGroq() {
       content: assistantReply,
     });
 
+    logger.info('Updating chat history in UI');
     document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${assistantReply}</span><br>`;
 
     logger.info('Assistant reply:', assistantReply);
@@ -1309,7 +1349,6 @@ async function sendChatToGroq() {
     }
   }
 }
-
 
 
 async function reinitializeConnection() {
@@ -1376,14 +1415,19 @@ destroyButton.onclick = async () => {
 const startButton = document.getElementById('start-button');
 
 startButton.onclick = async () => {
+  logger.info('Start button clicked. Current state:', isRecording ? 'Recording' : 'Not recording');
   if (!isRecording) {
     startButton.textContent = 'Stop';
+    logger.info('Starting recording...');
     await startRecording();
     isRecording = true;
+    logger.info('Recording started');
   } else {
     startButton.textContent = 'Speak';
+    logger.info('Stopping recording...');
     await stopRecording();
     isRecording = false;
+    logger.info('Recording stopped');
   }
 };
 
