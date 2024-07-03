@@ -1147,10 +1147,14 @@ function startInactivityTimeout() {
 
 async function startAudioCapture() {
   try {
+    logger.info('Starting audio capture...');
     microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    logger.info('Microphone stream obtained');
     audioContext = new AudioContext();
     
+    logger.info('Adding audio worklet module...');
     await audioContext.audioWorklet.addModule('audio-processor.js');
+    logger.info('Audio worklet module added');
     
     mediaStreamSource = audioContext.createMediaStreamSource(microphoneStream);
     audioWorkletNode = new AudioWorkletNode(audioContext, 'audio-processor');
