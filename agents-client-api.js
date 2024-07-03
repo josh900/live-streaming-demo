@@ -1071,7 +1071,13 @@ async function startRecording() {
 
     deepgramConnection = deepgramClient.listen.live({
       model: "nova-2",
-      language: "en-US"
+      language: "en-US",
+      smart_format: true,
+      interim_results: true,
+      utterance_end_ms: "1000",
+      punctuate: true,
+      encoding: "linear16",
+      sample_rate: audioContext.sampleRate,
     });
     logger.info('Deepgram connection created');
 
@@ -1082,21 +1088,27 @@ async function startRecording() {
 
     let currentTranscript = '';
 
-    deepgramConnection.addListener('transcriptReceived', (message) => {
-      logger.info('Received transcription:', JSON.stringify(message));
+    deepgramConnection.addListener('transcriptReceived', (data) => {
+      logger.info('Received data from Deepgram:', JSON.stringify(data));
       
-      if (message.is_final) {
-        const transcriptData = message.channel.alternatives[0];
+      if (data.type === 'Results') {
+        const transcriptData = data.channel.alternatives[0];
         if (transcriptData && transcriptData.transcript) {
-          currentTranscript += transcriptData.transcript + ' ';
-          logger.info('Updated transcript:', currentTranscript);
-          updateTranscript(currentTranscript, true);
+          if (data.is_final) {
+            currentTranscript += transcriptData.transcript + ' ';
+            logger.info('Final transcript:', currentTranscript);
+            updateTranscript(currentTranscript, true);
+          } else {
+            logger.info('Interim transcript:', transcriptData.transcript);
+            updateTranscript(transcriptData.transcript, false);
+          }
         }
-      } else {
-        const transcriptData = message.channel.alternatives[0];
-        if (transcriptData && transcriptData.transcript) {
-          updateTranscript(transcriptData.transcript, false);
-        }
+      } else if (data.type === 'Metadata') {
+        logger.info('Received metadata:', data);
+      } else if (data.type === 'UtteranceEnd') {
+        logger.info('Utterance ended:', data);
+        finalizeTranscript(currentTranscript);
+        currentTranscript = '';
       }
     });
 
@@ -1171,6 +1183,10 @@ async function startAudioCapture() {
     audioContext = new AudioContext();
     logger.info('Audio context created. Sample rate:', audioContext.sampleRate);
     
+    if (audioContext.sampleRate !== 48000) {
+      logger.warn('Audio context sample rate is not 48000 Hz. This may cause issues with transcription.');
+    }
+    
     logger.info('Adding audio worklet module...');
     await audioContext.audioWorklet.addModule('audio-processor.js');
     logger.info('Audio worklet module added successfully');
@@ -1205,16 +1221,22 @@ function startSendingAudioData() {
   audioWorkletNode.port.onmessage = (event) => {
     const audioData = event.data;
     
-    if (!(audioData instanceof ArrayBuffer)) {
-      logger.warn('Received non-ArrayBuffer data from AudioWorklet:', typeof audioData);
+    if (!(audioData instanceof Float32Array)) {
+      logger.warn('Received non-Float32Array data from AudioWorklet:', typeof audioData);
       return;
     }
 
-    if (deepgramConnection && deepgramConnection.getReadyState() === WebSocket.OPEN) {
+    // Convert Float32Array to Int16Array
+    const int16Data = new Int16Array(audioData.length);
+    for (let i = 0; i < audioData.length; i++) {
+      int16Data[i] = Math.max(-32768, Math.min(32767, Math.floor(audioData[i] * 32768)));
+    }
+
+    if (deepgramConnection && deepgramConnection.getReadyState() === 1) { // 1 is OPEN
       try {
-        deepgramConnection.send(audioData);
+        deepgramConnection.send(int16Data.buffer);
         packetCount++;
-        totalBytesSent += audioData.byteLength;
+        totalBytesSent += int16Data.byteLength;
         
         if (packetCount % 100 === 0) {
           logger.info(`Sent ${packetCount} audio packets to Deepgram. Total bytes: ${totalBytesSent}`);
@@ -1229,7 +1251,6 @@ function startSendingAudioData() {
 
   logger.info('Audio data sending setup complete');
 }
-
 
 async function stopRecording() {
   logger.info('Stopping recording...');
