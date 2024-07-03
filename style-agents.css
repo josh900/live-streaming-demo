@@ -84,20 +84,19 @@ body * {
 }
 
 button {
-  padding: 10px 20px;
   border-radius: 5px;
   border: none;
-  font-size: 16px;
   background-color: #7459fe;
   color: #fff;
   cursor: pointer;
   transition: background-color 0.3s ease;
-
 }
+
 
 button:hover {
   background-color: #5a3dd3;
 }
+
 
 button#connect-button {
   background-color: #4CAF50;
@@ -107,11 +106,10 @@ button#destroy-button {
   background-color: #f44336;
 }
 
-button#start-button {
-  margin: 1em;
+#start-button {
+  padding: 12px 24px;
   font-size: 18px;
-  padding: 15px 30px;
-  background-color: #2196F3;
+  margin-right: 10px;
 }
 
 h4 {
@@ -133,9 +131,15 @@ h4 {
 
 #speak-controls {
   display: flex;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: flex-start;
+
 }
 
+#auto-speak-toggle {
+  padding: 10px 20px;
+  font-size: 16px;
+}
 
 
 #status {
