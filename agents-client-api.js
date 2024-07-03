@@ -1064,10 +1064,14 @@ async function startStreaming(assistantReply) {
 
 async function startRecording() {
   try {
+    logger.info('Starting recording process...');
+
     // First, set up audio capture
     await startAudioCapture();
+    logger.info('Audio capture set up successfully');
 
     // Then initialize Deepgram connection
+    logger.info('Initializing Deepgram connection...');
     deepgramConnection = deepgramClient.listen.live({
       model: "nova-2",
       language: "en-US",
@@ -1093,6 +1097,7 @@ async function startRecording() {
       if (transcriptData.transcript && !transcription.is_final) {
         currentTranscript = transcriptData.transcript;
         updateInterimTranscript(currentTranscript);
+        logger.debug('Updated interim transcript:', currentTranscript);
       }
     });
 
@@ -1101,6 +1106,7 @@ async function startRecording() {
       if (currentTranscript.trim() !== '') {
         finalizeTranscript(currentTranscript);
         sendChatToGroq();
+        logger.info('Finalized transcript:', currentTranscript);
         currentTranscript = '';
       }
     });
@@ -1114,7 +1120,9 @@ async function startRecording() {
     });
 
     startInactivityTimeout();
+    logger.info('Inactivity timeout started');
 
+    logger.info('Recording started successfully');
   } catch (error) {
     logger.error('Error in startRecording:', error);
   }
@@ -1147,10 +1155,14 @@ function startInactivityTimeout() {
 
 async function startAudioCapture() {
   try {
+    logger.info('Starting audio capture...');
     microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    logger.info('Microphone stream obtained');
     audioContext = new AudioContext();
     
+    logger.info('Adding audio worklet module...');
     await audioContext.audioWorklet.addModule('audio-processor.js');
+    logger.info('Audio worklet module added');
     
     mediaStreamSource = audioContext.createMediaStreamSource(microphoneStream);
     audioWorkletNode = new AudioWorkletNode(audioContext, 'audio-processor');
@@ -1170,8 +1182,11 @@ function startSendingAudioData() {
     return;
   }
 
+  logger.info('Setting up audio data sending...');
+
   audioWorkletNode.port.onmessage = (event) => {
     const audioData = event.data;
+    logger.debug('Received audio data from worklet. Length:', audioData.length);
     if (deepgramConnection && deepgramConnection.getReadyState() === WebSocket.OPEN) {
       try {
         deepgramConnection.send(audioData);
@@ -1184,7 +1199,7 @@ function startSendingAudioData() {
     }
   };
 
-  logger.info('Started sending audio data to Deepgram');
+  logger.info('Audio data sending setup complete');
 }
 
 async function stopRecording() {
