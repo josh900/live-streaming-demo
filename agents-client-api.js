@@ -1074,7 +1074,7 @@ async function startRecording() {
       language: "en-US",
       smart_format: true,
       interim_results: true,
-      utterance_end_ms: "1000",
+      utterance_end_ms: 1000,
       punctuate: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate,
