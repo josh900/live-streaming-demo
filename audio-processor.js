@@ -2,6 +2,7 @@ class AudioProcessor extends AudioWorkletProcessor {
     process(inputs, outputs, parameters) {
       const input = inputs[0];
       if (input && input.length > 0) {
+        // Convert the Float32Array to Int16Array
         const inputData = input[0];
         const int16Data = new Int16Array(inputData.length);
         for (let i = 0; i < inputData.length; i++) {
