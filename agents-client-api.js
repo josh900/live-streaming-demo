@@ -280,7 +280,6 @@ function updateTranscript(text, isFinal) {
 }
 
 
-
 function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
 }
@@ -760,7 +759,6 @@ async function startStreaming(assistantReply) {
 }
 
 
-
 function startSendingAudioData() {
   logger.debug('Starting to send audio data...');
 
@@ -802,12 +800,19 @@ function handleTranscription(data) {
   if (data.is_final) {
     logger.info('Final transcript:', transcript);
     currentUtterance += transcript + ' ';
+    updateTranscript(currentUtterance.trim(), true);
+    chatHistory.push({
+      role: 'user',
+      content: currentUtterance.trim(),
+    });
+    sendChatToGroq();
+    currentUtterance = '';
+    interimMessageAdded = false;
   } else {
     logger.info('Interim transcript:', transcript);
+    updateTranscript(currentUtterance + transcript, false);
   }
-  updateTranscript(currentUtterance + transcript, false);
 }
-
 
 async function startRecording() {
   if (isRecording) {
@@ -924,7 +929,6 @@ function handleUtteranceEnd(data) {
   }
 }
 
-
 async function stopRecording() {
   if (isRecording) {
     logger.info('Stopping recording...');
@@ -1032,14 +1036,6 @@ async function sendChatToGroq() {
 
     logger.debug('Assistant reply:', assistantReply);
 
-    clearTimeout(inactivityTimeout);
-    inactivityTimeout = setTimeout(() => {
-      if (isRecording) {
-        logger.debug('Inactivity timeout reached. Stopping recording.');
-        startButton.click();
-      }
-    }, 45000); // 45 seconds
-
     await startStreaming(assistantReply);
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
@@ -1054,7 +1050,6 @@ async function sendChatToGroq() {
     isRecording = false;
   }
 }
-
 
 async function reinitializeConnection() {
   if (isInitializing) {
