@@ -844,7 +844,7 @@ async function startRecording() {
 
     // Set up Deepgram connection
     deepgramConnection = deepgramClient.listen.live({
-      model: "general",
+      model: "nova-2",
       language: "en-US",
       smart_format: true,
       interim_results: true,
@@ -855,7 +855,7 @@ async function startRecording() {
     });
 
     logger.debug('Deepgram connection created with options:', {
-      model: "general",
+      model: "nova-2",
       language: "en-US",
       smart_format: true,
       interim_results: true,
