@@ -1,12 +1,16 @@
 'use strict';
 import DID_API from './api.js';
 import logger from './logger.js';
+const { Deepgram } = deepgram;
 
 
 const GROQ_API_KEY = DID_API.groqKey;
 const DEEPGRAM_API_KEY = DID_API.deepgramKey;
 
 if (DID_API.key == '🤫') alert('Please put your api key inside ./api.js and restart..');
+
+const deepgramClient = new Deepgram(DID_API.deepgramKey);
+
 
 const RTCPeerConnection = (
   window.RTCPeerConnection ||
@@ -38,6 +42,8 @@ let audioDelay = 0.2; // 200ms delay
 let streamVideoElement;
 let idleVideoElement;
 let deepgramConnection;
+let isRecording = false;
+
 
 
 const avatars = {
@@ -1050,80 +1056,98 @@ async function startStreaming(assistantReply) {
 }
 
 async function startRecording() {
-  const deepgram = new Deepgram.Deepgram(DEEPGRAM_API_KEY);
+  try {
+    const connection = await deepgramClient.listen.live({
+      model: "nova-2",
+      language: "en-US",
+      smart_format: true,
+      interim_results: true,
+      utterance_end_ms: "1000",
+      punctuate: true,
+    });
 
-  const connection = await deepgram.transcription.live({
-    model: "nova-2",
-    language: "en-US",
-    smart_format: true,
-    interim_results: true,
-    utterance_end_ms: "1000",
-    punctuate: true,
+    connection.addListener('open', () => {
+      logger.info('Deepgram WebSocket Connection opened');
+      // Start capturing audio and sending it to Deepgram
+      startAudioCapture(connection);
+    });
+
+    let currentTranscript = '';
+
+    connection.addListener('transcriptReceived', (transcription) => {
+      const transcriptData = transcription.channel.alternatives[0];
+      if (transcriptData.transcript && !transcription.is_final) {
+        // Update the interim transcript
+        currentTranscript = transcriptData.transcript;
+        updateInterimTranscript(currentTranscript);
+      }
+    });
+
+    connection.addListener('utteranceEnd', () => {
+      if (currentTranscript.trim() !== '') {
+        finalizeTranscript(currentTranscript);
+        sendChatToGroq();
+        currentTranscript = '';
+      }
+    });
+
+    connection.addListener('error', (err) => {
+      logger.error('Deepgram error:', err);
+    });
+
+    connection.addListener('close', () => {
+      logger.info('Deepgram WebSocket connection closed');
+    });
+
+    // Store the connection for later use
+    deepgramConnection = connection;
+
+    // Start inactivity timeout
+    startInactivityTimeout();
+
+  } catch (error) {
+    logger.error('Error setting up Deepgram connection:', error);
+  }
+}
+
+function startAudioCapture(connection) {
+  navigator.mediaDevices.getUserMedia({ audio: true })
+    .then(stream => {
+      const audioContext = new AudioContext();
+      const source = audioContext.createMediaStreamSource(stream);
+      const processor = audioContext.createScriptProcessor(1024, 1, 1);
+
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+
+      processor.onaudioprocess = (e) => {
+        const audioData = e.inputBuffer.getChannelData(0);
+        if (connection.getReadyState() === WebSocket.OPEN) {
+          connection.send(audioData);
+        }
+      };
+    })
+    .catch(err => {
+      logger.error('Error accessing microphone:', err);
+    });
+}
+
+function updateInterimTranscript(transcript) {
+  document.getElementById('msgHistory').innerHTML = document.getElementById('msgHistory').innerHTML.replace(
+    /<span style='opacity:0.5'><u>User \(interim\):<\/u>.*<\/span><br>/,
+    `<span style='opacity:0.5'><u>User (interim):</u> ${transcript}</span><br>`
+  );
+}
+
+function finalizeTranscript(transcript) {
+  document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User:</u> ${transcript}</span><br>`;
+  chatHistory.push({
+    role: 'user',
+    content: transcript,
   });
+}
 
-  connection.addListener('open', () => {
-    logger.info('Deepgram WebSocket Connection opened');
-
-    // Start capturing audio and sending it to Deepgram
-    navigator.mediaDevices.getUserMedia({ audio: true })
-      .then(stream => {
-        const audioContext = new AudioContext();
-        const source = audioContext.createMediaStreamSource(stream);
-        const processor = audioContext.createScriptProcessor(1024, 1, 1);
-
-        source.connect(processor);
-        processor.connect(audioContext.destination);
-
-        processor.onaudioprocess = (e) => {
-          const audioData = e.inputBuffer.getChannelData(0);
-          if (connection.getReadyState() === WebSocket.OPEN) {
-            connection.send(audioData);
-          }
-        };
-      })
-      .catch(err => {
-        logger.error('Error accessing microphone:', err);
-      });
-  });
-
-  let currentTranscript = '';
-
-  connection.addListener('transcriptReceived', (transcription) => {
-    const transcriptData = transcription.channel.alternatives[0];
-    if (transcriptData.transcript && !transcription.is_final) {
-      // Update the interim transcript
-      currentTranscript = transcriptData.transcript;
-      document.getElementById('msgHistory').innerHTML = document.getElementById('msgHistory').innerHTML.replace(
-        /<span style='opacity:0.5'><u>User \(interim\):<\/u>.*<\/span><br>/,
-        `<span style='opacity:0.5'><u>User (interim):</u> ${currentTranscript}</span><br>`
-      );
-    }
-  });
-
-  connection.addListener('utteranceEnd', () => {
-    if (currentTranscript.trim() !== '') {
-      document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User:</u> ${currentTranscript}</span><br>`;
-      chatHistory.push({
-        role: 'user',
-        content: currentTranscript,
-      });
-      sendChatToGroq();
-      currentTranscript = '';
-    }
-  });
-
-  connection.addListener('error', (err) => {
-    logger.error('Deepgram error:', err);
-  });
-
-  connection.addListener('close', () => {
-    logger.info('Deepgram WebSocket connection closed');
-  });
-
-  // Store the connection for later use
-  deepgramConnection = connection;
-
-  // Start inactivity timeout
+function startInactivityTimeout() {
   inactivityTimeout = setTimeout(() => {
     if (isRecording) {
       logger.info('Inactivity timeout reached. Stopping recording.');
@@ -1140,6 +1164,7 @@ async function stopRecording() {
 
   clearTimeout(inactivityTimeout);
 }
+
 
 async function sendChatToGroq() {
   try {
@@ -1284,7 +1309,6 @@ destroyButton.onclick = async () => {
 };
 
 const startButton = document.getElementById('start-button');
-let isRecording = false;
 
 startButton.onclick = async () => {
   if (!isRecording) {
