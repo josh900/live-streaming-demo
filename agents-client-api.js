@@ -1088,18 +1088,21 @@ async function startRecording() {
 
     let currentTranscript = '';
 
-    deepgramConnection.addListener('transcriptReceived', (transcription) => {
-      logger.info('Received transcription:', JSON.stringify(transcription));
-      const transcriptData = transcription.channel.alternatives[0];
-      if (transcriptData.transcript && !transcription.is_final) {
-        currentTranscript = transcriptData.transcript;
-        logger.info('Updating interim transcript:', currentTranscript);
-        updateInterimTranscript(currentTranscript);
-      } else if (transcription.is_final) {
-        logger.info('Finalizing transcript:', currentTranscript);
-        finalizeTranscript(currentTranscript);
-        sendChatToGroq();
-        currentTranscript = '';
+    deepgramConnection.addListener('transcriptReceived', (message) => {
+      logger.info('Received transcription:', JSON.stringify(message));
+      
+      if (message.is_final) {
+        const transcriptData = message.channel.alternatives[0];
+        if (transcriptData && transcriptData.transcript) {
+          currentTranscript += transcriptData.transcript + ' ';
+          logger.info('Updated transcript:', currentTranscript);
+          updateTranscript(currentTranscript, true);
+        }
+      } else {
+        const transcriptData = message.channel.alternatives[0];
+        if (transcriptData && transcriptData.transcript) {
+          updateTranscript(transcriptData.transcript, false);
+        }
       }
     });
 
@@ -1109,6 +1112,7 @@ async function startRecording() {
 
     deepgramConnection.addListener('close', () => {
       logger.info('Deepgram WebSocket connection closed');
+      finalizeTranscript(currentTranscript);
     });
 
     startInactivityTimeout();
@@ -1119,20 +1123,40 @@ async function startRecording() {
   }
 }
 
-function updateInterimTranscript(transcript) {
-  document.getElementById('msgHistory').innerHTML = document.getElementById('msgHistory').innerHTML.replace(
-    /<span style='opacity:0.5'><u>User \(interim\):<\/u>.*<\/span><br>/,
-    `<span style='opacity:0.5'><u>User (interim):</u> ${transcript}</span><br>`
-  );
+function updateTranscript(text, isFinal) {
+  if (isFinal) {
+    document.getElementById('msgHistory').innerHTML += `<span><u>User:</u> ${text}</span><br>`;
+    chatHistory.push({
+      role: 'user',
+      content: text,
+    });
+    sendChatToGroq();
+  } else {
+    updateInterimTranscript(text);
+  }
 }
 
-function finalizeTranscript(transcript) {
-  document.getElementById('msgHistory').innerHTML += `<span style='opacity:0.5'><u>User:</u> ${transcript}</span><br>`;
-  chatHistory.push({
-    role: 'user',
-    content: transcript,
-  });
-  sendChatToGroq();
+
+function updateInterimTranscript(text) {
+  const msgHistory = document.getElementById('msgHistory');
+  const interimSpan = msgHistory.querySelector('span[data-interim]');
+  
+  if (interimSpan) {
+    interimSpan.textContent = `User (interim): ${text}`;
+  } else {
+    msgHistory.innerHTML += `<span data-interim style='opacity:0.5'><u>User (interim):</u> ${text}</span><br>`;
+  }
+}
+
+function finalizeTranscript(text) {
+  if (text.trim()) {
+    document.getElementById('msgHistory').innerHTML += `<span><u>User:</u> ${text}</span><br>`;
+    chatHistory.push({
+      role: 'user',
+      content: text,
+    });
+    sendChatToGroq();
+  }
 }
 
 function startInactivityTimeout() {
@@ -1347,7 +1371,6 @@ async function sendChatToGroq() {
     }
   }
 }
-
 
 async function reinitializeConnection() {
   if (isInitializing) {
