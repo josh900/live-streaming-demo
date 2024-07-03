@@ -49,6 +49,7 @@ let mediaStreamSource;
 let processor;
 let audioWorkletNode;
 let microphoneStream;
+let audioChunks = [];
 
 
 
@@ -1156,6 +1157,12 @@ async function startRecording() {
       logger.error('Error details:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
     });
 
+    deepgramConnection.addListener('warning', (warning) => {
+      logger.warn('Deepgram warning:', warning);
+    });
+    
+
+    
     deepgramConnection.addListener('close', () => {
       logger.info('Deepgram WebSocket connection closed');
       finalizeTranscript(currentTranscript);
@@ -1264,6 +1271,9 @@ function startSendingAudioData() {
       return;
     }
 
+
+    audioChunks.push(audioData);
+
     // Log a sample of the audio data
     if (packetCount % 100 === 0) {
       const sampleInt16Array = new Int16Array(audioData.slice(0, 10));
@@ -1304,8 +1314,33 @@ function isSilent(audioData) {
   return maxLevel < threshold;
 }
 
+function saveAudioFile() {
+  const blob = new Blob(audioChunks, { type: 'audio/webm' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.style.display = 'none';
+  a.href = url;
+  a.download = 'recorded_audio.webm';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  }, 100);
+}
+
+
 async function stopRecording() {
+
+
   logger.info('Stopping recording...');
+
+  
+  saveAudioFile();
+  audioChunks = []; // Clear the chunks for the next recording
+  
+
+
   if (deepgramConnection) {
     logger.info('Finishing Deepgram connection');
     deepgramConnection.finish();
@@ -1341,6 +1376,7 @@ async function stopRecording() {
 
   clearTimeout(inactivityTimeout);
   logger.info('Recording stopped and resources cleaned up');
+
 }
 
 async function sendChatToGroq() {
