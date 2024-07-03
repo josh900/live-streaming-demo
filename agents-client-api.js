@@ -1062,6 +1062,7 @@ async function startStreaming(assistantReply) {
   }
 }
 
+
 async function startRecording() {
   try {
     // First, set up audio capture
@@ -1094,6 +1095,16 @@ async function startRecording() {
         currentTranscript = transcriptData.transcript;
         updateInterimTranscript(currentTranscript);
       }
+    });
+
+    deepgramConnection.addListener('open', () => {
+      logger.info('Deepgram WebSocket Connection opened');
+      startSendingAudioData();
+      
+      // Send a test audio snippet
+      const testAudio = new Int16Array([0, 100, 200, 300, 400, 500]).buffer;
+      deepgramConnection.send(testAudio);
+      logger.info('Sent test audio snippet to Deepgram');
     });
 
     deepgramConnection.addListener('utteranceEnd', () => {
