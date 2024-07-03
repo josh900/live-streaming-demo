@@ -2,7 +2,8 @@
 import DID_API from './api.js';
 import logger from './logger.js';
 const { Deepgram } = deepgram;
-const { createClient } = deepgram;
+const { createClient, LiveTranscriptionEvents } = deepgram;
+
 
 
 
@@ -1162,25 +1163,25 @@ async function startRecording() {
       sample_rate: audioContext.sampleRate,
     });
 
-    deepgramConnection.addListener('open', () => {
+    deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
       logger.info('Deepgram WebSocket Connection opened');
       startSendingAudioData();
     });
 
-    deepgramConnection.addListener('close', () => {
+    deepgramConnection.addListener(LiveTranscriptionEvents.Close, () => {
       logger.info('Deepgram WebSocket connection closed');
     });
 
-    deepgramConnection.addListener('transcriptReceived', (message) => {
-      logger.info('Received transcription:', JSON.stringify(message));
-      handleTranscription(message);
+    deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
+      logger.info('Received transcription:', JSON.stringify(data));
+      handleTranscription(data);
     });
 
-    deepgramConnection.addListener('error', (err) => {
+    deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
       logger.error('Deepgram error:', err);
     });
 
-    deepgramConnection.addListener('warning', (warning) => {
+    deepgramConnection.addListener(LiveTranscriptionEvents.Warning, (warning) => {
       logger.warn('Deepgram warning:', warning);
     });
 
@@ -1190,20 +1191,50 @@ async function startRecording() {
   }
 }
 
+function startSendingAudioData() {
+  logger.info('Starting to send audio data...');
 
-function handleTranscription(message) {
-  if (message.is_final) {
-    const transcriptData = message.channel.alternatives[0];
-    if (transcriptData && transcriptData.transcript) {
-      logger.info('Final transcript:', transcriptData.transcript);
-      document.getElementById('msgHistory').innerHTML += `<span><u>User:</u> ${transcriptData.transcript}</span><br>`;
+  let packetCount = 0;
+  let totalBytesSent = 0;
+
+  audioWorkletNode.port.onmessage = (event) => {
+    const audioData = event.data;
+    
+    if (!(audioData instanceof ArrayBuffer)) {
+      logger.warn('Received non-ArrayBuffer data from AudioWorklet:', typeof audioData);
+      return;
     }
+
+    if (deepgramConnection && deepgramConnection.getReadyState() === WebSocket.OPEN) {
+      try {
+        deepgramConnection.send(audioData);
+        packetCount++;
+        totalBytesSent += audioData.byteLength;
+        
+        if (packetCount % 100 === 0) {
+          logger.info(`Sent ${packetCount} audio packets to Deepgram. Total bytes: ${totalBytesSent}`);
+        }
+      } catch (error) {
+        logger.error('Error sending audio data to Deepgram:', error);
+      }
+    } else {
+      logger.warn('Deepgram connection not open, cannot send audio data. ReadyState:', deepgramConnection ? deepgramConnection.getReadyState() : 'undefined');
+    }
+  };
+
+  logger.info('Audio data sending setup complete');
+}
+
+
+
+function handleTranscription(data) {
+  const transcript = data.channel.alternatives[0].transcript;
+  if (data.is_final) {
+    logger.info('Final transcript:', transcript);
+    document.getElementById('msgHistory').innerHTML += `<span><u>User:</u> ${transcript}</span><br>`;
   } else {
-    const transcriptData = message.channel.alternatives[0];
-    if (transcriptData && transcriptData.transcript) {
-      logger.info('Interim transcript:', transcriptData.transcript);
-      updateInterimTranscript(transcriptData.transcript);
-    }
+    logger.info('Interim transcript:', transcript);
+    updateInterimTranscript(transcript);
   }
 }
 
@@ -1285,39 +1316,6 @@ async function startAudioCapture() {
   }
 }
 
-function startSendingAudioData() {
-  logger.info('Starting to send audio data...');
-
-  let packetCount = 0;
-  let totalBytesSent = 0;
-
-  audioWorkletNode.port.onmessage = (event) => {
-    const audioData = event.data;
-    
-    if (!(audioData instanceof ArrayBuffer)) {
-      logger.warn('Received non-ArrayBuffer data from AudioWorklet:', typeof audioData);
-      return;
-    }
-
-    if (deepgramConnection && deepgramConnection.getReadyState() === WebSocket.OPEN) {
-      try {
-        deepgramConnection.send(audioData);
-        packetCount++;
-        totalBytesSent += audioData.byteLength;
-        
-        if (packetCount % 100 === 0) {
-          logger.info(`Sent ${packetCount} audio packets to Deepgram. Total bytes: ${totalBytesSent}`);
-        }
-      } catch (error) {
-        logger.error('Error sending audio data to Deepgram:', error);
-      }
-    } else {
-      logger.warn('Deepgram connection not open, cannot send audio data. ReadyState:', deepgramConnection ? deepgramConnection.getReadyState() : 'undefined');
-    }
-  };
-
-  logger.info('Audio data sending setup complete');
-}
 
 
 function isSilent(audioData) {
@@ -1362,6 +1360,7 @@ function stopRecording() {
   
   logger.info('Recording and transcription stopped');
 }
+
 
 
 async function sendChatToGroq() {
@@ -1533,7 +1532,7 @@ startButton.onclick = async () => {
   } else {
     startButton.textContent = 'Speak';
     logger.info('Stopping recording...');
-    await stopRecording();
+    stopRecording();
     isRecording = false;
     logger.info('Recording stopped');
   }
