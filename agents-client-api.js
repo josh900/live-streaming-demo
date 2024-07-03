@@ -761,13 +761,12 @@ async function startStreaming(assistantReply) {
 }
 
 async function startRecording() {
-
   if (isRecording) {
-    logger.warn('Recording is already in progress');
+    logger.warn('Recording is already in progress. Stopping current recording.');
+    await stopRecording();
     return;
   }
 
-  
   logger.info('Starting recording process...');
   
   // Reset states
@@ -1049,13 +1048,13 @@ async function sendChatToGroq() {
     msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
     msgHistory.scrollTop = msgHistory.scrollHeight;
   } finally {
-    // Ensure the button is reset even if there's an error
+    // Ensure the button is reset and recording is stopped
+    await stopRecording();
     const startButton = document.getElementById('start-button');
     startButton.textContent = 'Speak';
     isRecording = false;
   }
 }
-
 
 
 async function reinitializeConnection() {
