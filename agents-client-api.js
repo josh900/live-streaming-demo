@@ -50,6 +50,7 @@ let audioChunks = [];
 let deepgramSource;
 let additionalContext = '';
 let currentUtterance = '';
+let interimMessageAdded = false;
 
 
 const avatars = {
@@ -240,7 +241,7 @@ function initializeWebSocket() {
 
 function updateTranscript(text, isFinal) {
   const msgHistory = document.getElementById('msgHistory');
-  const interimSpan = msgHistory.querySelector('span[data-interim]');
+  let interimSpan = msgHistory.querySelector('span[data-interim]');
   
   if (isFinal) {
     if (interimSpan) {
@@ -248,16 +249,22 @@ function updateTranscript(text, isFinal) {
     }
     msgHistory.innerHTML += `<span><u>User:</u> ${text}</span><br>`;
     logger.info('Final transcript added to chat history:', text);
+    interimMessageAdded = false;
   } else {
-    if (interimSpan) {
-      interimSpan.innerHTML = `<u>User (interim):</u> ${text}`;
-    } else {
-      msgHistory.innerHTML += `<span data-interim style='opacity:0.5'><u>User (interim):</u> ${text}</span><br>`;
+    if (text.trim()) {
+      if (!interimMessageAdded) {
+        msgHistory.innerHTML += `<span data-interim style='opacity:0.5'><u>User (interim):</u> ${text}</span><br>`;
+        interimMessageAdded = true;
+      } else if (interimSpan) {
+        interimSpan.innerHTML = `<u>User (interim):</u> ${text}`;
+      }
     }
-    // Scroll to the bottom of the chat history
-    msgHistory.scrollTop = msgHistory.scrollHeight;
   }
+  // Scroll to the bottom of the chat history
+  msgHistory.scrollTop = msgHistory.scrollHeight;
 }
+
+
 
 function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
@@ -743,6 +750,7 @@ async function startRecording() {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     logger.info('Microphone stream obtained');
     
+    // Set up MediaRecorder for saving audio
     mediaRecorder = new MediaRecorder(stream);
     
     mediaRecorder.ondataavailable = event => {
@@ -757,12 +765,14 @@ async function startRecording() {
       link.download = 'recorded_audio.webm';
       link.click();
       
+      // Reset for next recording
       audioChunks = [];
     };
 
     mediaRecorder.start();
     logger.info('MediaRecorder started');
 
+    // Set up AudioContext and AudioWorklet for Deepgram
     audioContext = new AudioContext();
     logger.info('Audio context created. Sample rate:', audioContext.sampleRate);
     
@@ -779,23 +789,24 @@ async function startRecording() {
     source.connect(audioWorkletNode);
     logger.info('Media stream source connected to audio worklet node');
 
+    // Set up Deepgram connection
     deepgramConnection = deepgramClient.listen.live({
       model: "general",
       language: "en-US",
       smart_format: true,
       interim_results: true,
-      utterance_end_ms: 500,
+      utterance_end_ms: 1000,
       punctuate: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate,
     });
-    
+
     logger.info('Deepgram connection created with options:', {
       model: "general",
       language: "en-US",
       smart_format: true,
       interim_results: true,
-      utterance_end_ms: 500,
+      utterance_end_ms: 1000,
       punctuate: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate,
@@ -815,6 +826,11 @@ async function startRecording() {
       handleTranscription(data);
     });
 
+    deepgramConnection.addListener(LiveTranscriptionEvents.UtteranceEnd, (data) => {
+      logger.info('Utterance end event received:', data);
+      handleUtteranceEnd(data);
+    });
+
     deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
       logger.error('Deepgram error:', err);
     });
@@ -823,14 +839,14 @@ async function startRecording() {
       logger.warn('Deepgram warning:', warning);
     });
 
-    deepgramConnection.addListener(LiveTranscriptionEvents.UtteranceEnd, (data) => {
-      logger.info('Utterance end event received:', data);
-      handleUtteranceEnd(data);
-    });
+    // Reset flags and variables
+    currentUtterance = '';
+    interimMessageAdded = false;
 
     logger.info('Recording and transcription started successfully');
   } catch (error) {
     logger.error('Error starting recording:', error);
+    throw error;
   }
 }
 
@@ -873,12 +889,13 @@ function handleTranscription(data) {
   if (data.is_final) {
     logger.info('Final transcript:', transcript);
     currentUtterance += transcript + ' ';
-    updateTranscript(currentUtterance, false);
   } else {
     logger.info('Interim transcript:', transcript);
-    updateTranscript(currentUtterance + transcript, false);
   }
+  updateTranscript(currentUtterance + transcript, false);
 }
+
+
 
 
 
@@ -892,6 +909,7 @@ function handleUtteranceEnd(data) {
     });
     sendChatToGroq();
     currentUtterance = '';
+    interimMessageAdded = false;
   }
 }
 
@@ -949,6 +967,12 @@ async function sendChatToGroq() {
     let assistantReply = '';
     let done = false;
 
+    const msgHistory = document.getElementById('msgHistory');
+    const assistantSpan = document.createElement('span');
+    assistantSpan.innerHTML = '<u>Assistant:</u> ';
+    msgHistory.appendChild(assistantSpan);
+    msgHistory.appendChild(document.createElement('br'));
+
     while (!done) {
       const { value, done: readerDone } = await reader.read();
       done = readerDone;
@@ -970,12 +994,16 @@ async function sendChatToGroq() {
               const parsed = JSON.parse(data);
               const content = parsed.choices[0]?.delta?.content || '';
               assistantReply += content;
+              assistantSpan.innerHTML += content;
               logger.debug('Parsed content:', content);
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
           }
         }
+        
+        // Scroll to the bottom of the chat history
+        msgHistory.scrollTop = msgHistory.scrollHeight;
       }
     }
 
@@ -987,11 +1015,6 @@ async function sendChatToGroq() {
       role: 'assistant',
       content: assistantReply,
     });
-
-    logger.info('Updating chat history in UI');
-    const msgHistory = document.getElementById('msgHistory');
-    msgHistory.innerHTML += `<span><u>Assistant:</u> ${assistantReply}</span><br>`;
-    msgHistory.scrollTop = msgHistory.scrollHeight;
 
     logger.info('Assistant reply:', assistantReply);
 
@@ -1006,11 +1029,18 @@ async function sendChatToGroq() {
     await startStreaming(assistantReply);
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
-    if (isRecording) {
-      await reinitializeConnection();
-    }
+    const msgHistory = document.getElementById('msgHistory');
+    msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
+    msgHistory.scrollTop = msgHistory.scrollHeight;
+  } finally {
+    // Ensure the button is reset even if there's an error
+    const startButton = document.getElementById('start-button');
+    startButton.textContent = 'Speak';
+    isRecording = false;
   }
 }
+
+
 
 async function reinitializeConnection() {
   if (isInitializing) {
