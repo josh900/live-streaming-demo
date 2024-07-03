@@ -309,6 +309,16 @@ async function initialize() {
 
   initTransitionCanvas();
 
+  // Dynamically populate avatar options
+  const avatarSelect = document.getElementById('avatar-select');
+  avatarSelect.innerHTML = ''; // Clear existing options
+  for (const [key, value] of Object.entries(avatars)) {
+    const option = document.createElement('option');
+    option.value = key;
+    option.textContent = key.charAt(0).toUpperCase() + key.slice(1); // Capitalize first letter
+    avatarSelect.appendChild(option);
+  }
+
   playIdleVideo();
   showLoadingSymbol();
   initTransitionCanvas();
@@ -330,6 +340,8 @@ async function initialize() {
   appendContextButton.addEventListener('click', () => updateContext('append'));
   replaceContextButton.addEventListener('click', () => updateContext('replace'));
 }
+
+
 
 function updateContext(action) {
   const contextInput = document.getElementById('context-input');
