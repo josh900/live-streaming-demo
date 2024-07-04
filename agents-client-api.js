@@ -75,12 +75,27 @@ const avatars = {
   joshc: {
     idleImage: 'https://skoop-general.s3.amazonaws.com/joshc_idle.png',
     idleVideo: 'https://skoop-general.s3.amazonaws.com/joshc_idle.mp4',
-    voice: 'en-US-ChristopherNeural'
+    voice: 'en-US-GuyNeural'
   },
   aric: {
     idleImage: 'https://skoop-general.s3.amazonaws.com/aric_idle.png',
     idleVideo: 'https://skoop-general.s3.amazonaws.com/aric_idle.mp4',
-    voice: 'en-US-ChristopherNeural'
+    voice: 'en-US-GuyNeural'
+  },
+  Joshm1: {
+    idleImage: 'https://skoop-general.s3.amazonaws.com/joshm1_idle.png',
+    idleVideo: 'https://skoop-general.s3.amazonaws.com/joshm1_idle.mp4',
+    voice: 'en-US-GuyNeural'
+  },
+  Joshm2: {
+    idleImage: 'https://skoop-general.s3.amazonaws.com/joshm2_idle.png',
+    idleVideo: 'https://skoop-general.s3.amazonaws.com/joshm2_idle.mp4',
+    voice: 'en-US-GuyNeural'
+  },
+  Arshi: {
+    idleImage: 'https://skoop-general.s3.amazonaws.com/arshi_idle.png',
+    idleVideo: 'https://skoop-general.s3.amazonaws.com/arshi_idle.mp4',
+    voice: 'en-US-AvaNeural'
   },
 };
 
