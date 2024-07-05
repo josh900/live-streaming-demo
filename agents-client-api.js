@@ -39,6 +39,7 @@ let speakTimeout;
 let transitionCanvas;
 let transitionCtx;
 let transitionAnimationFrame;
+let isDebugMode = false;
 
 
 
@@ -416,7 +417,6 @@ You are a helpful, harmless, and honest grocery store assistant. Please answer t
 Reply with only 1 sentance, specifically limiting your response to only the answer to the user and nothing else.
 `;
 
-setLogLevel('DEBUG');
 
 
 function initializeTransitionCanvas() {
@@ -424,7 +424,7 @@ function initializeTransitionCanvas() {
   transitionCanvas.width = 400;
   transitionCanvas.height = 400;
   transitionCtx = transitionCanvas.getContext('2d');
-  
+
   transitionCanvas.style.position = 'absolute';
   transitionCanvas.style.top = '0';
   transitionCanvas.style.left = '0';
@@ -436,7 +436,7 @@ function initializeTransitionCanvas() {
 
 async function handleAvatarChange() {
   currentAvatar = avatarSelect.value;
-  
+
   const idleVideoElement = document.getElementById('idle-video-element');
   if (idleVideoElement) {
     idleVideoElement.src = avatars[currentAvatar].idleVideo;
@@ -455,15 +455,15 @@ async function handleAvatarChange() {
 
   // Stop the current recording and reset states
   await stopRecording();
-  
+
   // Reset transcription-related variables
   currentUtterance = '';
   interimMessageAdded = false;
-  
+
   // Clear the message history
   const msgHistory = document.getElementById('msgHistory');
   msgHistory.innerHTML = '';
-  
+
   // Reset chat history
   chatHistory = [];
 
@@ -502,7 +502,7 @@ async function destroyConnection() {
 function smoothTransition(toStreaming, duration = 250) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
-  
+
   if (!idleVideoElement || !streamVideoElement) {
     logger.warn('Video elements not found for transition');
     return;
@@ -511,30 +511,30 @@ function smoothTransition(toStreaming, duration = 250) {
   logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
 
   let startTime = null;
-  
+
   function animate(currentTime) {
     if (!startTime) startTime = currentTime;
     const elapsed = currentTime - startTime;
     const progress = Math.min(elapsed / duration, 1);
-    
+
     transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
-    
+
     if (toStreaming) {
       // Transitioning to streaming state
       transitionCtx.globalAlpha = 1;
       transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-      
+
       transitionCtx.globalAlpha = progress;
       transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
     } else {
       // Transitioning to idle state
       transitionCtx.globalAlpha = 1;
       transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-      
+
       transitionCtx.globalAlpha = progress;
       transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
     }
-    
+
     if (progress < 1) {
       transitionAnimationFrame = requestAnimationFrame(animate);
     } else {
@@ -550,7 +550,7 @@ function smoothTransition(toStreaming, duration = 250) {
       logger.debug('Smooth transition completed');
     }
   }
-  
+
   cancelAnimationFrame(transitionAnimationFrame);
   transitionAnimationFrame = requestAnimationFrame(animate);
 }
@@ -559,11 +559,11 @@ function smoothTransition(toStreaming, duration = 250) {
 function getVideoElements() {
   const idle = document.getElementById('idle-video-element');
   const stream = document.getElementById('stream-video-element');
-  
+
   if (!idle || !stream) {
     logger.warn('Video elements not found in the DOM');
   }
-  
+
   return { idle, stream };
 }
 
@@ -614,7 +614,7 @@ function initializeWebSocket() {
 function updateTranscript(text, isFinal) {
   const msgHistory = document.getElementById('msgHistory');
   let interimSpan = msgHistory.querySelector('span[data-interim]');
-  
+
   if (isFinal) {
     if (interimSpan) {
       interimSpan.remove();
@@ -644,7 +644,7 @@ function handleTextInput(text) {
 
   // Update transcript in UI
   updateTranscript(text, true);
-  
+
   // Add to chat history
   chatHistory.push({
     role: 'user',
@@ -662,6 +662,9 @@ function updateAssistantReply(text) {
 }
 
 async function initialize() {
+
+  setLogLevel('DEBUG');
+
   // Set up video elements
   const { idle, stream } = getVideoElements();
   idleVideoElement = idle;
@@ -750,7 +753,7 @@ function updateContext(action) {
 function displayBothContexts(original, updated) {
   const contextInput = document.getElementById('context-input');
   contextInput.value = `Original Context:\n${original}\n\nNew Context:\n${updated}`;
-  
+
   // After 5 seconds, reset to just the new context
   setTimeout(() => {
     contextInput.value = updated;
@@ -949,11 +952,49 @@ function setStreamVideoElement(stream) {
   logger.debug('Setting stream video element');
   streamVideoElement.srcObject = stream;
   streamVideoElement.style.opacity = '0';
-  
+
   streamVideoElement.onloadedmetadata = () => {
     logger.debug('Stream video metadata loaded');
     streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
+
+    if (isDebugMode) {
+      downloadStreamVideo(stream);
+    }
   };
+}
+
+
+function downloadStreamVideo(stream) {
+  logger.debug('Starting video download in debug mode');
+
+  const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+  const chunks = [];
+
+  mediaRecorder.ondataavailable = (event) => {
+    if (event.data.size > 0) {
+      chunks.push(event.data);
+    }
+  };
+
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(chunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    document.body.appendChild(a);
+    a.style = 'display: none';
+    a.href = url;
+    a.download = `talking-video-${new Date().toISOString()}.webm`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    logger.debug('Video download completed');
+  };
+
+  mediaRecorder.start();
+
+  // Stop recording after 10 seconds (adjust as needed)
+  setTimeout(() => {
+    mediaRecorder.stop();
+  }, 10000);
 }
 
 
@@ -1032,7 +1073,7 @@ function stopAllStreams() {
     logger.debug('Stopping video streams');
     streamVideoElement.srcObject.getTracks().forEach((track) => track.stop());
     streamVideoElement.srcObject = null;
-    
+
     smoothTransition();
   }
 }
@@ -1217,17 +1258,17 @@ async function startStreaming(assistantReply) {
 
     if (playResponseData.status === 'started') {
       logger.debug('Stream started successfully');
-      
+
       // Get video elements
       const { idle: idleVideoElement, stream: streamVideoElement } = getVideoElements();
-      
+
       // Ensure the stream video element is visible
       streamVideoElement.style.display = 'block';
-      
+
       // Log the current state of video elements
       logger.debug('Idle video element:', idleVideoElement.src);
       logger.debug('Stream video element:', streamVideoElement.srcObject);
-      
+
       // Set up event listeners for the stream video
       streamVideoElement.onloadedmetadata = () => {
         logger.debug('Stream video metadata loaded');
@@ -1236,25 +1277,25 @@ async function startStreaming(assistantReply) {
           logger.debug('Stream video playback started');
         }).catch(e => logger.error('Error playing stream video:', e));
       };
-      
+
       streamVideoElement.oncanplay = () => {
         logger.debug('Stream video can play');
       };
-      
+
       streamVideoElement.onerror = (e) => {
         logger.error('Error with stream video:', e);
       };
-      
+
       // Calculate the duration of the audio
       const audioDuration = playResponseData.audio_duration * 1000;
-      
+
       // Set a timeout to start speaking mode when the avatar finishes
       if (autoSpeakMode) {
         clearTimeout(speakTimeout);
         autoSpeakInProgress = true;
         const startButton = document.getElementById('start-button');
         startButton.textContent = 'Stop';
-        
+
         speakTimeout = setTimeout(async () => {
           if (!isRecording) {
             try {
@@ -1290,7 +1331,7 @@ function startSendingAudioData() {
 
   audioWorkletNode.port.onmessage = (event) => {
     const audioData = event.data;
-    
+
     if (!(audioData instanceof ArrayBuffer)) {
       logger.warn('Received non-ArrayBuffer data from AudioWorklet:', typeof audioData);
       return;
@@ -1301,7 +1342,7 @@ function startSendingAudioData() {
         deepgramConnection.send(audioData);
         packetCount++;
         totalBytesSent += audioData.byteLength;
-        
+
         if (packetCount % 100 === 0) {
           logger.debug(`Sent ${packetCount} audio packets to Deepgram. Total bytes: ${totalBytesSent}`);
         }
@@ -1318,7 +1359,7 @@ function startSendingAudioData() {
 
 function handleTranscription(data) {
   if (!isRecording) return;  // Ignore transcriptions if we're not recording
-  
+
   const transcript = data.channel.alternatives[0].transcript;
   if (data.is_final) {
     logger.debug('Final transcript:', transcript);
@@ -1347,28 +1388,28 @@ async function startRecording() {
   }
 
   logger.debug('Starting recording process...');
-  
+
   // Reset states
   currentUtterance = '';
   interimMessageAdded = false;
-  
+
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     logger.info('Microphone stream obtained');
-    
+
     // Set up AudioContext and AudioWorklet for Deepgram
     audioContext = new AudioContext();
     logger.debug('Audio context created. Sample rate:', audioContext.sampleRate);
-    
+
     await audioContext.audioWorklet.addModule('audio-processor.js');
     logger.debug('Audio worklet module added successfully');
-    
+
     const source = audioContext.createMediaStreamSource(stream);
     logger.debug('Media stream source created');
-    
+
     audioWorkletNode = new AudioWorkletNode(audioContext, 'audio-processor');
     logger.debug('Audio worklet node created');
-    
+
     source.connect(audioWorkletNode);
     logger.debug('Media stream source connected to audio worklet node');
 
@@ -1440,7 +1481,7 @@ async function startRecording() {
 
 function handleUtteranceEnd(data) {
   if (!isRecording) return;  // Ignore utterance end if we're not recording
-  
+
   logger.debug('Utterance end detected:', data);
   if (currentUtterance.trim()) {
     updateTranscript(currentUtterance.trim(), true);
@@ -1457,22 +1498,22 @@ function handleUtteranceEnd(data) {
 async function stopRecording() {
   if (isRecording) {
     logger.info('Stopping recording...');
-    
+
     if (audioContext) {
       await audioContext.close();
       logger.debug('AudioContext closed');
     }
-    
+
     if (deepgramConnection) {
       deepgramConnection.finish();
       logger.debug('Deepgram connection finished');
     }
-    
+
     isRecording = false;
     autoSpeakInProgress = false;
     const startButton = document.getElementById('start-button');
     startButton.textContent = 'Speak';
-    
+
     logger.debug('Recording and transcription stopped');
   }
 }
@@ -1552,7 +1593,7 @@ async function sendChatToGroq() {
             }
           }
         }
-        
+
         // Scroll to the bottom of the chat history
         msgHistory.scrollTop = msgHistory.scrollHeight;
       }
