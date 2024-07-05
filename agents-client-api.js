@@ -567,6 +567,7 @@ function smoothTransition(duration = 300) {
 }
 
 
+
 function getVideoElements() {
   const idle = document.getElementById('idle-video-element');
   const stream = document.getElementById('stream-video-element');
@@ -931,6 +932,7 @@ function onVideoStatusChange(videoIsPlaying, stream) {
 }
 
 
+
 function setStreamVideoElement(stream) {
   const { stream: streamVideoElement } = getVideoElements();
   if (!streamVideoElement) {
@@ -1043,7 +1045,6 @@ function playIdleVideo() {
     idleVideoElement.classList.remove("animated");
   }, 300);
 }
-
 
 
 function stopAllStreams() {

@@ -164,6 +164,7 @@ h4 {
   border-radius: 50%;
 }
 
+
 .chat {
   width: 400px;
 }
@@ -199,6 +200,7 @@ select {
   height: 100%;
   object-fit: cover;
   border-radius: 50%;
+  background: transparent;
 }
 
 #idle-video-element {
