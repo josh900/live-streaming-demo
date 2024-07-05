@@ -807,7 +807,7 @@ async function initialize() {
 }
 
 
-async function preloadAndPlayShortClip() {async function preloadAndPlayShortClip() {
+async function preloadAndPlayShortClip() {
   updateStatus('preloading', 'in-progress');
 
   return new Promise(async (resolve, reject) => {
@@ -897,6 +897,7 @@ async function preloadAndPlayShortClip() {async function preloadAndPlayShortClip
     }
   });
 }
+
 
 
 
