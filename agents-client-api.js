@@ -56,6 +56,10 @@ let speakTimeout;
 let autoSpeakInProgress = false;
 let audioBufferSource;
 let videoStartTimeout;
+let transitionCanvas;
+let transitionCtx;
+let transitionAnimationFrame;
+
 
 
 
@@ -434,6 +438,22 @@ Reply with only 1 sentance, specifically limiting your response to only the answ
 
 setLogLevel('INFO');
 
+
+function initializeTransitionCanvas() {
+  transitionCanvas = document.createElement('canvas');
+  transitionCanvas.width = 400;
+  transitionCanvas.height = 400;
+  transitionCtx = transitionCanvas.getContext('2d');
+  
+  transitionCanvas.style.position = 'absolute';
+  transitionCanvas.style.top = '0';
+  transitionCanvas.style.left = '0';
+  transitionCanvas.style.zIndex = '3';
+  transitionCanvas.style.borderRadius = '50%';
+  document.querySelector('#video-wrapper').appendChild(transitionCanvas);
+}
+
+
 async function handleAvatarChange() {
   currentAvatar = avatarSelect.value;
   
@@ -516,8 +536,6 @@ function blendFrames(idleFrame, talkingFrame, progress) {
   return canvas;
 }
 
-let transitionCanvas;
-let transitionCtx;
 
 function initTransitionCanvas() {
   transitionCanvas = document.createElement('canvas');
@@ -673,6 +691,8 @@ async function initialize() {
   }
 
   currentAvatar = avatarSelect.value;
+
+  initializeTransitionCanvas();
 
   const contextInput = document.getElementById('context-input');
   contextInput.value = context.trim();
@@ -913,14 +933,11 @@ function onVideoStatusChange(videoIsPlaying, stream) {
 
   if (videoIsPlaying) {
     status = 'streaming';
-    streamVideoElement.style.opacity = '1';
-    idleVideoElement.style.opacity = '0';
     setStreamVideoElement(stream);
+    startSmoothTransition(idleVideoElement, streamVideoElement);
   } else {
     status = 'empty';
-    streamVideoElement.style.opacity = '0';
-    idleVideoElement.style.opacity = '1';
-    playIdleVideo();
+    startSmoothTransition(streamVideoElement, idleVideoElement);
   }
 
   const { streaming: streamingStatusLabel } = getStatusLabels();
@@ -933,6 +950,7 @@ function onVideoStatusChange(videoIsPlaying, stream) {
 
 
 
+
 function setStreamVideoElement(stream) {
   const { stream: streamVideoElement } = getVideoElements();
   if (!streamVideoElement) {
@@ -942,10 +960,46 @@ function setStreamVideoElement(stream) {
 
   logger.debug('Setting stream video element');
   streamVideoElement.srcObject = stream;
-  streamVideoElement.play().then(() => {
-    logger.debug('Stream video playback started');
-    smoothTransition();
-  }).catch(e => logger.error('Error playing video:', e));
+  streamVideoElement.play().catch(e => logger.error('Error playing video:', e));
+}
+
+
+
+function startSmoothTransition(fromVideo, toVideo) {
+  if (!transitionCanvas) {
+    initializeTransitionCanvas();
+  }
+
+  let progress = 0;
+  const duration = 500; // Transition duration in milliseconds
+  const startTime = performance.now();
+
+  function animate(currentTime) {
+    progress = (currentTime - startTime) / duration;
+
+    if (progress < 1) {
+      transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
+      
+      // Draw the 'from' video
+      transitionCtx.globalAlpha = 1 - progress;
+      transitionCtx.drawImage(fromVideo, 0, 0, transitionCanvas.width, transitionCanvas.height);
+      
+      // Draw the 'to' video
+      transitionCtx.globalAlpha = progress;
+      transitionCtx.drawImage(toVideo, 0, 0, transitionCanvas.width, transitionCanvas.height);
+
+      transitionAnimationFrame = requestAnimationFrame(animate);
+    } else {
+      // Finish transition
+      transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
+      toVideo.style.opacity = '1';
+      fromVideo.style.opacity = '0';
+      cancelAnimationFrame(transitionAnimationFrame);
+    }
+  }
+
+  // Start the animation
+  transitionAnimationFrame = requestAnimationFrame(animate);
 }
 
 
@@ -1029,7 +1083,6 @@ function playIdleVideo() {
     logger.error('Idle video element not found');
     return;
   }
-  idleVideoElement.classList.add("animated");
   idleVideoElement.src = avatars[currentAvatar].idleVideo;
   idleVideoElement.loop = true;
 
@@ -1041,10 +1094,9 @@ function playIdleVideo() {
     logger.error(`Error loading idle video for ${currentAvatar}:`, e);
   };
 
-  setTimeout(() => {
-    idleVideoElement.classList.remove("animated");
-  }, 300);
+  idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e));
 }
+
 
 
 function stopAllStreams() {

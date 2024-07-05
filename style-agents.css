@@ -203,6 +203,11 @@ select {
   background: transparent;
 }
 
+#idle-video-element,
+#stream-video-element {
+  transition: none;
+}
+
 #idle-video-element {
   z-index: 1;
 }
