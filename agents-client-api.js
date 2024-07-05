@@ -671,7 +671,7 @@ function handleTextInput(text) {
   const textInput = document.getElementById('text-input');
   textInput.value = ''; // Clear the input field
 
-  // Simulate transcription completion
+  // Update transcript in UI
   updateTranscript(text, true);
   
   // Add to chat history
@@ -680,9 +680,10 @@ function handleTextInput(text) {
     content: text,
   });
 
-  // Bypass Groq and directly send to avatar
-  simulateAssistantReply(text);
+  // Send to Groq
+  sendChatToGroq();
 }
+
 
 async function simulateAssistantReply(userInput) {
   // This is a simple echo response. Replace this with more complex logic if needed.
