@@ -1280,7 +1280,7 @@ async function initializeConnection() {
 }
 
 
-async function preloadShortClip() {
+javascriptCopyasync function preloadShortClip() {
   const { preloading: preloadingStatusLabel } = getStatusLabels();
   if (preloadingStatusLabel) {
     preloadingStatusLabel.innerText = 'In Progress';
