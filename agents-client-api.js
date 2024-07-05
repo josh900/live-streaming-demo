@@ -722,32 +722,46 @@ async function initialize() {
     idleVideoElement.muted = true;
   }
   if (streamVideoElement) {
-    streamVideoElement.setAttribute('playsinline', '');
-    // Don't mute the stream video element as it will be used for talking
-  }
-
-  // Create a new video element for preloading
-  preloadVideoElement = document.createElement('video');
-  preloadVideoElement.style.display = 'none';
-  preloadVideoElement.setAttribute('playsinline', '');
-  preloadVideoElement.muted = true;
-  document.querySelector('#video-wrapper').appendChild(preloadVideoElement);
-
-  initTransitionCanvas();
-
-  // Set up avatar selection
-  const avatarSelect = document.getElementById('avatar-select');
-  avatarSelect.innerHTML = ''; // Clear existing options
-  for (const [key, value] of Object.entries(avatars)) {
-    const option = document.createElement('option');
-    option.value = key;
-    option.textContent = key.charAt(0).toUpperCase() + key.slice(1); // Capitalize first letter
-    avatarSelect.appendChild(option);
-  }
-  currentAvatar = avatarSelect.value;
-  
-  // Initialize AudioContext after user interaction
-  document.body.addEventListener('click', initAudioContext, { once: true });
+    streamVideoElement.setAttribute('playsinline', '');async function initialize() {
+      logger.info('Initializing application...');
+    
+      const { idle, stream } = getVideoElements();
+      idleVideoElement = idle;
+      streamVideoElement = stream;
+    
+      if (idleVideoElement) {
+        idleVideoElement.setAttribute('playsinline', '');
+        idleVideoElement.muted = true;
+      }
+      if (streamVideoElement) {
+        streamVideoElement.setAttribute('playsinline', '');
+        // Don't mute the stream video element as it will be used for talking
+      }
+    
+      // Create a new video element for preloading
+      preloadVideoElement = document.createElement('video');
+      preloadVideoElement.style.display = 'none';
+      preloadVideoElement.setAttribute('playsinline', '');
+      preloadVideoElement.muted = true;
+      document.querySelector('#video-wrapper').appendChild(preloadVideoElement);
+    
+      initTransitionCanvas();
+    
+      // Set up avatar selection
+      const avatarSelect = document.getElementById('avatar-select');
+      avatarSelect.innerHTML = ''; // Clear existing options
+      for (const [key, value] of Object.entries(avatars)) {
+        const option = document.createElement('option');
+        option.value = key;
+        option.textContent = key.charAt(0).toUpperCase() + key.slice(1); // Capitalize first letter
+        avatarSelect.appendChild(option);
+      }
+      currentAvatar = avatarSelect.value;
+      
+      // Initialize AudioContext after user interaction
+      document.body.addEventListener('click', initAudioContext, { once: true });
+    
+    
 
 
   // Add event listener for avatar change
@@ -795,8 +809,22 @@ async function initialize() {
     showErrorMessage('Failed to connect. Please try again.');
   }
 
+  try {
+    await initializeConnection();
+    playIdleVideo();
+    await preloadAndPlayShortClip();
+    startKeepAlive();
+    hideLoadingSymbol();
+    logger.info('Initialization completed successfully');
+  } catch (error) {
+    logger.error('Error during initialization:', error);
+    hideLoadingSymbol();
+    showErrorMessage('Failed to connect. Please try again.');
+  }
+
   logger.info('Initial avatar:', currentAvatar);
 }
+
 
 
 function initAudioContext() {
@@ -819,14 +847,13 @@ async function preloadAndPlayShortClip() {
 
   return new Promise(async (resolve, reject) => {
     try {
-      const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+      const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
         method: 'POST',
         headers: {
           Authorization: `Basic ${DID_API.key}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          source_url: avatars[currentAvatar].idleImage,
           script: {
             type: 'text',
             input: 'Hello',
@@ -842,65 +869,40 @@ async function preloadAndPlayShortClip() {
             auto_match: true,
             stitch: true,
             normalization_factor: 0.5
-          }
+          },
+          session_id: sessionId,
         }),
       });
 
-      const { id: clipStreamId, sdp: offerSdp, ice_servers: iceServers } = await response.json();
+      const playResponseData = await response.json();
 
-      if (!offerSdp || !offerSdp.type || !offerSdp.sdp) {
-        throw new Error('Invalid SDP received from server');
+      if (playResponseData.status !== 'started') {
+        throw new Error('Unexpected response status: ' + playResponseData.status);
       }
 
-      const peerConnection = new RTCPeerConnection({ iceServers });
+      logger.debug('Preload clip started successfully');
 
-      peerConnection.ontrack = (event) => {
-        preloadVideoElement.srcObject = event.streams[0];
-      };
+      // Wait for the stream to be ready
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-      try {
-        await peerConnection.setRemoteDescription(offerSdp);
-        const answerSdp = await peerConnection.createAnswer();
-        await peerConnection.setLocalDescription(answerSdp);
-
-        const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${clipStreamId}/sdp`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Basic ${DID_API.key}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            answer: answerSdp,
-            session_id: null,
-          }),
-        });
-
-        if (!sdpResponse.ok) {
-          throw new Error('Failed to set SDP answer');
-        }
-
-        preloadVideoElement.oncanplaythrough = () => {
-          preloadVideoElement.play().then(() => {
-            logger.debug('Preload clip played successfully');
-            updateStatus('preloading', 'complete');
-            resolve();
-          }).catch((error) => {
-            logger.error('Error playing preload clip:', error);
-            updateStatus('preloading', 'failed');
-            resolve(); // Resolve anyway to not block initialization
-          });
-        };
-
-        preloadVideoElement.onerror = (error) => {
-          logger.error('Error loading preload clip:', error);
+      preloadVideoElement.oncanplaythrough = () => {
+        preloadVideoElement.play().then(() => {
+          logger.debug('Preload clip played successfully');
+          updateStatus('preloading', 'complete');
+          resolve();
+        }).catch((error) => {
+          logger.error('Error playing preload clip:', error);
           updateStatus('preloading', 'failed');
           resolve(); // Resolve anyway to not block initialization
-        };
-      } catch (error) {
-        logger.error('Error setting up WebRTC connection:', error);
+        });
+      };
+
+      preloadVideoElement.onerror = (error) => {
+        logger.error('Error loading preload clip:', error);
         updateStatus('preloading', 'failed');
         resolve(); // Resolve anyway to not block initialization
-      }
+      };
+
     } catch (error) {
       logger.error('Error in preloadAndPlayShortClip:', error);
       updateStatus('preloading', 'failed');
@@ -1506,6 +1508,7 @@ async function startStreaming(assistantReply) {
           logger.debug('Stream video playback started');
         }).catch(e => logger.error('Error playing stream video:', e));
       };
+
       
       streamVideoElement.oncanplay = () => {
         logger.debug('Stream video can play');
@@ -1552,7 +1555,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
 
 function startSendingAudioData() {
   logger.debug('Starting to send audio data...');
