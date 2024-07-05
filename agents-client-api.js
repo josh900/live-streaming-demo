@@ -453,6 +453,7 @@ function initializeTransitionCanvas() {
   document.querySelector('#video-wrapper').appendChild(transitionCanvas);
 }
 
+
 async function handleAvatarChange() {
   currentAvatar = avatarSelect.value;
   
@@ -559,17 +560,31 @@ function smoothTransition(duration = 500) {
     return;
   }
 
+  // Ensure the stream video is hidden and ready
+  streamVideoElement.style.opacity = '0';
+  streamVideoElement.style.display = 'block';
+
+  // Start the stream video playback
+  streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
+
   logger.debug('Starting smooth transition');
 
-  let startTime = performance.now();
+  let startTime = null;
   
   function animate(currentTime) {
+    if (!startTime) startTime = currentTime;
     const elapsed = currentTime - startTime;
     const progress = Math.min(elapsed / duration, 1);
     
-    const blendedFrame = blendFrames(idleVideoElement, streamVideoElement, progress);
     transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
-    transitionCtx.drawImage(blendedFrame, 0, 0, transitionCanvas.width, transitionCanvas.height);
+    
+    // Draw the idle video frame
+    transitionCtx.globalAlpha = 1;
+    transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+    
+    // Draw the stream video frame with increasing opacity
+    transitionCtx.globalAlpha = progress;
+    transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
     
     if (progress < 1) {
       transitionAnimationFrame = requestAnimationFrame(animate);
@@ -581,7 +596,7 @@ function smoothTransition(duration = 500) {
     }
   }
   
-  streamVideoElement.style.opacity = '0';
+  cancelAnimationFrame(transitionAnimationFrame);
   transitionAnimationFrame = requestAnimationFrame(animate);
 }
 
@@ -992,7 +1007,7 @@ function onVideoStatusChange(videoIsPlaying, stream) {
 
 
 function setStreamVideoElement(stream) {
-  const { stream: streamVideoElement } = getVideoElements();
+  const streamVideoElement = document.getElementById('stream-video-element');
   if (!streamVideoElement) {
     logger.error('Stream video element not found');
     return;
@@ -1001,13 +1016,12 @@ function setStreamVideoElement(stream) {
   logger.debug('Setting stream video element');
   streamVideoElement.srcObject = stream;
   streamVideoElement.style.opacity = '0';
+  streamVideoElement.style.display = 'none';
   
   streamVideoElement.onloadedmetadata = () => {
     logger.debug('Stream video metadata loaded');
-    streamVideoElement.play().then(() => {
-      logger.debug('Stream video playback started');
-      smoothTransition();
-    }).catch(e => logger.error('Error playing stream video:', e));
+    // Instead of playing immediately, we'll start the transition
+    smoothTransition();
   };
 }
 
