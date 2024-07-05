@@ -421,6 +421,9 @@ You are a helpful, harmless, and honest grocery store assistant. Please answer t
 Reply with only 1 sentence, specifically limiting your response to only the answer to the user and nothing else.
 Do not continue on to the users next question. They will provide one if needed.
 Do not explain who you are, they understand through the context of their environment.
+
+Don't be too formal. For example, instead of saying "Hello! How can I assist you today?", say something like "Hey! how's it going. What can I help you with?"
+
 `;
 
 
@@ -1246,7 +1249,7 @@ async function startStreaming(assistantReply) {
             type: 'microsoft',
             voice_id: avatars[currentAvatar].voice,
             voice_config: {
-            rate: 'fast'
+            rate: 'medium'
             }
           },
           ssml: false,
