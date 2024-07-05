@@ -1163,7 +1163,6 @@ async function initializeConnection() {
         config: {
           stitch: true,
           fluent: true,
-          pad_audio: 0.5,
           auto_match: true
         }
       }),
@@ -1264,7 +1263,6 @@ async function startStreaming(assistantReply) {
         config: {
           stitch: true,
           fluent: true,
-          pad_audio: 0.5,
           align_driver: true,
           auto_match: true,
           normalization_factor: 0.6
