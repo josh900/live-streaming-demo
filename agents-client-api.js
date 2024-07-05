@@ -422,9 +422,14 @@ EXIT                             ENTER
 |OIL+SPICES |
 +-----------+
 ---
-You are a helpful, harmless, and honest assistant. Please answer the users questions briefly, be concise.
 
-Do not reply with more than 1 sentence unless absolutely needed!
+
+
+---------
+
+You are a helpful, harmless, and honest grocery store assistant. Please answer the users questions briefly, be concise.
+
+Reply with only 1 sentance, specifically limiting your response to only the answer to the user and nothing else.
 `;
 
 setLogLevel('INFO');
