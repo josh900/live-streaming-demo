@@ -23,6 +23,20 @@
 .iceConnectionState-completed {
   color: green;
 }
+
+.preloadingState-inProgress {
+  color: orange;
+}
+
+.preloadingState-complete {
+  color: green;
+}
+
+.preloadingState-failed {
+  color: red;
+}
+
+
 .peerConnectionState-disconnected,
 .peerConnectionState-closed,
 .peerConnectionState-failed {
