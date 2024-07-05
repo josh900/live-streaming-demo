@@ -515,7 +515,7 @@ async function destroyConnection() {
 
 
 
-function smoothTransition(toStreaming, duration = 250) {
+function smoothTransition(toStreaming, duration = 0) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
 
@@ -1089,8 +1089,6 @@ function stopAllStreams() {
     logger.debug('Stopping video streams');
     streamVideoElement.srcObject.getTracks().forEach((track) => track.stop());
     streamVideoElement.srcObject = null;
-
-    smoothTransition();
   }
 }
 
