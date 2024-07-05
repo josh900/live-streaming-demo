@@ -594,7 +594,6 @@ function getStatusLabels() {
   };
 }
 
-
 function initializeWebSocket() {
   socket = new WebSocket(`wss://${window.location.host}`);
 
@@ -774,7 +773,7 @@ async function preloadTalkingAvatar() {
       body: JSON.stringify({
         script: {
           type: 'text',
-          input: 'Hello there',
+          input: 'Testing',
           provider: {
             type: 'microsoft',
             voice_id: avatars[currentAvatar].voice
@@ -796,14 +795,11 @@ async function preloadTalkingAvatar() {
     logger.debug('Preload response:', playResponseData);
 
     if (playResponseData.status === 'started') {
-      // Create a tiny, nearly invisible video element for preloading
+      // Create a hidden video element for preloading
       preloadVideoElement = document.createElement('video');
-      preloadVideoElement.style.position = 'fixed';
-      preloadVideoElement.style.right = '0';
-      preloadVideoElement.style.bottom = '0';
-      preloadVideoElement.style.width = '1px';
-      preloadVideoElement.style.height = '1px';
-      preloadVideoElement.style.opacity = '0.01';
+      preloadVideoElement.style.display = 'none';
+      preloadVideoElement.style.width = '0';
+      preloadVideoElement.style.height = '0';
       preloadVideoElement.muted = true;
       preloadVideoElement.playsInline = true;
       document.body.appendChild(preloadVideoElement);
@@ -813,12 +809,7 @@ async function preloadTalkingAvatar() {
         logger.debug('Preload video metadata loaded');
         preloadVideoElement.play().then(() => {
           logger.debug('Preload video playback started');
-        }).catch(e => {
-          logger.error('Error playing preload video:', e);
-          if (preloadingStatusLabel) {
-            preloadingStatusLabel.innerText = 'Failed to play';
-          }
-        });
+        }).catch(e => logger.error('Error playing preload video:', e));
       };
 
       preloadVideoElement.onended = () => {
@@ -830,34 +821,12 @@ async function preloadTalkingAvatar() {
         }
       };
 
-      preloadVideoElement.onerror = (e) => {
-        logger.error('Error with preload video:', e);
-        if (preloadingStatusLabel) {
-          preloadingStatusLabel.innerText = 'Error occurred';
-        }
-      };
-
       // Set the video source
       if (peerConnection && peerConnection.getReceivers) {
         const videoTrack = peerConnection.getReceivers().find(receiver => receiver.track.kind === 'video')?.track;
         if (videoTrack) {
           preloadVideoElement.srcObject = new MediaStream([videoTrack]);
-        } else {
-          logger.warn('No video track found for preloading');
-          if (preloadingStatusLabel) {
-            preloadingStatusLabel.innerText = 'No video track';
-          }
         }
-      } else {
-        logger.warn('Peer connection or receivers not available');
-        if (preloadingStatusLabel) {
-          preloadingStatusLabel.innerText = 'Connection issue';
-        }
-      }
-    } else {
-      logger.warn('Unexpected response status:', playResponseData.status);
-      if (preloadingStatusLabel) {
-        preloadingStatusLabel.innerText = 'Unexpected response';
       }
     }
   } catch (error) {
@@ -867,7 +836,6 @@ async function preloadTalkingAvatar() {
     }
   }
 }
-
 
 
 function updateContext(action) {
