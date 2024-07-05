@@ -40,11 +40,6 @@ let transitionCanvas;
 let transitionCtx;
 let transitionAnimationFrame;
 let isDebugMode = false;
-let preloadVideoElement;
-let preloadingStatusLabel;
-let autoSpeakInProgress = false;
-
-
 
 
 
@@ -480,7 +475,6 @@ async function handleAvatarChange() {
 
   await destroyConnection();
   await initializeConnection();
-  await preloadTalkingAvatar();
 }
 
 
@@ -522,10 +516,6 @@ function smoothTransition(toStreaming, duration = 250) {
 
   logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
 
-  // Ensure both videos are visible during transition
-  idleVideoElement.style.display = 'block';
-  streamVideoElement.style.display = 'block';
-
   let startTime = null;
 
   function animate(currentTime) {
@@ -559,11 +549,9 @@ function smoothTransition(toStreaming, duration = 250) {
       if (toStreaming) {
         streamVideoElement.style.opacity = '1';
         idleVideoElement.style.opacity = '0';
-        idleVideoElement.style.display = 'none';
       } else {
         streamVideoElement.style.opacity = '0';
         idleVideoElement.style.opacity = '1';
-        streamVideoElement.style.display = 'none';
       }
       logger.debug('Smooth transition completed');
     }
@@ -572,7 +560,6 @@ function smoothTransition(toStreaming, duration = 250) {
   cancelAnimationFrame(transitionAnimationFrame);
   transitionAnimationFrame = requestAnimationFrame(animate);
 }
-
 
 
 function getVideoElements() {
@@ -593,8 +580,7 @@ function getStatusLabels() {
     ice: document.getElementById('ice-status-label'),
     iceGathering: document.getElementById('ice-gathering-status-label'),
     signaling: document.getElementById('signaling-status-label'),
-    streaming: document.getElementById('streaming-status-label'),
-    // preloading: document.getElementById('preloading-status-label')
+    streaming: document.getElementById('streaming-status-label')
   };
 }
 
@@ -705,7 +691,7 @@ async function initialize() {
   }
 
   currentAvatar = avatarSelect.value;
-  logger.debug('Initial avatar:', currentAvatar);
+  logger.info('Initial avatar:', currentAvatar);
 
   // Set up context input
   const contextInput = document.getElementById('context-input');
@@ -715,13 +701,6 @@ async function initialize() {
       context = contextInput.value.trim();
     }
   });
-
-    // Set up status labels
-    const statusLabels = getStatusLabels();
-    preloadingStatusLabel = statusLabels.preloading;
-    if (preloadingStatusLabel) {
-      preloadingStatusLabel.innerText = 'Not started';
-    }
 
   // Set up event listeners
   const sendTextButton = document.getElementById('send-text-button');
@@ -744,7 +723,6 @@ async function initialize() {
   showLoadingSymbol();
   try {
     await initializeConnection();
-    await preloadTalkingAvatar();
     startKeepAlive();
     hideLoadingSymbol();
   } catch (error) {
@@ -753,94 +731,6 @@ async function initialize() {
     showErrorMessage('Failed to connect. Please try again.');
   }
 }
-
-
-
-async function preloadTalkingAvatar() {
-  if (!streamId || !sessionId) {
-    logger.warn('Cannot preload talking avatar: streamId or sessionId is missing');
-    return;
-  }
-
-  logger.debug('Preloading talking avatar...');
-  if (preloadingStatusLabel) {
-    preloadingStatusLabel.innerText = 'In progress';
-  }
-
-  try {
-    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: 'Testing',
-          provider: {
-            type: 'microsoft',
-            voice_id: avatars[currentAvatar].voice
-          }
-        },
-        config: {
-          fluent: true,
-          pad_audio: 0,
-          align_driver: true,
-          auto_match: true,
-          stitch: true,
-          normalization_factor: 0.85
-        },
-        session_id: sessionId,
-      }),
-    });
-
-    const playResponseData = await playResponse.json();
-    logger.debug('Preload response:', playResponseData);
-
-    if (playResponseData.status === 'started') {
-      // Create a hidden video element for preloading
-      preloadVideoElement = document.createElement('video');
-      preloadVideoElement.style.display = 'none';
-      preloadVideoElement.style.width = '0';
-      preloadVideoElement.style.height = '0';
-      preloadVideoElement.muted = true;
-      preloadVideoElement.playsInline = true;
-      document.body.appendChild(preloadVideoElement);
-
-      // Set up event listeners for the preload video
-      preloadVideoElement.onloadedmetadata = () => {
-        logger.debug('Preload video metadata loaded');
-        preloadVideoElement.play().then(() => {
-          logger.debug('Preload video playback started');
-        }).catch(e => logger.error('Error playing preload video:', e));
-      };
-
-      preloadVideoElement.onended = () => {
-        logger.debug('Preload video playback ended');
-        document.body.removeChild(preloadVideoElement);
-        preloadVideoElement = null;
-        if (preloadingStatusLabel) {
-          preloadingStatusLabel.innerText = 'Complete';
-        }
-      };
-
-      // Set the video source
-      if (peerConnection && peerConnection.getReceivers) {
-        const videoTrack = peerConnection.getReceivers().find(receiver => receiver.track.kind === 'video')?.track;
-        if (videoTrack) {
-          preloadVideoElement.srcObject = new MediaStream([videoTrack]);
-        }
-      }
-    }
-  } catch (error) {
-    logger.error('Error during preloading:', error);
-    if (preloadingStatusLabel) {
-      preloadingStatusLabel.innerText = 'Failed';
-    }
-  }
-}
-
 
 function updateContext(action) {
   const contextInput = document.getElementById('context-input');
@@ -853,7 +743,7 @@ function updateContext(action) {
     } else if (action === 'replace') {
       context = newContext;
     }
-    logger.debug('Context updated:', context);
+    logger.info('Context updated:', context);
     showToast('Context saved successfully');
 
     // Display both contexts temporarily
@@ -1819,7 +1709,7 @@ destroyButton.onclick = async () => {
 const startButton = document.getElementById('start-button');
 
 startButton.onclick = async () => {
-  logger.debug('Start button clicked. Current state:', isRecording ? 'Recording' : 'Not recording');
+  logger.info('Start button clicked. Current state:', isRecording ? 'Recording' : 'Not recording');
   if (!isRecording) {
     try {
       await startRecording();
@@ -1831,5 +1721,4 @@ startButton.onclick = async () => {
     await stopRecording();
   }
 };
-
 
