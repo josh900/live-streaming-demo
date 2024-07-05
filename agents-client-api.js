@@ -59,6 +59,8 @@ let videoStartTimeout;
 let transitionCanvas;
 let transitionCtx;
 let transitionAnimationFrame;
+let talkingVideoElement;
+let preloadVideoElement;
 
 
 
@@ -708,16 +710,26 @@ function updateAssistantReply(text) {
 }
 
 async function initialize() {
-  const { idle, stream } = getVideoElements();
-  idleVideoElement = idle;
-  streamVideoElement = stream;
+  logger.info('Initializing application...');
+
+  // Set up video elements
+  const videoWrapper = document.getElementById('video-wrapper');
+  idleVideoElement = document.getElementById('idle-video-element');
+  streamVideoElement = document.getElementById('stream-video-element');
+  
+  // Create a new video element for preloading
+  preloadVideoElement = document.createElement('video');
+  preloadVideoElement.style.display = 'none';
+  videoWrapper.appendChild(preloadVideoElement);
 
   if (idleVideoElement) idleVideoElement.setAttribute('playsinline', '');
   if (streamVideoElement) streamVideoElement.setAttribute('playsinline', '');
+  preloadVideoElement.setAttribute('playsinline', '');
 
-  initTransitionCanvas();
+  // Initialize transition canvas
+  initializeTransitionCanvas();
 
-  // Dynamically populate avatar options
+  // Set up avatar selection
   const avatarSelect = document.getElementById('avatar-select');
   avatarSelect.innerHTML = ''; // Clear existing options
   for (const [key, value] of Object.entries(avatars)) {
@@ -726,8 +738,10 @@ async function initialize() {
     option.textContent = key.charAt(0).toUpperCase() + key.slice(1); // Capitalize first letter
     avatarSelect.appendChild(option);
   }
+  currentAvatar = avatarSelect.value;
+  logger.info('Initial avatar:', currentAvatar);
 
-
+  // Set up text input handlers
   const sendTextButton = document.getElementById('send-text-button');
   const textInput = document.getElementById('text-input');
 
@@ -741,43 +755,118 @@ async function initialize() {
     }
   });
 
-
-
-  currentAvatar = avatarSelect.value;
-
-  initializeTransitionCanvas();
-
+  // Set up context input
   const contextInput = document.getElementById('context-input');
   contextInput.value = context.trim();
 
   contextInput.addEventListener('input', () => {
-    // Only update the context when user is actively typing
     if (!contextInput.value.includes('Original Context:')) {
       context = contextInput.value.trim();
     }
   });
 
-  playIdleVideo();
+  // Set up context button
+  const replaceContextButton = document.getElementById('replace-context-button');
+  replaceContextButton.addEventListener('click', () => updateContext('replace'));
+
+  // Start initialization process
   showLoadingSymbol();
-  initTransitionCanvas();
+
   try {
     await initializeConnection();
+    await preloadAndPlayShortClip();
     startKeepAlive();
     hideLoadingSymbol();
+    playIdleVideo();
+    logger.info('Initialization completed successfully');
   } catch (error) {
     logger.error('Error during initialization:', error);
     hideLoadingSymbol();
     showErrorMessage('Failed to connect. Please try again.');
   }
-
-  // Add event listeners for context buttons
-  const replaceContextButton = document.getElementById('replace-context-button');
-
-  replaceContextButton.addEventListener('click', () => updateContext('replace'));
-
-  currentAvatar = avatarSelect.value;
-  logger.info('Initial avatar:', currentAvatar);
 }
+
+async function preloadAndPlayShortClip() {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          source_url: avatars[currentAvatar].idleImage,
+          script: {
+            type: 'text',
+            input: 'Hello',
+            provider: {
+              type: 'microsoft',
+              voice_id: avatars[currentAvatar].voice
+            }
+          },
+          config: {
+            fluent: true,
+            pad_audio: 0,
+            align_driver: true,
+            auto_match: true,
+            stitch: true,
+            normalization_factor: 0.5
+          }
+        }),
+      });
+
+      const { id: clipStreamId, sdp: offerSdp, ice_servers: iceServers } = await response.json();
+
+      const peerConnection = new RTCPeerConnection({ iceServers });
+
+      peerConnection.ontrack = (event) => {
+        preloadVideoElement.srcObject = event.streams[0];
+      };
+
+      await peerConnection.setRemoteDescription(offerSdp);
+      const answerSdp = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answerSdp);
+
+      const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${clipStreamId}/sdp`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          answer: answerSdp,
+          session_id: null,
+        }),
+      });
+
+      if (!sdpResponse.ok) {
+        throw new Error('Failed to set SDP answer');
+      }
+
+      preloadVideoElement.oncanplaythrough = () => {
+        preloadVideoElement.muted = true;
+        preloadVideoElement.play().then(() => {
+          logger.debug('Preload clip played successfully');
+          resolve();
+        }).catch((error) => {
+          logger.error('Error playing preload clip:', error);
+          resolve(); // Resolve anyway to not block initialization
+        });
+      };
+
+      preloadVideoElement.onerror = (error) => {
+        logger.error('Error loading preload clip:', error);
+        resolve(); // Resolve anyway to not block initialization
+      };
+
+    } catch (error) {
+      logger.error('Error in preloadAndPlayShortClip:', error);
+      resolve(); // Resolve anyway to not block initialization
+    }
+  });
+}
+
 
 function updateContext(action) {
   const contextInput = document.getElementById('context-input');
@@ -997,7 +1086,6 @@ function onVideoStatusChange(videoIsPlaying, stream) {
 
 
 function setStreamVideoElement(stream) {
-  const { stream: streamVideoElement } = getVideoElements();
   if (!streamVideoElement) {
     logger.error('Stream video element not found');
     return;
@@ -1005,7 +1093,10 @@ function setStreamVideoElement(stream) {
 
   logger.debug('Setting stream video element');
   streamVideoElement.srcObject = stream;
-  streamVideoElement.play().catch(e => logger.error('Error playing video:', e));
+  streamVideoElement.muted = false; // Ensure audio is enabled
+  streamVideoElement.onloadedmetadata = () => {
+    streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
+  };
 }
 
 
