@@ -594,6 +594,8 @@ function getStatusLabels() {
   };
 }
 
+
+
 function initializeWebSocket() {
   socket = new WebSocket(`wss://${window.location.host}`);
 
@@ -712,12 +714,12 @@ async function initialize() {
     }
   });
 
-    // Set up status labels
-    const statusLabels = getStatusLabels();
-    preloadingStatusLabel = statusLabels.preloading;
-    if (preloadingStatusLabel) {
-      preloadingStatusLabel.innerText = 'Not started';
-    }
+   // Set up status labels
+   const statusLabels = getStatusLabels();
+   preloadingStatusLabel = statusLabels.preloading;
+   if (preloadingStatusLabel) {
+     preloadingStatusLabel.innerText = 'Not started';
+   }
 
   // Set up event listeners
   const sendTextButton = document.getElementById('send-text-button');
@@ -736,18 +738,18 @@ async function initialize() {
   initializeWebSocket();
   playIdleVideo();
 
-  // Connect to the service
-  showLoadingSymbol();
-  try {
-    await initializeConnection();
-    await preloadTalkingAvatar();
-    startKeepAlive();
-    hideLoadingSymbol();
-  } catch (error) {
-    logger.error('Error during initialization:', error);
-    hideLoadingSymbol();
-    showErrorMessage('Failed to connect. Please try again.');
-  }
+ // Connect to the service
+ showLoadingSymbol();
+ try {
+   await initializeConnection();
+   await preloadTalkingAvatar();
+   startKeepAlive();
+   hideLoadingSymbol();
+ } catch (error) {
+   logger.error('Error during initialization:', error);
+   hideLoadingSymbol();
+   showErrorMessage('Failed to connect. Please try again.');
+ }
 }
 
 
@@ -795,11 +797,10 @@ async function preloadTalkingAvatar() {
     logger.debug('Preload response:', playResponseData);
 
     if (playResponseData.status === 'started') {
-      // Create a hidden video element for preloading
+      // Create an off-screen video element for preloading
       preloadVideoElement = document.createElement('video');
-      preloadVideoElement.style.display = 'none';
-      preloadVideoElement.style.width = '0';
-      preloadVideoElement.style.height = '0';
+      preloadVideoElement.style.position = 'absolute';
+      preloadVideoElement.style.left = '-9999px';
       preloadVideoElement.muted = true;
       preloadVideoElement.playsInline = true;
       document.body.appendChild(preloadVideoElement);
