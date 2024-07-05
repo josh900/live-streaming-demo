@@ -1120,13 +1120,13 @@ async function initializeConnection() {
       },
       body: JSON.stringify({
         source_url: avatars[currentAvatar].idleImage,
-        // driver_url: 'bank://lively/',
         stream_warmup: true,
+        output_resolution: 512,
         config: {
           stitch: true,
           fluent: true,
-          pad_audio: 0.5,
-          align_driver: true,
+          pad_audio: 1.5,
+          auto_match: true
         }
       }),
     });
@@ -1221,10 +1221,11 @@ async function startStreaming(assistantReply) {
         },
         config: {
           fluent: true,
-          pad_audio: 0.5,
-          stitch: true,
+          pad_audio: 1.5,
+          align_driver: true,
+          auto_match: true
+
         },
-        driver_url: 'bank://lively/',
         session_id: sessionId,
       }),
     });
