@@ -40,6 +40,8 @@ let transitionCanvas;
 let transitionCtx;
 let transitionAnimationFrame;
 let isDebugMode = false;
+let preloadVideoElement;
+
 
 
 
@@ -473,6 +475,7 @@ async function handleAvatarChange() {
 
   await destroyConnection();
   await initializeConnection();
+  await preloadTalkingAvatar();
 }
 
 
@@ -514,6 +517,10 @@ function smoothTransition(toStreaming, duration = 250) {
 
   logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
 
+  // Ensure both videos are visible during transition
+  idleVideoElement.style.display = 'block';
+  streamVideoElement.style.display = 'block';
+
   let startTime = null;
 
   function animate(currentTime) {
@@ -547,9 +554,11 @@ function smoothTransition(toStreaming, duration = 250) {
       if (toStreaming) {
         streamVideoElement.style.opacity = '1';
         idleVideoElement.style.opacity = '0';
+        idleVideoElement.style.display = 'none';
       } else {
         streamVideoElement.style.opacity = '0';
         idleVideoElement.style.opacity = '1';
+        streamVideoElement.style.display = 'none';
       }
       logger.debug('Smooth transition completed');
     }
@@ -558,6 +567,7 @@ function smoothTransition(toStreaming, duration = 250) {
   cancelAnimationFrame(transitionAnimationFrame);
   transitionAnimationFrame = requestAnimationFrame(animate);
 }
+
 
 
 function getVideoElements() {
@@ -666,7 +676,6 @@ function updateAssistantReply(text) {
 }
 
 async function initialize() {
-
   setLogLevel('DEBUG');
 
   // Set up video elements
@@ -696,7 +705,6 @@ async function initialize() {
   const contextInput = document.getElementById('context-input');
   contextInput.value = context.trim();
   contextInput.addEventListener('input', () => {
-    // Only update the context when user is actively typing
     if (!contextInput.value.includes('Original Context:')) {
       context = contextInput.value.trim();
     }
@@ -723,6 +731,7 @@ async function initialize() {
   showLoadingSymbol();
   try {
     await initializeConnection();
+    await preloadTalkingAvatar();
     startKeepAlive();
     hideLoadingSymbol();
   } catch (error) {
@@ -731,6 +740,83 @@ async function initialize() {
     showErrorMessage('Failed to connect. Please try again.');
   }
 }
+
+
+async function preloadTalkingAvatar() {
+  if (!streamId || !sessionId) {
+    logger.warn('Cannot preload talking avatar: streamId or sessionId is missing');
+    return;
+  }
+
+  logger.debug('Preloading talking avatar...');
+
+  try {
+    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: 'Testing',
+          provider: {
+            type: 'microsoft',
+            voice_id: avatars[currentAvatar].voice
+          }
+        },
+        config: {
+          fluent: true,
+          pad_audio: 0,
+          align_driver: true,
+          auto_match: true,
+          stitch: true,
+          normalization_factor: 0.85
+        },
+        session_id: sessionId,
+      }),
+    });
+
+    const playResponseData = await playResponse.json();
+    logger.debug('Preload response:', playResponseData);
+
+    if (playResponseData.status === 'started') {
+      // Create a hidden video element for preloading
+      preloadVideoElement = document.createElement('video');
+      preloadVideoElement.style.display = 'none';
+      preloadVideoElement.muted = true;
+      preloadVideoElement.playsInline = true;
+      document.body.appendChild(preloadVideoElement);
+
+      // Set up event listeners for the preload video
+      preloadVideoElement.onloadedmetadata = () => {
+        logger.debug('Preload video metadata loaded');
+        preloadVideoElement.play().then(() => {
+          logger.debug('Preload video playback started');
+        }).catch(e => logger.error('Error playing preload video:', e));
+      };
+
+      preloadVideoElement.onended = () => {
+        logger.debug('Preload video playback ended');
+        document.body.removeChild(preloadVideoElement);
+        preloadVideoElement = null;
+      };
+
+      // Set the video source
+      if (peerConnection && peerConnection.getReceivers) {
+        const videoTrack = peerConnection.getReceivers().find(receiver => receiver.track.kind === 'video')?.track;
+        if (videoTrack) {
+          preloadVideoElement.srcObject = new MediaStream([videoTrack]);
+        }
+      }
+    }
+  } catch (error) {
+    logger.error('Error during preloading:', error);
+  }
+}
+
+
 
 function updateContext(action) {
   const contextInput = document.getElementById('context-input');
