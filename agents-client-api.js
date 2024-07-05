@@ -1200,7 +1200,7 @@ async function fetchWithRetries(url, options, retries = 1) {
   }
 }
 
-javascriptCopyasync function initializeConnection() {
+async function initializeConnection() {
   if (isInitializing) {
     logger.warn('Connection initialization already in progress. Skipping initialize.');
     return;
