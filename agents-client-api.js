@@ -462,7 +462,7 @@ async function handleAvatarChange() {
     idleVideoElement.src = avatars[currentAvatar].idleVideo;
     try {
       await idleVideoElement.load();
-      logger.debug(`Idle video loaded for ${currentAvatar}`);
+      logger.info(`Idle video loaded for ${currentAvatar}`);
     } catch (error) {
       logger.error(`Error loading idle video for ${currentAvatar}:`, error);
     }
@@ -781,7 +781,7 @@ async function initialize() {
   replaceContextButton.addEventListener('click', () => updateContext('replace'));
 
   currentAvatar = avatarSelect.value;
-  logger.debug('Initial avatar:', currentAvatar);
+  logger.info('Initial avatar:', currentAvatar);
 }
 
 function updateContext(action) {
@@ -795,7 +795,7 @@ function updateContext(action) {
     } else if (action === 'replace') {
       context = newContext;
     }
-    logger.debug('Context updated:', context);
+    logger.info('Context updated:', context);
     showToast('Context saved successfully');
 
     // Display both contexts temporarily
@@ -1912,7 +1912,7 @@ destroyButton.onclick = async () => {
 const startButton = document.getElementById('start-button');
 
 startButton.onclick = async () => {
-  logger.debug('Start button clicked. Current state:', isRecording ? 'Recording' : 'Not recording');
+  logger.info('Start button clicked. Current state:', isRecording ? 'Recording' : 'Not recording');
   if (!isRecording) {
     try {
       await startRecording();
