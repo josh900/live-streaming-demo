@@ -1246,12 +1246,13 @@ async function startStreaming(assistantReply) {
             type: 'microsoft',
             voice_id: avatars[currentAvatar].voice,
             voice_config: {
-            rate: 'medium'
+            rate: 'fast'
             }
           },
           ssml: false,
         },
         config: {
+          stitch: true,
           fluent: true,
           pad_audio: 0.5,
           align_driver: true,
