@@ -42,7 +42,7 @@ let transitionAnimationFrame;
 let isDebugMode = false;
 let preloadVideoElement;
 let preloadingStatusLabel;
-
+let isPreloading = false;
 
 
 
@@ -508,12 +508,12 @@ async function destroyConnection() {
 
 
 function smoothTransition(toStreaming, duration = 250) {
-  
-  if (preloadVideoElement) {
+  // Only perform transition for actual streaming, not preloading
+  if (isPreloading) {
     logger.debug('Ignoring transition during preloading');
     return;
   }
-  
+
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
 
@@ -574,6 +574,7 @@ function smoothTransition(toStreaming, duration = 250) {
   cancelAnimationFrame(transitionAnimationFrame);
   transitionAnimationFrame = requestAnimationFrame(animate);
 }
+
 
 
 
@@ -771,6 +772,8 @@ async function preloadTalkingAvatar() {
     preloadingStatusLabel.innerText = 'In progress';
   }
 
+  isPreloading = true;
+
   try {
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'POST',
@@ -828,6 +831,7 @@ async function preloadTalkingAvatar() {
         logger.debug('Preload video playback ended');
         document.body.removeChild(preloadVideoElement);
         preloadVideoElement = null;
+        isPreloading = false;
         if (preloadingStatusLabel) {
           preloadingStatusLabel.innerText = 'Complete';
         }
@@ -846,8 +850,10 @@ async function preloadTalkingAvatar() {
     if (preloadingStatusLabel) {
       preloadingStatusLabel.innerText = 'Failed';
     }
+    isPreloading = false;
   }
 }
+
 
 
 function updateContext(action) {
@@ -1396,7 +1402,7 @@ async function startStreaming(assistantReply) {
       // Set up event listeners for the stream video
       streamVideoElement.onloadedmetadata = () => {
         logger.debug('Stream video metadata loaded');
-        smoothTransition(300);
+        smoothTransition(true, 300);
         streamVideoElement.play().then(() => {
           logger.debug('Stream video playback started');
         }).catch(e => logger.error('Error playing stream video:', e));
@@ -1446,6 +1452,7 @@ async function startStreaming(assistantReply) {
     }
   }
 }
+
 
 function startSendingAudioData() {
   logger.debug('Starting to send audio data...');
