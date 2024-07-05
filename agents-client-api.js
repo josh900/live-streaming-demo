@@ -515,7 +515,7 @@ async function destroyConnection() {
 
 
 
-function smoothTransition(toStreaming, duration = 0) {
+function smoothTransition(toStreaming, duration = 250) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
 
@@ -768,10 +768,10 @@ function displayBothContexts(original, updated) {
   const contextInput = document.getElementById('context-input');
   contextInput.value = `Original Context:\n${original}\n\nNew Context:\n${updated}`;
 
-  // After 5 seconds, reset to just the new context
+  // After 0 seconds, reset to just the new context
   setTimeout(() => {
     contextInput.value = updated;
-  }, 5000);
+  }, 0);
 }
 
 function showToast(message) {
