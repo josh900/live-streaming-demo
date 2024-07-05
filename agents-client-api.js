@@ -43,12 +43,11 @@ let isDebugMode = false;
 
 
 
-function setLogLevel(level) {
+export function setLogLevel(level) {
   logger.setLogLevel(level);
   isDebugMode = level === 'DEBUG';
   logger.debug(`Log level set to ${level}. Debug mode is ${isDebugMode ? 'enabled' : 'disabled'}.`);
 }
-
 
 
 const avatars = {
@@ -1724,9 +1723,3 @@ startButton.onclick = async () => {
 };
 
 
-
-
-
-export function setLogLevel(level) {
-  logger.setLogLevel(level);
-}
