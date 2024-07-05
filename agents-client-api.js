@@ -508,12 +508,6 @@ async function destroyConnection() {
 
 
 function smoothTransition(toStreaming, duration = 250) {
-  
-  if (preloadVideoElement) {
-    logger.debug('Ignoring transition during preloading');
-    return;
-  }
-  
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
 
@@ -599,8 +593,6 @@ function getStatusLabels() {
     preloading: document.getElementById('preloading-status-label')
   };
 }
-
-
 
 function initializeWebSocket() {
   socket = new WebSocket(`wss://${window.location.host}`);
@@ -805,13 +797,9 @@ async function preloadTalkingAvatar() {
     if (playResponseData.status === 'started') {
       // Create a hidden video element for preloading
       preloadVideoElement = document.createElement('video');
-      preloadVideoElement.style.position = 'absolute';
-      preloadVideoElement.style.left = '-9999px';
-      preloadVideoElement.style.top = '-9999px';
-      preloadVideoElement.style.width = '1px';
-      preloadVideoElement.style.height = '1px';
-      preloadVideoElement.style.opacity = '0';
-      preloadVideoElement.style.pointerEvents = 'none';
+      preloadVideoElement.style.display = 'none';
+      preloadVideoElement.style.width = '0';
+      preloadVideoElement.style.height = '0';
       preloadVideoElement.muted = true;
       preloadVideoElement.playsInline = true;
       document.body.appendChild(preloadVideoElement);
