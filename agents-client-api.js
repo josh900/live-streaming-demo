@@ -1,11 +1,7 @@
 'use strict';
 import DID_API from './api.js';
 import logger from './logger.js';
-const { Deepgram } = deepgram;
 const { createClient, LiveTranscriptionEvents } = deepgram;
-
-const GROQ_API_KEY = DID_API.groqKey;
-const DEEPGRAM_API_KEY = DID_API.deepgramKey;
 
 if (DID_API.key == '🤫') alert('Please put your api key inside ./api.js and restart..');
 
@@ -25,37 +21,21 @@ let statsIntervalId;
 let videoIsPlaying;
 let lastBytesReceived;
 let chatHistory = [];
-let mediaRecorder;
-let deepgramSocket;
-let transcript = '';
 let inactivityTimeout;
 let transcriptionTimer;
 let keepAliveInterval;
 let socket;
-let transcriptionStartTime;
-let sdpExchangeComplete = false;
 let isInitializing = false;
 let audioContext;
-let audioSource;
-let audioDelay = 0.2; // 200ms delay
 let streamVideoElement;
 let idleVideoElement;
 let deepgramConnection;
 let isRecording = false;
-let mediaStreamSource;
-let processor;
 let audioWorkletNode;
-let microphoneStream;
-let audioChunks = [];
-let deepgramSource;
-let additionalContext = '';
 let currentUtterance = '';
 let interimMessageAdded = false;
 let autoSpeakMode = true;
 let speakTimeout;
-let autoSpeakInProgress = false;
-let audioBufferSource;
-let videoStartTimeout;
 let transitionCanvas;
 let transitionCtx;
 let transitionAnimationFrame;
@@ -516,42 +496,10 @@ async function destroyConnection() {
   }
 }
 
-function blendFrames(idleFrame, talkingFrame, progress) {
-  const canvas = document.createElement('canvas');
-  canvas.width = idleFrame.videoWidth || 400;
-  canvas.height = idleFrame.videoHeight || 400;
-  const ctx = canvas.getContext('2d');
-  
-  ctx.globalAlpha = 1;
-  ctx.drawImage(idleFrame, 0, 0, canvas.width, canvas.height);
-  
-  ctx.globalAlpha = progress;
-  ctx.drawImage(talkingFrame, 0, 0, canvas.width, canvas.height);
-  
-  ctx.globalCompositeOperation = 'destination-in';
-  ctx.beginPath();
-  ctx.arc(canvas.width / 2, canvas.height / 2, canvas.width / 2, 0, Math.PI * 2);
-  ctx.fill();
-  
-  return canvas;
-}
 
 
-function initTransitionCanvas() {
-  transitionCanvas = document.createElement('canvas');
-  transitionCanvas.width = 400;
-  transitionCanvas.height = 400;
-  transitionCtx = transitionCanvas.getContext('2d');
-  
-  transitionCanvas.style.position = 'absolute';
-  transitionCanvas.style.top = '0';
-  transitionCanvas.style.left = '0';
-  transitionCanvas.style.zIndex = '3';
-  transitionCanvas.style.borderRadius = '50%';
-  document.querySelector('#video-wrapper').appendChild(transitionCanvas);
-}
 
-function smoothTransition(toStreaming, duration = 500) {
+function smoothTransition(toStreaming, duration = 250) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
   
@@ -708,23 +656,6 @@ function handleTextInput(text) {
 }
 
 
-async function simulateAssistantReply(userInput) {
-  // This is a simple echo response. Replace this with more complex logic if needed.
-  const assistantReply = `You said: "${userInput}". This is a simulated response.`;
-
-  // Update chat history in the UI
-  updateAssistantReply(assistantReply);
-
-  // Add to chat history
-  chatHistory.push({
-    role: 'assistant',
-    content: assistantReply,
-  });
-
-  // Start streaming the avatar's response
-  await startStreaming(assistantReply);
-}
-
 
 function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
@@ -815,10 +746,6 @@ function updateContext(action) {
   }
 }
 
-function resetContextInput() {
-  const contextInput = document.getElementById('context-input');
-  contextInput.value = context.trim();
-}
 
 function displayBothContexts(original, updated) {
   const contextInput = document.getElementById('context-input');
@@ -1030,46 +957,6 @@ function setStreamVideoElement(stream) {
 }
 
 
-
-function startSmoothTransition(fromVideo, toVideo) {
-  if (!transitionCanvas) {
-    initializeTransitionCanvas();
-  }
-
-  let progress = 0;
-  const duration = 500; // Transition duration in milliseconds
-  const startTime = performance.now();
-
-  function animate(currentTime) {
-    progress = (currentTime - startTime) / duration;
-
-    if (progress < 1) {
-      transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
-      
-      // Draw the 'from' video
-      transitionCtx.globalAlpha = 1 - progress;
-      transitionCtx.drawImage(fromVideo, 0, 0, transitionCanvas.width, transitionCanvas.height);
-      
-      // Draw the 'to' video
-      transitionCtx.globalAlpha = progress;
-      transitionCtx.drawImage(toVideo, 0, 0, transitionCanvas.width, transitionCanvas.height);
-
-      transitionAnimationFrame = requestAnimationFrame(animate);
-    } else {
-      // Finish transition
-      transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
-      toVideo.style.opacity = '1';
-      fromVideo.style.opacity = '0';
-      cancelAnimationFrame(transitionAnimationFrame);
-    }
-  }
-
-  // Start the animation
-  transitionAnimationFrame = requestAnimationFrame(animate);
-}
-
-
-
 function onTrack(event) {
   logger.debug('onTrack event:', event);
   if (!event.track) return;
@@ -1117,31 +1004,6 @@ function onTrack(event) {
   setStreamVideoElement(event.streams[0]);
 }
 
-function setVideoElement(stream) {
-  const { stream: streamVideoElement } = getVideoElements();
-  if (!streamVideoElement) {
-    logger.error('Stream video element not found');
-    return;
-  }
-  if (!stream) {
-    logger.warn('No stream available to set video element');
-    return;
-  }
-  streamVideoElement.classList.add("animated");
-  streamVideoElement.srcObject = stream;
-  streamVideoElement.loop = false;
-  streamVideoElement.muted = false;
-
-  setTimeout(() => {
-    streamVideoElement.classList.remove("animated");
-  }, 300);
-
-  if (streamVideoElement.paused) {
-    streamVideoElement.play().then(() => {
-      logger.debug('Video playback started');
-    }).catch(e => logger.error('Error playing video:', e));
-  }
-}
 
 function playIdleVideo() {
   const { idle: idleVideoElement } = getVideoElements();
@@ -1244,7 +1106,7 @@ async function initializeConnection() {
         config: {
           stitch: true,
           fluent: true,
-          pad_audio: 1.5,
+          pad_audio: 1.0,
           auto_match: true
         }
       }),
@@ -1340,11 +1202,11 @@ async function startStreaming(assistantReply) {
         },
         config: {
           fluent: true,
-          pad_audio: 1.5,
+          pad_audio: 1.0,
           align_driver: true,
           auto_match: true,
           stitch: true,
-          normalization_factor: 0.5
+          normalization_factor: 0.85
         },
         session_id: sessionId,
       }),
