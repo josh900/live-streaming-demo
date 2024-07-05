@@ -162,9 +162,7 @@ h4 {
   aspect-ratio: 1 / 1;
   overflow: hidden;
   border-radius: 50%;
-  background-color: transparent;
 }
-
 
 
 .chat {
@@ -232,21 +230,8 @@ select {
   height: 100%;
   object-fit: cover;
   border-radius: 50%;
-  background-color: transparent;
+  background: transparent;
 }
-
-.preloadingState-in-progress {
-  color: orange;
-}
-
-.preloadingState-complete {
-  color: green;
-}
-
-.preloadingState-failed {
-  color: red;
-}
-
 
 #idle-video-element,
 #stream-video-element {
