@@ -723,7 +723,6 @@ async function initialize() {
   }
   if (streamVideoElement) {
     streamVideoElement.setAttribute('playsinline', '');
-    // Don't mute the stream video element as it will be used for talking
   }
 
   // Create a new video element for preloading
@@ -734,6 +733,15 @@ async function initialize() {
   document.querySelector('#video-wrapper').appendChild(preloadVideoElement);
 
   initTransitionCanvas();
+
+  // Initialize AudioContext and AudioWorklet
+  try {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    await audioContext.audioWorklet.addModule('audio-processor.js');
+    logger.debug('AudioWorklet initialized successfully');
+  } catch (error) {
+    logger.error('Failed to initialize AudioWorklet:', error);
+  }
 
 
 
@@ -796,11 +804,10 @@ async function initialize() {
   }
 
   logger.info('Initial avatar:', currentAvatar);
-
-
 }
 
-async function preloadAndPlayShortClip() {
+
+async function preloadAndPlayShortClip() {async function preloadAndPlayShortClip() {
   updateStatus('preloading', 'in-progress');
 
   return new Promise(async (resolve, reject) => {
@@ -841,7 +848,7 @@ async function preloadAndPlayShortClip() {
       };
 
       try {
-        await peerConnection.setRemoteDescription(offerSdp);
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(offerSdp));
         const answerSdp = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answerSdp);
 
@@ -890,6 +897,8 @@ async function preloadAndPlayShortClip() {
     }
   });
 }
+
+
 
 
 
