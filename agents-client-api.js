@@ -489,6 +489,9 @@ async function handleAvatarChange() {
 
   await destroyConnection();
   await initializeConnection();
+
+  // Preload a short clip for the new avatar
+  await preloadShortClip();
 }
 
 
@@ -1197,7 +1200,7 @@ async function fetchWithRetries(url, options, retries = 1) {
   }
 }
 
-async function initializeConnection() {
+javascriptCopyasync function initializeConnection() {
   if (isInitializing) {
     logger.warn('Connection initialization already in progress. Skipping initialize.');
     return;
@@ -1263,11 +1266,58 @@ async function initializeConnection() {
 
     logger.info('Connection initialized successfully');
     startKeepAlive();
+
+    // Preload a short clip
+    await preloadShortClip();
   } catch (error) {
     logger.error('Failed to initialize connection:', error);
     throw error;
   } finally {
     isInitializing = false;
+  }
+}
+
+
+async function preloadShortClip() {
+  try {
+    logger.debug('Preloading short clip...');
+    const preloadResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: 'Hi',
+          provider: {
+            type: 'microsoft',
+            voice_id: avatars[currentAvatar].voice
+          }
+        },
+        config: {
+          fluent: true,
+          pad_audio: 0,
+          align_driver: true,
+          auto_match: true,
+          stitch: true,
+          normalization_factor: 0.5
+        },
+        session_id: sessionId,
+      }),
+    });
+
+    if (!preloadResponse.ok) {
+      throw new Error(`Failed to preload short clip: ${preloadResponse.status} ${preloadResponse.statusText}`);
+    }
+
+    logger.debug('Short clip preloaded successfully');
+
+    // Wait for the preloaded clip to finish
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  } catch (error) {
+    logger.error('Error preloading short clip:', error);
   }
 }
 
@@ -1338,8 +1388,9 @@ async function startStreaming(assistantReply) {
       // Get video elements
       const { idle: idleVideoElement, stream: streamVideoElement } = getVideoElements();
       
-      // Ensure the stream video element is visible
+      // Ensure the stream video element is visible and unmuted
       streamVideoElement.style.display = 'block';
+      streamVideoElement.muted = false;
       
       // Log the current state of video elements
       logger.debug('Idle video element:', idleVideoElement.src);
