@@ -48,7 +48,7 @@ let preloadingStatusLabel;
 
 export function setLogLevel(level) {
   logger.setLogLevel(level);
-  isDebugMode = level === 'DEBUG';
+  isDebugMode = level === 'INFO';
   logger.debug(`Log level set to ${level}. Debug mode is ${isDebugMode ? 'enabled' : 'disabled'}.`);
 }
 
