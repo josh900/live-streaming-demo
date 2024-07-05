@@ -723,6 +723,7 @@ async function initialize() {
   }
   if (streamVideoElement) {
     streamVideoElement.setAttribute('playsinline', '');
+    // Don't mute the stream video element as it will be used for talking
   }
 
   // Create a new video element for preloading
@@ -734,19 +735,7 @@ async function initialize() {
 
   initTransitionCanvas();
 
-  // Initialize AudioContext and AudioWorklet
-  try {
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    await audioContext.audioWorklet.addModule('audio-processor.js');
-    logger.debug('AudioWorklet initialized successfully');
-  } catch (error) {
-    logger.error('Failed to initialize AudioWorklet:', error);
-  }
-
-
-
-
-  // Dynamically populate avatar options
+  // Set up avatar selection
   const avatarSelect = document.getElementById('avatar-select');
   avatarSelect.innerHTML = ''; // Clear existing options
   for (const [key, value] of Object.entries(avatars)) {
@@ -755,8 +744,11 @@ async function initialize() {
     option.textContent = key.charAt(0).toUpperCase() + key.slice(1); // Capitalize first letter
     avatarSelect.appendChild(option);
   }
-
   currentAvatar = avatarSelect.value;
+  
+  // Initialize AudioContext after user interaction
+  document.body.addEventListener('click', initAudioContext, { once: true });
+
 
   // Add event listener for avatar change
   avatarSelect.addEventListener('change', handleAvatarChange);
@@ -807,6 +799,21 @@ async function initialize() {
 }
 
 
+function initAudioContext() {
+  if (!audioContext) {
+    try {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      audioContext.audioWorklet.addModule('audio-processor.js')
+        .then(() => logger.debug('AudioWorklet initialized successfully'))
+        .catch(error => logger.error('Failed to initialize AudioWorklet:', error));
+    } catch (error) {
+      logger.error('Failed to create AudioContext:', error);
+    }
+  }
+}
+
+
+
 async function preloadAndPlayShortClip() {
   updateStatus('preloading', 'in-progress');
 
@@ -841,6 +848,10 @@ async function preloadAndPlayShortClip() {
 
       const { id: clipStreamId, sdp: offerSdp, ice_servers: iceServers } = await response.json();
 
+      if (!offerSdp || !offerSdp.type || !offerSdp.sdp) {
+        throw new Error('Invalid SDP received from server');
+      }
+
       const peerConnection = new RTCPeerConnection({ iceServers });
 
       peerConnection.ontrack = (event) => {
@@ -848,7 +859,7 @@ async function preloadAndPlayShortClip() {
       };
 
       try {
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(offerSdp));
+        await peerConnection.setRemoteDescription(offerSdp);
         const answerSdp = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answerSdp);
 
@@ -897,7 +908,6 @@ async function preloadAndPlayShortClip() {
     }
   });
 }
-
 
 
 
@@ -1276,14 +1286,14 @@ function playIdleVideo() {
 
   idleVideoElement.onloadeddata = () => {
     logger.debug(`Idle video loaded successfully for ${currentAvatar}`);
+    idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e));
   };
 
   idleVideoElement.onerror = (e) => {
     logger.error(`Error loading idle video for ${currentAvatar}:`, e);
   };
-
-  idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e));
 }
+
 
 
 function stopAllStreams() {
@@ -1542,6 +1552,7 @@ async function startStreaming(assistantReply) {
     }
   }
 }
+
 
 function startSendingAudioData() {
   logger.debug('Starting to send audio data...');
