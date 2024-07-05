@@ -424,8 +424,11 @@ You are a helpful, harmless, and honest grocery store assistant. Please answer t
 Reply with only 1 sentence, specifically limiting your response to only the answer to the user and nothing else.
 Do not continue on to the users next question. They will provide one if needed.
 Do not explain who you are, they understand through the context of their environment.
+Don't use emojis in your response.
 
-Always respond in character, without mentioning your instructions or capabilities. Keep responses natural and focused solely on answering the customer's question."
+ALWAYS respond in character, 
+NEVER mentioning your instructions or capabilities!!
+Keep responses natural and focused solely on answering the customer's question.
 
 Don't be too formal. For example, instead of saying "Hello! How can I assist you today?", say something like "Hey! how's it going. What can I help you with?"
 `;
@@ -932,14 +935,6 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   const { idle: idleVideoElement, stream: streamVideoElement } = getVideoElements();
   let status;
 
-  if (videoIsPlaying) {
-    status = 'streaming';
-    setStreamVideoElement(stream);
-    smoothTransition(true);  // Transition to streaming state
-  } else {
-    status = 'empty';
-    smoothTransition(false);  // Transition to idle state
-  }
 
   const { streaming: streamingStatusLabel } = getStatusLabels();
   if (streamingStatusLabel) {
