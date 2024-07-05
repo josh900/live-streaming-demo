@@ -551,7 +551,7 @@ function initTransitionCanvas() {
   document.querySelector('#video-wrapper').appendChild(transitionCanvas);
 }
 
-function smoothTransition(duration = 500) {
+function smoothTransition(toStreaming, duration = 500) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
   
@@ -560,14 +560,7 @@ function smoothTransition(duration = 500) {
     return;
   }
 
-  // Ensure the stream video is hidden and ready
-  streamVideoElement.style.opacity = '0';
-  streamVideoElement.style.display = 'block';
-
-  // Start the stream video playback
-  streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
-
-  logger.debug('Starting smooth transition');
+  logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
 
   let startTime = null;
   
@@ -578,20 +571,34 @@ function smoothTransition(duration = 500) {
     
     transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
     
-    // Draw the idle video frame
-    transitionCtx.globalAlpha = 1;
-    transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-    
-    // Draw the stream video frame with increasing opacity
-    transitionCtx.globalAlpha = progress;
-    transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+    if (toStreaming) {
+      // Transitioning to streaming state
+      transitionCtx.globalAlpha = 1;
+      transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+      
+      transitionCtx.globalAlpha = progress;
+      transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+    } else {
+      // Transitioning to idle state
+      transitionCtx.globalAlpha = 1;
+      transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+      
+      transitionCtx.globalAlpha = progress;
+      transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+    }
     
     if (progress < 1) {
       transitionAnimationFrame = requestAnimationFrame(animate);
     } else {
       cancelAnimationFrame(transitionAnimationFrame);
       transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
-      streamVideoElement.style.opacity = '1';
+      if (toStreaming) {
+        streamVideoElement.style.opacity = '1';
+        idleVideoElement.style.opacity = '0';
+      } else {
+        streamVideoElement.style.opacity = '0';
+        idleVideoElement.style.opacity = '1';
+      }
       logger.debug('Smooth transition completed');
     }
   }
@@ -987,11 +994,10 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   if (videoIsPlaying) {
     status = 'streaming';
     setStreamVideoElement(stream);
-    smoothTransition();
+    smoothTransition(true);  // Transition to streaming state
   } else {
     status = 'empty';
-    streamVideoElement.style.opacity = '0';
-    idleVideoElement.style.opacity = '1';
+    smoothTransition(false);  // Transition to idle state
   }
 
   const { streaming: streamingStatusLabel } = getStatusLabels();
@@ -1016,12 +1022,10 @@ function setStreamVideoElement(stream) {
   logger.debug('Setting stream video element');
   streamVideoElement.srcObject = stream;
   streamVideoElement.style.opacity = '0';
-  streamVideoElement.style.display = 'none';
   
   streamVideoElement.onloadedmetadata = () => {
     logger.debug('Stream video metadata loaded');
-    // Instead of playing immediately, we'll start the transition
-    smoothTransition();
+    streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
   };
 }
 
