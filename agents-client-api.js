@@ -453,7 +453,6 @@ function initializeTransitionCanvas() {
   document.querySelector('#video-wrapper').appendChild(transitionCanvas);
 }
 
-
 async function handleAvatarChange() {
   currentAvatar = avatarSelect.value;
   
@@ -522,7 +521,7 @@ function blendFrames(idleFrame, talkingFrame, progress) {
   canvas.height = idleFrame.videoHeight || 400;
   const ctx = canvas.getContext('2d');
   
-  ctx.globalAlpha = 1 - progress;
+  ctx.globalAlpha = 1;
   ctx.drawImage(idleFrame, 0, 0, canvas.width, canvas.height);
   
   ctx.globalAlpha = progress;
@@ -551,8 +550,9 @@ function initTransitionCanvas() {
   document.querySelector('#video-wrapper').appendChild(transitionCanvas);
 }
 
-function smoothTransition(duration = 300) {
-  const { idle: idleVideoElement, stream: streamVideoElement } = getVideoElements();
+function smoothTransition(duration = 500) {
+  const idleVideoElement = document.getElementById('idle-video-element');
+  const streamVideoElement = document.getElementById('stream-video-element');
   
   if (!idleVideoElement || !streamVideoElement) {
     logger.warn('Video elements not found for transition');
@@ -561,26 +561,29 @@ function smoothTransition(duration = 300) {
 
   logger.debug('Starting smooth transition');
 
-  // Ensure both videos are visible and positioned correctly
-  idleVideoElement.style.opacity = '1';
+  let startTime = performance.now();
+  
+  function animate(currentTime) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    
+    const blendedFrame = blendFrames(idleVideoElement, streamVideoElement, progress);
+    transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
+    transitionCtx.drawImage(blendedFrame, 0, 0, transitionCanvas.width, transitionCanvas.height);
+    
+    if (progress < 1) {
+      transitionAnimationFrame = requestAnimationFrame(animate);
+    } else {
+      cancelAnimationFrame(transitionAnimationFrame);
+      transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
+      streamVideoElement.style.opacity = '1';
+      logger.debug('Smooth transition completed');
+    }
+  }
+  
   streamVideoElement.style.opacity = '0';
-  
-  // Force a reflow to ensure the initial state is applied
-  void idleVideoElement.offsetWidth;
-  
-  // Apply transition only to the stream video element
-  streamVideoElement.style.transition = `opacity ${duration}ms ease-in-out`;
-  
-  // Trigger the transition
-  streamVideoElement.style.opacity = '1';
-  
-  // Remove transition after it completes
-  setTimeout(() => {
-    streamVideoElement.style.transition = '';
-    logger.debug('Smooth transition completed');
-  }, duration);
+  transitionAnimationFrame = requestAnimationFrame(animate);
 }
-
 
 
 function getVideoElements() {
@@ -593,6 +596,7 @@ function getVideoElements() {
   
   return { idle, stream };
 }
+
 
 function getStatusLabels() {
   return {
@@ -705,6 +709,7 @@ function updateAssistantReply(text) {
 }
 
 async function initialize() {
+  // Set up video elements
   const { idle, stream } = getVideoElements();
   idleVideoElement = idle;
   streamVideoElement = stream;
@@ -712,7 +717,7 @@ async function initialize() {
   if (idleVideoElement) idleVideoElement.setAttribute('playsinline', '');
   if (streamVideoElement) streamVideoElement.setAttribute('playsinline', '');
 
-  initTransitionCanvas();
+  initializeTransitionCanvas();
 
   // Dynamically populate avatar options
   const avatarSelect = document.getElementById('avatar-select');
@@ -724,29 +729,12 @@ async function initialize() {
     avatarSelect.appendChild(option);
   }
 
-
-  const sendTextButton = document.getElementById('send-text-button');
-  const textInput = document.getElementById('text-input');
-
-  sendTextButton.addEventListener('click', () => {
-    handleTextInput(textInput.value);
-  });
-
-  textInput.addEventListener('keypress', (event) => {
-    if (event.key === 'Enter') {
-      handleTextInput(textInput.value);
-    }
-  });
-
-
-
   currentAvatar = avatarSelect.value;
+  logger.info('Initial avatar:', currentAvatar);
 
-  initializeTransitionCanvas();
-
+  // Set up context input
   const contextInput = document.getElementById('context-input');
   contextInput.value = context.trim();
-
   contextInput.addEventListener('input', () => {
     // Only update the context when user is actively typing
     if (!contextInput.value.includes('Original Context:')) {
@@ -754,9 +742,25 @@ async function initialize() {
     }
   });
 
+  // Set up event listeners
+  const sendTextButton = document.getElementById('send-text-button');
+  const textInput = document.getElementById('text-input');
+  const replaceContextButton = document.getElementById('replace-context-button');
+  const autoSpeakToggle = document.getElementById('auto-speak-toggle');
+
+  sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
+  textInput.addEventListener('keypress', (event) => {
+    if (event.key === 'Enter') handleTextInput(textInput.value);
+  });
+  replaceContextButton.addEventListener('click', () => updateContext('replace'));
+  autoSpeakToggle.addEventListener('click', toggleAutoSpeak);
+
+  // Initialize WebSocket and start idle video
+  initializeWebSocket();
   playIdleVideo();
+
+  // Connect to the service
   showLoadingSymbol();
-  initTransitionCanvas();
   try {
     await initializeConnection();
     startKeepAlive();
@@ -766,14 +770,6 @@ async function initialize() {
     hideLoadingSymbol();
     showErrorMessage('Failed to connect. Please try again.');
   }
-
-  // Add event listeners for context buttons
-  const replaceContextButton = document.getElementById('replace-context-button');
-
-  replaceContextButton.addEventListener('click', () => updateContext('replace'));
-
-  currentAvatar = avatarSelect.value;
-  logger.info('Initial avatar:', currentAvatar);
 }
 
 function updateContext(action) {
@@ -976,10 +972,11 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   if (videoIsPlaying) {
     status = 'streaming';
     setStreamVideoElement(stream);
-    startSmoothTransition(idleVideoElement, streamVideoElement);
+    smoothTransition();
   } else {
     status = 'empty';
-    startSmoothTransition(streamVideoElement, idleVideoElement);
+    streamVideoElement.style.opacity = '0';
+    idleVideoElement.style.opacity = '1';
   }
 
   const { streaming: streamingStatusLabel } = getStatusLabels();
@@ -993,6 +990,7 @@ function onVideoStatusChange(videoIsPlaying, stream) {
 
 
 
+
 function setStreamVideoElement(stream) {
   const { stream: streamVideoElement } = getVideoElements();
   if (!streamVideoElement) {
@@ -1002,7 +1000,15 @@ function setStreamVideoElement(stream) {
 
   logger.debug('Setting stream video element');
   streamVideoElement.srcObject = stream;
-  streamVideoElement.play().catch(e => logger.error('Error playing video:', e));
+  streamVideoElement.style.opacity = '0';
+  
+  streamVideoElement.onloadedmetadata = () => {
+    logger.debug('Stream video metadata loaded');
+    streamVideoElement.play().then(() => {
+      logger.debug('Stream video playback started');
+      smoothTransition();
+    }).catch(e => logger.error('Error playing stream video:', e));
+  };
 }
 
 
@@ -1090,7 +1096,7 @@ function onTrack(event) {
     }
   }, 1000);
 
-  setVideoElement(event.streams[0]);
+  setStreamVideoElement(event.streams[0]);
 }
 
 function setVideoElement(stream) {
@@ -1792,18 +1798,6 @@ startButton.onclick = async () => {
 
 
 
-
-
-// Initialize WebSocket connection
-initializeWebSocket();
-
-// Initialize the connection when the page loads
-initializeConnection().catch(error => {
-  logger.error('Failed to initialize connection:', error);
-  showErrorMessage('Failed to initialize connection. Please try again.');
-  document.getElementById('auto-speak-toggle').addEventListener('click', toggleAutoSpeak);
-
-});
 
 export function setLogLevel(level) {
   logger.setLogLevel(level);
