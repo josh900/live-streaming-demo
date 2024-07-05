@@ -568,17 +568,14 @@ function smoothTransition(duration = 300) {
   // Force a reflow to ensure the initial state is applied
   void idleVideoElement.offsetWidth;
   
-  // Apply transition to both elements
-  idleVideoElement.style.transition = `opacity ${duration}ms ease-in-out`;
+  // Apply transition only to the stream video element
   streamVideoElement.style.transition = `opacity ${duration}ms ease-in-out`;
   
   // Trigger the transition
-  idleVideoElement.style.opacity = '0';
   streamVideoElement.style.opacity = '1';
   
-  // Remove transitions after they complete
+  // Remove transition after it completes
   setTimeout(() => {
-    idleVideoElement.style.transition = '';
     streamVideoElement.style.transition = '';
     logger.debug('Smooth transition completed');
   }, duration);
