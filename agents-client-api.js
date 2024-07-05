@@ -1224,8 +1224,8 @@ async function startStreaming(assistantReply) {
           pad_audio: 1.5,
           align_driver: true,
           auto_match: true,
-          stitch: true
-
+          stitch: true,
+          normalization_factor: 0.5
         },
         session_id: sessionId,
       }),
