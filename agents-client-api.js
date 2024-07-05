@@ -665,6 +665,42 @@ function updateTranscript(text, isFinal) {
   msgHistory.scrollTop = msgHistory.scrollHeight;
 }
 
+function handleTextInput(text) {
+  if (text.trim() === '') return;
+
+  const textInput = document.getElementById('text-input');
+  textInput.value = ''; // Clear the input field
+
+  // Simulate transcription completion
+  updateTranscript(text, true);
+  
+  // Add to chat history
+  chatHistory.push({
+    role: 'user',
+    content: text,
+  });
+
+  // Bypass Groq and directly send to avatar
+  simulateAssistantReply(text);
+}
+
+async function simulateAssistantReply(userInput) {
+  // This is a simple echo response. Replace this with more complex logic if needed.
+  const assistantReply = `You said: "${userInput}". This is a simulated response.`;
+
+  // Update chat history in the UI
+  updateAssistantReply(assistantReply);
+
+  // Add to chat history
+  chatHistory.push({
+    role: 'assistant',
+    content: assistantReply,
+  });
+
+  // Start streaming the avatar's response
+  await startStreaming(assistantReply);
+}
+
 
 function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
@@ -689,6 +725,22 @@ async function initialize() {
     option.textContent = key.charAt(0).toUpperCase() + key.slice(1); // Capitalize first letter
     avatarSelect.appendChild(option);
   }
+
+
+  const sendTextButton = document.getElementById('send-text-button');
+  const textInput = document.getElementById('text-input');
+
+  sendTextButton.addEventListener('click', () => {
+    handleTextInput(textInput.value);
+  });
+
+  textInput.addEventListener('keypress', (event) => {
+    if (event.key === 'Enter') {
+      handleTextInput(textInput.value);
+    }
+  });
+
+
 
   currentAvatar = avatarSelect.value;
 
@@ -788,17 +840,9 @@ function showToast(message) {
 
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
-    initialize().catch(error => {
-      logger.error('Error during initialization:', error);
-      showErrorMessage('Failed to initialize. Please refresh the page and try again.');
-    });
-  });
+  document.addEventListener('DOMContentLoaded', initialize);
 } else {
-  initialize().catch(error => {
-    logger.error('Error during initialization:', error);
-    showErrorMessage('Failed to initialize. Please refresh the page and try again.');
-  });
+  initialize();
 }
 
 
