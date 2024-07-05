@@ -935,6 +935,14 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   const { idle: idleVideoElement, stream: streamVideoElement } = getVideoElements();
   let status;
 
+  if (videoIsPlaying) {
+    status = 'streaming';
+    setStreamVideoElement(stream);
+    smoothTransition(true);  // Transition to streaming state
+  } else {
+    status = 'empty';
+    smoothTransition(false);  // Transition to idle state
+  }
 
   const { streaming: streamingStatusLabel } = getStatusLabels();
   if (streamingStatusLabel) {
@@ -1284,7 +1292,6 @@ async function startStreaming(assistantReply) {
       // Set up event listeners for the stream video
       streamVideoElement.onloadedmetadata = () => {
         logger.debug('Stream video metadata loaded');
-        smoothTransition(300);
         streamVideoElement.play().then(() => {
           logger.debug('Stream video playback started');
         }).catch(e => logger.error('Error playing stream video:', e));
