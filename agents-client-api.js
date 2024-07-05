@@ -717,16 +717,26 @@ async function initialize() {
   idleVideoElement = idle;
   streamVideoElement = stream;
 
-  if (idleVideoElement) idleVideoElement.setAttribute('playsinline', '');
-  if (streamVideoElement) streamVideoElement.setAttribute('playsinline', '');
+  if (idleVideoElement) {
+    idleVideoElement.setAttribute('playsinline', '');
+    idleVideoElement.muted = true;
+  }
+  if (streamVideoElement) {
+    streamVideoElement.setAttribute('playsinline', '');
+    // Don't mute the stream video element as it will be used for talking
+  }
 
   // Create a new video element for preloading
   preloadVideoElement = document.createElement('video');
   preloadVideoElement.style.display = 'none';
   preloadVideoElement.setAttribute('playsinline', '');
+  preloadVideoElement.muted = true;
   document.querySelector('#video-wrapper').appendChild(preloadVideoElement);
 
   initTransitionCanvas();
+
+
+
 
   // Dynamically populate avatar options
   const avatarSelect = document.getElementById('avatar-select');
@@ -786,6 +796,8 @@ async function initialize() {
   }
 
   logger.info('Initial avatar:', currentAvatar);
+
+
 }
 
 async function preloadAndPlayShortClip() {
@@ -828,45 +840,49 @@ async function preloadAndPlayShortClip() {
         preloadVideoElement.srcObject = event.streams[0];
       };
 
-      await peerConnection.setRemoteDescription(offerSdp);
-      const answerSdp = await peerConnection.createAnswer();
-      await peerConnection.setLocalDescription(answerSdp);
+      try {
+        await peerConnection.setRemoteDescription(offerSdp);
+        const answerSdp = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answerSdp);
 
-      const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${clipStreamId}/sdp`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${DID_API.key}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          answer: answerSdp,
-          session_id: null,
-        }),
-      });
+        const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${clipStreamId}/sdp`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Basic ${DID_API.key}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            answer: answerSdp,
+            session_id: null,
+          }),
+        });
 
-      if (!sdpResponse.ok) {
-        throw new Error('Failed to set SDP answer');
-      }
+        if (!sdpResponse.ok) {
+          throw new Error('Failed to set SDP answer');
+        }
 
-      preloadVideoElement.oncanplaythrough = () => {
-        preloadVideoElement.muted = true;
-        preloadVideoElement.play().then(() => {
-          logger.debug('Preload clip played successfully');
-          updateStatus('preloading', 'complete');
-          resolve();
-        }).catch((error) => {
-          logger.error('Error playing preload clip:', error);
+        preloadVideoElement.oncanplaythrough = () => {
+          preloadVideoElement.play().then(() => {
+            logger.debug('Preload clip played successfully');
+            updateStatus('preloading', 'complete');
+            resolve();
+          }).catch((error) => {
+            logger.error('Error playing preload clip:', error);
+            updateStatus('preloading', 'failed');
+            resolve(); // Resolve anyway to not block initialization
+          });
+        };
+
+        preloadVideoElement.onerror = (error) => {
+          logger.error('Error loading preload clip:', error);
           updateStatus('preloading', 'failed');
           resolve(); // Resolve anyway to not block initialization
-        });
-      };
-
-      preloadVideoElement.onerror = (error) => {
-        logger.error('Error loading preload clip:', error);
+        };
+      } catch (error) {
+        logger.error('Error setting up WebRTC connection:', error);
         updateStatus('preloading', 'failed');
         resolve(); // Resolve anyway to not block initialization
-      };
-
+      }
     } catch (error) {
       logger.error('Error in preloadAndPlayShortClip:', error);
       updateStatus('preloading', 'failed');
@@ -874,6 +890,8 @@ async function preloadAndPlayShortClip() {
     }
   });
 }
+
+
 
 
 function updateStatus(statusType, state) {
@@ -1111,11 +1129,16 @@ function setStreamVideoElement(stream) {
 
   logger.debug('Setting stream video element');
   streamVideoElement.srcObject = stream;
-  streamVideoElement.muted = false; // Ensure audio is enabled
+  streamVideoElement.muted = false; // Ensure audio is enabled for talking avatar
   streamVideoElement.onloadedmetadata = () => {
-    streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
+    streamVideoElement.play().then(() => {
+      logger.debug('Stream video playback started');
+    }).catch(e => logger.error('Error playing stream video:', e));
   };
 }
+
+
+
 
 
 
@@ -1239,6 +1262,7 @@ function playIdleVideo() {
   }
   idleVideoElement.src = avatars[currentAvatar].idleVideo;
   idleVideoElement.loop = true;
+  idleVideoElement.muted = true;
 
   idleVideoElement.onloadeddata = () => {
     logger.debug(`Idle video loaded successfully for ${currentAvatar}`);
@@ -1250,7 +1274,6 @@ function playIdleVideo() {
 
   idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e));
 }
-
 
 
 function stopAllStreams() {
@@ -1447,8 +1470,9 @@ async function startStreaming(assistantReply) {
       // Get video elements
       const { idle: idleVideoElement, stream: streamVideoElement } = getVideoElements();
       
-      // Ensure the stream video element is visible
+      // Ensure the stream video element is visible and unmuted
       streamVideoElement.style.display = 'block';
+      streamVideoElement.muted = false;
       
       // Log the current state of video elements
       logger.debug('Idle video element:', idleVideoElement.src);
@@ -1457,7 +1481,7 @@ async function startStreaming(assistantReply) {
       // Set up event listeners for the stream video
       streamVideoElement.onloadedmetadata = () => {
         logger.debug('Stream video metadata loaded');
-        smoothTransition(300);
+        startSmoothTransition(idleVideoElement, streamVideoElement);
         streamVideoElement.play().then(() => {
           logger.debug('Stream video playback started');
         }).catch(e => logger.error('Error playing stream video:', e));
@@ -1474,29 +1498,30 @@ async function startStreaming(assistantReply) {
       // Calculate the duration of the audio
       const audioDuration = playResponseData.audio_duration * 1000;
       
-      // Set a timeout to start speaking mode when the avatar finishes
-      if (autoSpeakMode) {
-        clearTimeout(speakTimeout);
-        autoSpeakInProgress = true;
-        const startButton = document.getElementById('start-button');
-        startButton.textContent = 'Stop';
+      // Set a timeout to transition back to idle and handle auto-speak
+      setTimeout(() => {
+        startSmoothTransition(streamVideoElement, idleVideoElement);
         
-        speakTimeout = setTimeout(async () => {
-          if (!isRecording) {
-            try {
-              await startRecording();
-            } catch (error) {
-              logger.error('Failed to auto-start recording:', error);
+        if (autoSpeakMode) {
+          clearTimeout(speakTimeout);
+          autoSpeakInProgress = true;
+          const startButton = document.getElementById('start-button');
+          startButton.textContent = 'Stop';
+          
+          speakTimeout = setTimeout(async () => {
+            if (!isRecording) {
+              try {
+                await startRecording();
+              } catch (error) {
+                logger.error('Failed to auto-start recording:', error);
+              }
             }
-          }
-        }, audioDuration - 200);
-      } else {
-        // If auto-speak is off, change button text after audio finishes
-        setTimeout(() => {
+          }, 200); // Reduced delay to 200ms
+        } else {
           const startButton = document.getElementById('start-button');
           startButton.textContent = 'Speak';
-        }, audioDuration);
-      }
+        }
+      }, audioDuration);
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
     }
