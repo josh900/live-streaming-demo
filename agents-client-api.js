@@ -1153,7 +1153,7 @@ async function initializeConnection() {
         config: {
           stitch: true,
           fluent: true,
-          pad_audio: 1.0,
+          pad_audio: 0.5,
           auto_match: true
         }
       }),
@@ -1244,16 +1244,19 @@ async function startStreaming(assistantReply) {
           input: assistantReply,
           provider: {
             type: 'microsoft',
-            voice_id: avatars[currentAvatar].voice
-          }
+            voice_id: avatars[currentAvatar].voice,
+            voice_config: {
+            rate: 1.1
+            }
+          },
+          ssml: false,
         },
         config: {
           fluent: true,
-          pad_audio: 1.0,
+          pad_audio: 0.5,
           align_driver: true,
           auto_match: true,
-          stitch: true,
-          normalization_factor: 0.85
+          normalization_factor: 0.6
         },
         session_id: sessionId,
       }),
