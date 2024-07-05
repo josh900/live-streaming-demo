@@ -1090,7 +1090,6 @@ function stopAllStreams() {
     streamVideoElement.srcObject.getTracks().forEach((track) => track.stop());
     streamVideoElement.srcObject = null;
 
-    smoothTransition();
   }
 }
 
