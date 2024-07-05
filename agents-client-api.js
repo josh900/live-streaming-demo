@@ -1246,7 +1246,7 @@ async function startStreaming(assistantReply) {
             type: 'microsoft',
             voice_id: avatars[currentAvatar].voice,
             voice_config: {
-            rate: 1.1
+            rate: 'medium'
             }
           },
           ssml: false,
