@@ -1113,12 +1113,13 @@ async function initializeConnection() {
       },
       body: JSON.stringify({
         source_url: avatars[currentAvatar].idleImage,
-        driver_url: 'bank://lively/',
+        // driver_url: 'bank://lively/',
         stream_warmup: true,
         config: {
           stitch: true,
           fluent: true,
           pad_audio: 0.5,
+          align_driver: true,
         }
       }),
     });
