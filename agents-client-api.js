@@ -41,6 +41,7 @@ let transitionCtx;
 let transitionAnimationFrame;
 let isDebugMode = false;
 let preloadVideoElement;
+let preloadingStatusLabel;
 
 
 
@@ -588,7 +589,8 @@ function getStatusLabels() {
     ice: document.getElementById('ice-status-label'),
     iceGathering: document.getElementById('ice-gathering-status-label'),
     signaling: document.getElementById('signaling-status-label'),
-    streaming: document.getElementById('streaming-status-label')
+    streaming: document.getElementById('streaming-status-label'),
+    preloading: document.getElementById('preloading-status-label')
   };
 }
 
@@ -710,6 +712,13 @@ async function initialize() {
     }
   });
 
+    // Set up status labels
+    const statusLabels = getStatusLabels();
+    preloadingStatusLabel = statusLabels.preloading;
+    if (preloadingStatusLabel) {
+      preloadingStatusLabel.innerText = 'Not started';
+    }
+
   // Set up event listeners
   const sendTextButton = document.getElementById('send-text-button');
   const textInput = document.getElementById('text-input');
@@ -742,6 +751,7 @@ async function initialize() {
 }
 
 
+
 async function preloadTalkingAvatar() {
   if (!streamId || !sessionId) {
     logger.warn('Cannot preload talking avatar: streamId or sessionId is missing');
@@ -749,6 +759,9 @@ async function preloadTalkingAvatar() {
   }
 
   logger.debug('Preloading talking avatar...');
+  if (preloadingStatusLabel) {
+    preloadingStatusLabel.innerText = 'In progress';
+  }
 
   try {
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
@@ -785,6 +798,8 @@ async function preloadTalkingAvatar() {
       // Create a hidden video element for preloading
       preloadVideoElement = document.createElement('video');
       preloadVideoElement.style.display = 'none';
+      preloadVideoElement.style.width = '0';
+      preloadVideoElement.style.height = '0';
       preloadVideoElement.muted = true;
       preloadVideoElement.playsInline = true;
       document.body.appendChild(preloadVideoElement);
@@ -801,6 +816,9 @@ async function preloadTalkingAvatar() {
         logger.debug('Preload video playback ended');
         document.body.removeChild(preloadVideoElement);
         preloadVideoElement = null;
+        if (preloadingStatusLabel) {
+          preloadingStatusLabel.innerText = 'Complete';
+        }
       };
 
       // Set the video source
@@ -813,9 +831,11 @@ async function preloadTalkingAvatar() {
     }
   } catch (error) {
     logger.error('Error during preloading:', error);
+    if (preloadingStatusLabel) {
+      preloadingStatusLabel.innerText = 'Failed';
+    }
   }
 }
-
 
 
 function updateContext(action) {
