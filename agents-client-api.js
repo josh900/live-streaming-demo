@@ -1223,7 +1223,8 @@ async function startStreaming(assistantReply) {
           fluent: true,
           pad_audio: 1.5,
           align_driver: true,
-          auto_match: true
+          auto_match: true,
+          stitch: true
 
         },
         session_id: sessionId,
