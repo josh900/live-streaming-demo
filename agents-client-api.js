@@ -42,6 +42,8 @@ let transitionAnimationFrame;
 let isDebugMode = false;
 let preloadVideoElement;
 let preloadingStatusLabel;
+let autoSpeakInProgress = false;
+
 
 
 
