@@ -43,6 +43,11 @@ let isDebugMode = false;
 
 
 
+function setLogLevel(level) {
+  logger.setLogLevel(level);
+  isDebugMode = level === 'DEBUG';
+  logger.debug(`Log level set to ${level}. Debug mode is ${isDebugMode ? 'enabled' : 'disabled'}.`);
+}
 
 
 
@@ -952,11 +957,11 @@ function setStreamVideoElement(stream) {
   logger.debug('Setting stream video element');
   streamVideoElement.srcObject = stream;
   streamVideoElement.style.opacity = '0';
-
+  
   streamVideoElement.onloadedmetadata = () => {
     logger.debug('Stream video metadata loaded');
     streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
-
+    
     if (isDebugMode) {
       downloadStreamVideo(stream);
     }
@@ -964,18 +969,19 @@ function setStreamVideoElement(stream) {
 }
 
 
+
 function downloadStreamVideo(stream) {
   logger.debug('Starting video download in debug mode');
-
+  
   const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
   const chunks = [];
-
+  
   mediaRecorder.ondataavailable = (event) => {
     if (event.data.size > 0) {
       chunks.push(event.data);
     }
   };
-
+  
   mediaRecorder.onstop = () => {
     const blob = new Blob(chunks, { type: 'video/webm' });
     const url = URL.createObjectURL(blob);
@@ -988,14 +994,15 @@ function downloadStreamVideo(stream) {
     window.URL.revokeObjectURL(url);
     logger.debug('Video download completed');
   };
-
+  
   mediaRecorder.start();
-
+  
   // Stop recording after 10 seconds (adjust as needed)
   setTimeout(() => {
     mediaRecorder.stop();
   }, 10000);
 }
+
 
 
 function onTrack(event) {
