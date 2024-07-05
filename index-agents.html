@@ -19,6 +19,7 @@
         Peer connection status: <label id="peer-status-label"></label><br />
         Signaling status: <label id="signaling-status-label"></label><br />
         Streaming status: <label id="streaming-status-label"></label><br />
+        Pre-loading status: <label id="preloading-status-label"></label><br />
         <br>
         <div id="buttons">
           <select id="avatar-select">
@@ -30,9 +31,9 @@
 
       <div id="video-wrapper">
         <div>
-          <video id="idle-video-element" width="400" height="400" src="brad_idle.mp4" autoplay loop muted></video>
-          <video id="stream-video-element" width="400" height="400" autoplay></video>    
-        </div>
+          <video id="idle-video-element" width="400" height="400" playsinline muted></video>
+          <video id="stream-video-element" width="400" height="400" playsinline></video>
+          </div>
       </div>
     </div>
 
@@ -66,8 +67,6 @@
 
   <script>
     // AudioWorklet implementation
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-
     // AudioWorklet processor code
     const workletCode = `
       class AudioProcessor extends AudioWorkletProcessor {
@@ -89,6 +88,7 @@
 
       registerProcessor('audio-processor', AudioProcessor);
     `;
+    
 
     const blob = new Blob([workletCode], { type: 'application/javascript' });
     const workletUrl = URL.createObjectURL(blob);
@@ -98,6 +98,10 @@
       // Connect the audio processor to the audio context destination
       audioProcessor.connect(audioContext.destination);
     }).catch(err => console.error('Error loading AudioWorklet:', err));
+
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+
   </script>
 
   <script src="https://cdn.jsdelivr.net/npm/@deepgram/sdk"></script>

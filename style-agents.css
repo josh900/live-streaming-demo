@@ -235,6 +235,18 @@ select {
   background-color: transparent;
 }
 
+.preloadingState-in-progress {
+  color: orange;
+}
+
+.preloadingState-complete {
+  color: green;
+}
+
+.preloadingState-failed {
+  color: red;
+}
+
 
 #idle-video-element,
 #stream-video-element {

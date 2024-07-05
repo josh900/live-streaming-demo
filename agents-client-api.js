@@ -457,22 +457,20 @@ function initializeTransitionCanvas() {
 
 
 async function handleAvatarChange() {
-  currentAvatar = avatarSelect.value;
-  
-  const idleVideoElement = document.getElementById('idle-video-element');
-  if (idleVideoElement) {
-    idleVideoElement.src = avatars[currentAvatar].idleVideo;
-    try {
-      await idleVideoElement.load();
-      logger.info(`Idle video loaded for ${currentAvatar}`);
-    } catch (error) {
-      logger.error(`Error loading idle video for ${currentAvatar}:`, error);
-    }
-  }
+  currentAvatar = document.getElementById('avatar-select').value;
+  logger.info('Avatar changed to:', currentAvatar);
 
-  const streamVideoElement = document.getElementById('stream-video-element');
-  if (streamVideoElement) {
-    streamVideoElement.srcObject = null;
+  // Update preloading status
+  updateStatus('preloading', 'in-progress');
+
+  try {
+    await preloadAndPlayShortClip();
+    playIdleVideo();
+    updateStatus('preloading', 'complete');
+  } catch (error) {
+    logger.error('Error during avatar change:', error);
+    updateStatus('preloading', 'failed');
+    showErrorMessage('Failed to load new avatar. Please try again.');
   }
 
   // Stop the current recording and reset states
@@ -605,9 +603,12 @@ function getStatusLabels() {
     ice: document.getElementById('ice-status-label'),
     iceGathering: document.getElementById('ice-gathering-status-label'),
     signaling: document.getElementById('signaling-status-label'),
-    streaming: document.getElementById('streaming-status-label')
+    streaming: document.getElementById('streaming-status-label'),
+    preloading: document.getElementById('preloading-status-label')
   };
 }
+
+
 
 function initializeWebSocket() {
   socket = new WebSocket(`wss://${window.location.host}`);
@@ -712,24 +713,22 @@ function updateAssistantReply(text) {
 async function initialize() {
   logger.info('Initializing application...');
 
-  // Set up video elements
-  const videoWrapper = document.getElementById('video-wrapper');
-  idleVideoElement = document.getElementById('idle-video-element');
-  streamVideoElement = document.getElementById('stream-video-element');
-  
-  // Create a new video element for preloading
-  preloadVideoElement = document.createElement('video');
-  preloadVideoElement.style.display = 'none';
-  videoWrapper.appendChild(preloadVideoElement);
+  const { idle, stream } = getVideoElements();
+  idleVideoElement = idle;
+  streamVideoElement = stream;
 
   if (idleVideoElement) idleVideoElement.setAttribute('playsinline', '');
   if (streamVideoElement) streamVideoElement.setAttribute('playsinline', '');
+
+  // Create a new video element for preloading
+  preloadVideoElement = document.createElement('video');
+  preloadVideoElement.style.display = 'none';
   preloadVideoElement.setAttribute('playsinline', '');
+  document.querySelector('#video-wrapper').appendChild(preloadVideoElement);
 
-  // Initialize transition canvas
-  initializeTransitionCanvas();
+  initTransitionCanvas();
 
-  // Set up avatar selection
+  // Dynamically populate avatar options
   const avatarSelect = document.getElementById('avatar-select');
   avatarSelect.innerHTML = ''; // Clear existing options
   for (const [key, value] of Object.entries(avatars)) {
@@ -738,8 +737,21 @@ async function initialize() {
     option.textContent = key.charAt(0).toUpperCase() + key.slice(1); // Capitalize first letter
     avatarSelect.appendChild(option);
   }
+
   currentAvatar = avatarSelect.value;
-  logger.info('Initial avatar:', currentAvatar);
+
+  // Add event listener for avatar change
+  avatarSelect.addEventListener('change', handleAvatarChange);
+
+  const contextInput = document.getElementById('context-input');
+  contextInput.value = context.trim();
+
+  contextInput.addEventListener('input', () => {
+    // Only update the context when user is actively typing
+    if (!contextInput.value.includes('Original Context:')) {
+      context = contextInput.value.trim();
+    }
+  });
 
   // Set up text input handlers
   const sendTextButton = document.getElementById('send-text-button');
@@ -755,23 +767,11 @@ async function initialize() {
     }
   });
 
-  // Set up context input
-  const contextInput = document.getElementById('context-input');
-  contextInput.value = context.trim();
-
-  contextInput.addEventListener('input', () => {
-    if (!contextInput.value.includes('Original Context:')) {
-      context = contextInput.value.trim();
-    }
-  });
-
-  // Set up context button
+  // Add event listeners for context buttons
   const replaceContextButton = document.getElementById('replace-context-button');
   replaceContextButton.addEventListener('click', () => updateContext('replace'));
 
-  // Start initialization process
   showLoadingSymbol();
-
   try {
     await initializeConnection();
     await preloadAndPlayShortClip();
@@ -784,9 +784,13 @@ async function initialize() {
     hideLoadingSymbol();
     showErrorMessage('Failed to connect. Please try again.');
   }
+
+  logger.info('Initial avatar:', currentAvatar);
 }
 
 async function preloadAndPlayShortClip() {
+  updateStatus('preloading', 'in-progress');
+
   return new Promise(async (resolve, reject) => {
     try {
       const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
@@ -848,24 +852,38 @@ async function preloadAndPlayShortClip() {
         preloadVideoElement.muted = true;
         preloadVideoElement.play().then(() => {
           logger.debug('Preload clip played successfully');
+          updateStatus('preloading', 'complete');
           resolve();
         }).catch((error) => {
           logger.error('Error playing preload clip:', error);
+          updateStatus('preloading', 'failed');
           resolve(); // Resolve anyway to not block initialization
         });
       };
 
       preloadVideoElement.onerror = (error) => {
         logger.error('Error loading preload clip:', error);
+        updateStatus('preloading', 'failed');
         resolve(); // Resolve anyway to not block initialization
       };
 
     } catch (error) {
       logger.error('Error in preloadAndPlayShortClip:', error);
+      updateStatus('preloading', 'failed');
       resolve(); // Resolve anyway to not block initialization
     }
   });
 }
+
+
+function updateStatus(statusType, state) {
+  const statusLabel = document.getElementById(`${statusType}-status-label`);
+  if (statusLabel) {
+    statusLabel.innerText = state;
+    statusLabel.className = `${statusType}State-${state}`;
+  }
+}
+
 
 
 function updateContext(action) {
