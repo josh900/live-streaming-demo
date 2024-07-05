@@ -514,49 +514,51 @@ function smoothTransition(toStreaming, duration = 250) {
 
   logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
 
-  let startTime = null;
+  // Ensure both videos are the same size and position
+  streamVideoElement.style.width = '100%';
+  streamVideoElement.style.height = '100%';
+  streamVideoElement.style.objectFit = 'cover';
+  idleVideoElement.style.width = '100%';
+  idleVideoElement.style.height = '100%';
+  idleVideoElement.style.objectFit = 'cover';
 
-  function animate(currentTime) {
-    if (!startTime) startTime = currentTime;
-    const elapsed = currentTime - startTime;
-    const progress = Math.min(elapsed / duration, 1);
-
-    transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
-
-    if (toStreaming) {
-      // Transitioning to streaming state
-      transitionCtx.globalAlpha = 1;
-      transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-
-      transitionCtx.globalAlpha = progress;
-      transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-    } else {
-      // Transitioning to idle state
-      transitionCtx.globalAlpha = 1;
-      transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-
-      transitionCtx.globalAlpha = progress;
-      transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-    }
-
-    if (progress < 1) {
-      transitionAnimationFrame = requestAnimationFrame(animate);
-    } else {
-      cancelAnimationFrame(transitionAnimationFrame);
-      transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
-      if (toStreaming) {
-        streamVideoElement.style.opacity = '1';
-        idleVideoElement.style.opacity = '0';
-      } else {
-        streamVideoElement.style.opacity = '0';
-        idleVideoElement.style.opacity = '1';
-      }
-      logger.debug('Smooth transition completed');
-    }
+  // Preload the stream video
+  if (toStreaming) {
+    streamVideoElement.load();
   }
 
-  cancelAnimationFrame(transitionAnimationFrame);
-  transitionAnimationFrame = requestAnimationFrame(animate);
+  // Small delay before starting the transition
+  setTimeout(() => {
+    let startTime = null;
+
+    function animate(currentTime) {
+      if (!startTime) startTime = currentTime;
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+
+      if (toStreaming) {
+        streamVideoElement.style.opacity = progress;
+        idleVideoElement.style.opacity = 1 - progress;
+      } else {
+        streamVideoElement.style.opacity = 1 - progress;
+        idleVideoElement.style.opacity = progress;
+      }
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        if (toStreaming) {
+          idleVideoElement.style.display = 'none';
+          streamVideoElement.style.display = 'block';
+        } else {
+          streamVideoElement.style.display = 'none';
+          idleVideoElement.style.display = 'block';
+        }
+      }
+    }
+
+    requestAnimationFrame(animate);
+  }, 50); // 50ms delay before starting the transition
 }
 
 
@@ -959,14 +961,19 @@ function setStreamVideoElement(stream) {
   
   streamVideoElement.onloadedmetadata = () => {
     logger.debug('Stream video metadata loaded');
-    streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
+    setTimeout(() => {
+      smoothTransition(true, 300);
+      streamVideoElement.play().then(() => {
+        logger.debug('Stream video playback started');
+      }).catch(e => logger.error('Error playing stream video:', e));
+    }, 50); // Small delay before transition
     
     if (isDebugMode) {
       downloadStreamVideo(stream);
     }
+
   };
 }
-
 
 
 function downloadStreamVideo(stream) {
