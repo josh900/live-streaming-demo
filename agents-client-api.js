@@ -1269,6 +1269,9 @@ async function initializeConnection() {
     logger.info('Connection initialized successfully');
     startKeepAlive();
 
+    // Wait for the connection to be stable before preloading
+    await waitForStableConnection();
+
     // Preload a short clip
     await preloadShortClip();
   } catch (error) {
@@ -1278,6 +1281,24 @@ async function initializeConnection() {
     isInitializing = false;
   }
 }
+
+
+function waitForStableConnection() {
+  return new Promise((resolve) => {
+    const checkStatus = () => {
+      const { peer: peerStatusLabel, ice: iceStatusLabel } = getStatusLabels();
+      if (peerStatusLabel.innerText === 'connected' && iceStatusLabel.innerText === 'connected') {
+        logger.info('WebRTC connection is stable');
+        resolve();
+      } else {
+        setTimeout(checkStatus, 500);
+      }
+    };
+    checkStatus();
+  });
+}
+
+
 
 
 async function preloadShortClip() {
@@ -1310,7 +1331,7 @@ async function preloadShortClip() {
           align_driver: true,
           auto_match: true,
           stitch: true,
-          normalization_factor: 0.8
+          normalization_factor: 0.5
         },
         session_id: sessionId,
       }),
@@ -1380,6 +1401,7 @@ async function preloadShortClip() {
     }
   }
 }
+
 
 function startKeepAlive() {
   if (keepAliveInterval) {
