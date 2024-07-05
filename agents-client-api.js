@@ -797,22 +797,38 @@ async function preloadTalkingAvatar() {
     logger.debug('Preload response:', playResponseData);
 
     if (playResponseData.status === 'started') {
-      // Create an invisible audio context for preloading
-      preloadAudioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const dummyNode = preloadAudioContext.createGain();
-      dummyNode.gain.value = 0; // Ensure it's silent
-      dummyNode.connect(preloadAudioContext.destination);
+      // Create an off-screen video element for preloading
+      preloadVideoElement = document.createElement('video');
+      preloadVideoElement.style.position = 'absolute';
+      preloadVideoElement.style.left = '-9999px';
+      preloadVideoElement.muted = true;
+      preloadVideoElement.playsInline = true;
+      document.body.appendChild(preloadVideoElement);
 
-      // Set up a timeout to simulate the preloading process
-      setTimeout(() => {
-        logger.debug('Preload audio processing completed');
-        preloadAudioContext.close().then(() => {
-          preloadAudioContext = null;
-          if (preloadingStatusLabel) {
-            preloadingStatusLabel.innerText = 'Complete';
-          }
-        });
-      }, 2000); // Adjust this timeout as needed to simulate the preload duration
+      // Set up event listeners for the preload video
+      preloadVideoElement.onloadedmetadata = () => {
+        logger.debug('Preload video metadata loaded');
+        preloadVideoElement.play().then(() => {
+          logger.debug('Preload video playback started');
+        }).catch(e => logger.error('Error playing preload video:', e));
+      };
+
+      preloadVideoElement.onended = () => {
+        logger.debug('Preload video playback ended');
+        document.body.removeChild(preloadVideoElement);
+        preloadVideoElement = null;
+        if (preloadingStatusLabel) {
+          preloadingStatusLabel.innerText = 'Complete';
+        }
+      };
+
+      // Set the video source
+      if (peerConnection && peerConnection.getReceivers) {
+        const videoTrack = peerConnection.getReceivers().find(receiver => receiver.track.kind === 'video')?.track;
+        if (videoTrack) {
+          preloadVideoElement.srcObject = new MediaStream([videoTrack]);
+        }
+      }
     }
   } catch (error) {
     logger.error('Error during preloading:', error);
