@@ -1280,7 +1280,7 @@ async function initializeConnection() {
 }
 
 
-async function preloadShortClip() {
+javascriptCopyasync function preloadShortClip() {
   const { preloading: preloadingStatusLabel } = getStatusLabels();
   if (preloadingStatusLabel) {
     preloadingStatusLabel.innerText = 'In Progress';
@@ -1298,7 +1298,7 @@ async function preloadShortClip() {
       body: JSON.stringify({
         script: {
           type: 'text',
-          input: 'Hello, how are you?',  // Increased length to meet minimum requirement
+          input: 'Hello, how are you?',
           provider: {
             type: 'microsoft',
             voice_id: avatars[currentAvatar].voice
@@ -1310,7 +1310,7 @@ async function preloadShortClip() {
           align_driver: true,
           auto_match: true,
           stitch: true,
-          normalization_factor: 0.5
+          normalization_factor: 0.8
         },
         session_id: sessionId,
       }),
@@ -1321,17 +1321,59 @@ async function preloadShortClip() {
     }
 
     const preloadData = await preloadResponse.json();
-    logger.debug('Short clip preloaded successfully');
+    logger.debug('Short clip preload request successful');
+
+    // Get the stream video element
+    const { stream: streamVideoElement } = getVideoElements();
+    
+    if (!streamVideoElement) {
+      throw new Error('Stream video element not found');
+    }
+
+    // Ensure the stream video is muted
+    streamVideoElement.muted = true;
+
+    // Set up event listeners
+    streamVideoElement.onloadedmetadata = () => {
+      logger.debug('Preload video metadata loaded');
+    };
+
+    streamVideoElement.oncanplay = () => {
+      logger.debug('Preload video can play');
+    };
+
+    let playAttempted = false;
+    streamVideoElement.onplay = () => {
+      logger.debug('Preload video playback started');
+      playAttempted = true;
+    };
+
+    streamVideoElement.onerror = (e) => {
+      logger.error('Error with preload video:', e);
+    };
+
+    // Attempt to play the video
+    try {
+      await streamVideoElement.play();
+    } catch (playError) {
+      logger.error('Failed to play preload video:', playError);
+    }
 
     // Wait for the preloaded clip to finish
-    await new Promise(resolve => setTimeout(resolve, preloadData.audio_duration * 1000));
+    await new Promise(resolve => setTimeout(resolve, preloadData.audio_duration * 1000 + 1000)); // Add 1 second buffer
 
-    if (preloadingStatusLabel) {
-      preloadingStatusLabel.innerText = 'Complete';
-      preloadingStatusLabel.className = 'preloadingState-complete';
+    if (playAttempted) {
+      logger.debug('Preload video finished playing');
+      if (preloadingStatusLabel) {
+        preloadingStatusLabel.innerText = 'Complete';
+        preloadingStatusLabel.className = 'preloadingState-complete';
+      }
+    } else {
+      throw new Error('Preload video did not play');
     }
+
   } catch (error) {
-    logger.error('Error preloading short clip:', error);
+    logger.error('Error during preloading short clip:', error);
     if (preloadingStatusLabel) {
       preloadingStatusLabel.innerText = 'Failed';
       preloadingStatusLabel.className = 'preloadingState-failed';
@@ -1391,7 +1433,7 @@ async function startStreaming(assistantReply) {
           align_driver: true,
           auto_match: true,
           stitch: true,
-          normalization_factor: 0.5
+          normalization_factor: 0.8
         },
         session_id: sessionId,
       }),
