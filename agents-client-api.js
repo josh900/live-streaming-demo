@@ -606,11 +606,9 @@ function getStatusLabels() {
     ice: document.getElementById('ice-status-label'),
     iceGathering: document.getElementById('ice-gathering-status-label'),
     signaling: document.getElementById('signaling-status-label'),
-    streaming: document.getElementById('streaming-status-label'),
-    preloading: document.getElementById('preloading-status-label')  // New status label
+    streaming: document.getElementById('streaming-status-label')
   };
 }
-
 
 function initializeWebSocket() {
   socket = new WebSocket(`wss://${window.location.host}`);
@@ -1281,12 +1279,6 @@ async function initializeConnection() {
 
 
 async function preloadShortClip() {
-  const { preloading: preloadingStatusLabel } = getStatusLabels();
-  if (preloadingStatusLabel) {
-    preloadingStatusLabel.innerText = 'In Progress';
-    preloadingStatusLabel.className = 'preloadingState-inProgress';
-  }
-
   try {
     logger.debug('Preloading short clip...');
     const preloadResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
@@ -1298,7 +1290,7 @@ async function preloadShortClip() {
       body: JSON.stringify({
         script: {
           type: 'text',
-          input: 'Hello, how are you?',  // Increased length to meet minimum requirement
+          input: 'Hi',
           provider: {
             type: 'microsoft',
             voice_id: avatars[currentAvatar].voice
@@ -1320,22 +1312,12 @@ async function preloadShortClip() {
       throw new Error(`Failed to preload short clip: ${preloadResponse.status} ${preloadResponse.statusText}`);
     }
 
-    const preloadData = await preloadResponse.json();
     logger.debug('Short clip preloaded successfully');
 
     // Wait for the preloaded clip to finish
-    await new Promise(resolve => setTimeout(resolve, preloadData.audio_duration * 1000));
-
-    if (preloadingStatusLabel) {
-      preloadingStatusLabel.innerText = 'Complete';
-      preloadingStatusLabel.className = 'preloadingState-complete';
-    }
+    await new Promise(resolve => setTimeout(resolve, 2000));
   } catch (error) {
     logger.error('Error preloading short clip:', error);
-    if (preloadingStatusLabel) {
-      preloadingStatusLabel.innerText = 'Failed';
-      preloadingStatusLabel.className = 'preloadingState-failed';
-    }
   }
 }
 
