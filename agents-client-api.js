@@ -503,7 +503,7 @@ async function destroyConnection() {
 
 
 
-function smoothTransition(toStreaming, duration = 250) {
+function smoothTransition(toStreaming, duration = 300) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
 
@@ -514,50 +514,57 @@ function smoothTransition(toStreaming, duration = 250) {
 
   logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
 
-  let startTime = null;
+  // Ensure both videos are fully loaded before transition
+  Promise.all([
+    idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e)),
+    streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e))
+  ]).then(() => {
+    let startTime = null;
 
-  function animate(currentTime) {
-    if (!startTime) startTime = currentTime;
-    const elapsed = currentTime - startTime;
-    const progress = Math.min(elapsed / duration, 1);
+    function animate(currentTime) {
+      if (!startTime) startTime = currentTime;
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
 
-    transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
-
-    if (toStreaming) {
-      // Transitioning to streaming state
-      transitionCtx.globalAlpha = 1;
-      transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-
-      transitionCtx.globalAlpha = progress;
-      transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-    } else {
-      // Transitioning to idle state
-      transitionCtx.globalAlpha = 1;
-      transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-
-      transitionCtx.globalAlpha = progress;
-      transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-    }
-
-    if (progress < 1) {
-      transitionAnimationFrame = requestAnimationFrame(animate);
-    } else {
-      cancelAnimationFrame(transitionAnimationFrame);
       transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
-      if (toStreaming) {
-        streamVideoElement.style.opacity = '1';
-        idleVideoElement.style.opacity = '0';
-      } else {
-        streamVideoElement.style.opacity = '0';
-        idleVideoElement.style.opacity = '1';
-      }
-      logger.debug('Smooth transition completed');
-    }
-  }
 
-  cancelAnimationFrame(transitionAnimationFrame);
-  transitionAnimationFrame = requestAnimationFrame(animate);
+      if (toStreaming) {
+        // Transitioning to streaming state
+        transitionCtx.globalAlpha = 1;
+        transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+
+        transitionCtx.globalAlpha = progress;
+        transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+      } else {
+        // Transitioning to idle state
+        transitionCtx.globalAlpha = 1;
+        transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+
+        transitionCtx.globalAlpha = progress;
+        transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+      }
+
+      if (progress < 1) {
+        transitionAnimationFrame = requestAnimationFrame(animate);
+      } else {
+        cancelAnimationFrame(transitionAnimationFrame);
+        transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
+        if (toStreaming) {
+          streamVideoElement.style.opacity = '1';
+          idleVideoElement.style.opacity = '0';
+        } else {
+          streamVideoElement.style.opacity = '0';
+          idleVideoElement.style.opacity = '1';
+        }
+        logger.debug('Smooth transition completed');
+      }
+    }
+
+    cancelAnimationFrame(transitionAnimationFrame);
+    transitionAnimationFrame = requestAnimationFrame(animate);
+  });
 }
+
 
 
 function getVideoElements() {
@@ -965,7 +972,11 @@ function setStreamVideoElement(stream) {
       downloadStreamVideo(stream);
     }
   };
+
+  // Preload the video
+  streamVideoElement.load();
 }
+
 
 
 
