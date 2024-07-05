@@ -449,7 +449,7 @@ async function handleAvatarChange() {
     idleVideoElement.src = avatars[currentAvatar].idleVideo;
     try {
       await idleVideoElement.load();
-      logger.info(`Idle video loaded for ${currentAvatar}`);
+      logger.debug(`Idle video loaded for ${currentAvatar}`);
     } catch (error) {
       logger.error(`Error loading idle video for ${currentAvatar}:`, error);
     }
@@ -590,7 +590,7 @@ function getStatusLabels() {
     iceGathering: document.getElementById('ice-gathering-status-label'),
     signaling: document.getElementById('signaling-status-label'),
     streaming: document.getElementById('streaming-status-label'),
-    preloading: document.getElementById('preloading-status-label')
+    // preloading: document.getElementById('preloading-status-label')
   };
 }
 
@@ -678,7 +678,7 @@ function updateAssistantReply(text) {
 }
 
 async function initialize() {
-  setLogLevel('DEBUG');
+  setLogLevel('INFO');
 
   // Set up video elements
   const { idle, stream } = getVideoElements();
@@ -701,7 +701,7 @@ async function initialize() {
   }
 
   currentAvatar = avatarSelect.value;
-  logger.info('Initial avatar:', currentAvatar);
+  logger.debug('Initial avatar:', currentAvatar);
 
   // Set up context input
   const contextInput = document.getElementById('context-input');
@@ -849,7 +849,7 @@ function updateContext(action) {
     } else if (action === 'replace') {
       context = newContext;
     }
-    logger.info('Context updated:', context);
+    logger.debug('Context updated:', context);
     showToast('Context saved successfully');
 
     // Display both contexts temporarily
@@ -1815,7 +1815,7 @@ destroyButton.onclick = async () => {
 const startButton = document.getElementById('start-button');
 
 startButton.onclick = async () => {
-  logger.info('Start button clicked. Current state:', isRecording ? 'Recording' : 'Not recording');
+  logger.debug('Start button clicked. Current state:', isRecording ? 'Recording' : 'Not recording');
   if (!isRecording) {
     try {
       await startRecording();
