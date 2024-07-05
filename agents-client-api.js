@@ -729,6 +729,7 @@ async function initialize() {
     avatarSelect.appendChild(option);
   }
 
+  
   currentAvatar = avatarSelect.value;
   logger.info('Initial avatar:', currentAvatar);
 
