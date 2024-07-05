@@ -40,6 +40,8 @@ let transitionCanvas;
 let transitionCtx;
 let transitionAnimationFrame;
 let isDebugMode = false;
+let isTransitioning = false;
+
 
 
 
@@ -503,16 +505,39 @@ async function destroyConnection() {
 
 
 
-function smoothTransition(toStreaming, duration = 250) {
+function smoothTransition(toStreaming, duration = 300) {
+  if (isTransitioning) {
+    logger.warn('Transition already in progress. Skipping new transition.');
+    return;
+  }
+
+  isTransitioning = true;
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
 
   if (!idleVideoElement || !streamVideoElement) {
     logger.warn('Video elements not found for transition');
+    isTransitioning = false;
     return;
   }
 
   logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
+
+  // Ensure both videos are visible during transition
+  idleVideoElement.style.display = 'block';
+  streamVideoElement.style.display = 'block';
+
+  // Reset video positions and styles
+  idleVideoElement.style.zIndex = toStreaming ? '1' : '2';
+  streamVideoElement.style.zIndex = toStreaming ? '2' : '1';
+  idleVideoElement.style.opacity = '1';
+  streamVideoElement.style.opacity = '0';
+
+  // Preload the stream video if transitioning to streaming
+  if (toStreaming && streamVideoElement.readyState < 3) {
+    logger.debug('Preloading stream video');
+    streamVideoElement.load();
+  }
 
   let startTime = null;
 
@@ -521,42 +546,26 @@ function smoothTransition(toStreaming, duration = 250) {
     const elapsed = currentTime - startTime;
     const progress = Math.min(elapsed / duration, 1);
 
-    transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
-
     if (toStreaming) {
-      // Transitioning to streaming state
-      transitionCtx.globalAlpha = 1;
-      transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-
-      transitionCtx.globalAlpha = progress;
-      transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+      streamVideoElement.style.opacity = progress;
     } else {
-      // Transitioning to idle state
-      transitionCtx.globalAlpha = 1;
-      transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-
-      transitionCtx.globalAlpha = progress;
-      transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+      streamVideoElement.style.opacity = 1 - progress;
     }
 
     if (progress < 1) {
-      transitionAnimationFrame = requestAnimationFrame(animate);
+      requestAnimationFrame(animate);
     } else {
-      cancelAnimationFrame(transitionAnimationFrame);
-      transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
       if (toStreaming) {
-        streamVideoElement.style.opacity = '1';
-        idleVideoElement.style.opacity = '0';
+        idleVideoElement.style.display = 'none';
       } else {
-        streamVideoElement.style.opacity = '0';
-        idleVideoElement.style.opacity = '1';
+        streamVideoElement.style.display = 'none';
       }
       logger.debug('Smooth transition completed');
+      isTransitioning = false;
     }
   }
 
-  cancelAnimationFrame(transitionAnimationFrame);
-  transitionAnimationFrame = requestAnimationFrame(animate);
+  requestAnimationFrame(animate);
 }
 
 
@@ -730,6 +739,13 @@ async function initialize() {
     hideLoadingSymbol();
     showErrorMessage('Failed to connect. Please try again.');
   }
+
+  for (const avatar of Object.values(avatars)) {
+    const video = document.createElement('video');
+    video.src = avatar.idleVideo;
+    video.preload = 'auto';
+  }
+  
 }
 
 function updateContext(action) {
@@ -956,16 +972,14 @@ function setStreamVideoElement(stream) {
   logger.debug('Setting stream video element');
   streamVideoElement.srcObject = stream;
   streamVideoElement.style.opacity = '0';
+  streamVideoElement.style.display = 'none';  // Hide initially
   
   streamVideoElement.onloadedmetadata = () => {
     logger.debug('Stream video metadata loaded');
     streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
-    
-    if (isDebugMode) {
-      downloadStreamVideo(stream);
-    }
   };
 }
+
 
 
 
@@ -1265,37 +1279,23 @@ async function startStreaming(assistantReply) {
     if (playResponseData.status === 'started') {
       logger.debug('Stream started successfully');
 
-      // Get video elements
-      const { idle: idleVideoElement, stream: streamVideoElement } = getVideoElements();
+      const { stream: streamVideoElement } = getVideoElements();
 
-      // Ensure the stream video element is visible
-      streamVideoElement.style.display = 'block';
-
-      // Log the current state of video elements
-      logger.debug('Idle video element:', idleVideoElement.src);
-      logger.debug('Stream video element:', streamVideoElement.srcObject);
-
-      // Set up event listeners for the stream video
-      streamVideoElement.onloadedmetadata = () => {
-        logger.debug('Stream video metadata loaded');
-        smoothTransition(300);
+      // Wait for the stream to be ready before transitioning
+      streamVideoElement.oncanplay = () => {
+        logger.debug('Stream video can play');
+        smoothTransition(true, 300);
         streamVideoElement.play().then(() => {
           logger.debug('Stream video playback started');
         }).catch(e => logger.error('Error playing stream video:', e));
-      };
-
-      streamVideoElement.oncanplay = () => {
-        logger.debug('Stream video can play');
       };
 
       streamVideoElement.onerror = (e) => {
         logger.error('Error with stream video:', e);
       };
 
-      // Calculate the duration of the audio
       const audioDuration = playResponseData.audio_duration * 1000;
 
-      // Set a timeout to start speaking mode when the avatar finishes
       if (autoSpeakMode) {
         clearTimeout(speakTimeout);
         autoSpeakInProgress = true;
@@ -1312,7 +1312,6 @@ async function startStreaming(assistantReply) {
           }
         }, audioDuration - 200);
       } else {
-        // If auto-speak is off, change button text after audio finishes
         setTimeout(() => {
           const startButton = document.getElementById('start-button');
           startButton.textContent = 'Speak';
@@ -1328,6 +1327,7 @@ async function startStreaming(assistantReply) {
     }
   }
 }
+
 
 function startSendingAudioData() {
   logger.debug('Starting to send audio data...');
