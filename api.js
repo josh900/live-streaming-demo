@@ -10,3 +10,4 @@ export default {
     awsRegion: "YOUR_AWS_REGION",
     awsBucketName: "YOUR_S3_BUCKET_NAME"
   };
+  
