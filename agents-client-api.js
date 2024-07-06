@@ -1394,6 +1394,5 @@ export {
   updateAvatarSelector,
   handleTextInput,
   toggleAutoSpeak,
-  updateContext,
-  setLogLevel
+  updateContext
 };
