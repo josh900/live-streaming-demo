@@ -60,22 +60,21 @@
   color: grey;
 }
 
-#agentId-label, #chatId-label{
-  color: green;
+#left-column, #right-column {
+  width: 48%;
 }
 
-/* added css from here */
 
 body * {
   font-family: 'Mulish', sans-serif;
-  text-align: center;
 }
 
 #content {
   display: flex;
-  flex-direction: row;
-  justify-content: space-evenly;
-  margin-top: 50px;
+  justify-content: space-between;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
 }
 
 #buttons {
@@ -85,63 +84,70 @@ body * {
 }
 
 button {
-  padding: 10px 20px;
   border-radius: 5px;
   border: none;
-  font-size: 16px;
-  margin: 0 5px;
   background-color: #7459fe;
   color: #fff;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  padding: 10px 20px;
+
 }
+
+
+button:hover {
+  background-color: #5a3dd3;
+}
+
 
 button#connect-button {
-background-color: green;
-}
-button#destroy-button{
-  background-color: red;
+  background-color: #4CAF50;
 }
 
-button#start-button{
-  margin: 1em;
+button#destroy-button {
+  background-color: #f44336;
 }
 
-button:hover, #destroy-button:hover,#connect-button:hover {
-  filter: brightness(85%);
-  cursor: pointer;
-  transition: all 0.2s ease-out;
+#start-button {
+  padding: 12px 24px;
+  font-size: 18px;
+  margin-right: 10px;
 }
 
-h4{
+h4 {
   margin: 0;
   margin-bottom: 10px;
 }
 
 #destroy-button, #connect-button {
-  display: none;
-}
-
-textarea {
-  font-size: 16px;
-  text-align: center;
-  width: 500px;
-  border-radius: 5px;
-  padding: 10px 20px;
-  border: 2px solid #7459fe;
-  font-size: 16px;
-  margin: 0 5px;
+  display: inline-block;
 }
 
 #msgHistory {
+  height: 300px;
   overflow-y: auto;
-  line-break: loose;
+  border: 1px solid #ccc;
+  padding: 10px;
+  border-radius: 5px;
 }
 
+#speak-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-top: 10px;
+}
+
+#auto-speak-toggle {
+  padding: 10px 20px;
+  font-size: 16px;
+}
+
+
 #status {
-  display: inline-block;
-  zoom: 1;
-  line-height: 140%;
-  font-size: 15px;
-  width: 400px;
+
+  margin-bottom: 20px;
+
 }
 
 #status div {
@@ -149,31 +155,259 @@ textarea {
 }
 
 #video-wrapper {
-  /* height: 500px; */
+  position: relative;
   width: 400px;
   height: 400px;
-  background-position: top;
+  overflow: hidden;
+  border-radius: 50%;
 }
 
-.chat{
+
+.chat {
   width: 400px;
 }
+select {
+  padding: 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  font-size: 16px;
+  margin-right: 10px;
+}
 
 
-video {
-  /* display: block; */
-  border-radius: 50%;
-  background-image: url("emma_idle.png");
-  background-position: top;
-  /* position: absolute; */
-  background-size: contain;
+#avatar-select {
+  padding: 10px;
+  margin-right: 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+#text-input-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-top: 10px;
+}
+
+#text-input {
+  flex-grow: 1;
+  padding: 10px;
+  font-size: 16px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  margin-right: 10px;
+}
+
+#send-text-button {
+  padding: 10px 20px;
+  font-size: 16px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+#send-text-button:hover {
+  background-color: #45a049;
+}
+
+#avatar-select:focus {
+  outline: none;
+  border-color: #7459fe;
+}
+
+#idle-video-element,
+#stream-video-element {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+#idle-video-element,
+#stream-video-element {
+  transition: none;
+}
+
+#idle-video-element {
+  z-index: 1;
+}
+
+#stream-video-element {
+  z-index: 2;
 }
 
 .animated {
-  animation: opacityAnimation 0.2s ease-in-out;
+  transition: opacity 0.3s ease-in-out;
 }
 
-@keyframes opacityAnimation {
-from { opacity: 0.8; }
-to { opacity: 1; }
+#context-wrapper {
+  margin-bottom: 20px;
+}
+
+#context-input {
+  width: 100%;
+  height: 100px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  resize: vertical;
+}
+
+#replace-context-button {
+  margin-right: 10px;
+}
+
+
+
+
+@keyframes fadeInOut {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.error-message {
+  color: #ff0000;
+  font-weight: bold;
+  margin-top: 10px;
+}
+
+.loading-symbol {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 24px;
+  color: #333;
+  background-color: rgba(255, 255, 255, 0.8);
+  padding: 10px;
+  border-radius: 5px;
+  z-index: 1000;
+}
+
+@media (max-width: 768px) {
+  #content {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  #video-wrapper,
+  #status,
+  .chat {
+    width: 90%;
+    margin-bottom: 20px;
+  }
+}
+
+/*
+#video-wrapper::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 100px;
+  background: linear-gradient(to bottom, 
+                rgba(255,255,255,0) 0%,
+                rgba(255,255,255,0.7) 70%,
+                rgba(255,255,255,1) 90%);
+  z-index: 3;
+  pointer-events: none; 
+  border-bottom-left-radius: 50%;
+  border-bottom-right-radius: 50%;
+}
+
+*/
+
+
+
+#idle-video-element,
+#stream-video-element {
+  background: transparent;
+}
+
+
+
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0,0,0,0.4);
+}
+
+.modal-content {
+  background-color: #fefefe;
+  margin: 15% auto;
+  padding: 20px;
+  border: 1px solid #888;
+  width: 80%;
+  max-width: 500px;
+  border-radius: 5px;
+}
+
+#avatar-form {
+  display: flex;
+  flex-direction: column;
+}
+
+#avatar-form label {
+  margin-top: 10px;
+}
+
+#avatar-form input {
+  margin-bottom: 10px;
+  padding: 5px;
+  border-radius: 3px;
+  border: 1px solid #ccc;
+}
+
+#avatar-form button {
+  margin-top: 10px;
+}
+
+#close-modal {
+  background-color: #f44336;
+}
+
+#create-avatar-button,
+#edit-avatar-button {
+  margin-right: 10px;
+}
+
+
+
+
+
+
+@media (max-width: 1024px) {
+  #content {
+    flex-direction: column;
+  }
+
+  #left-column, #right-column {
+    width: 100%;
+  }
+
+  #video-wrapper {
+    max-width: 300px; /* Adjust this value as needed */
+    margin-bottom: 20px;
+  }
+}
+
+
+
+@media (max-width: 480px) {
+  #video-wrapper {
+    max-width: 250px; /* Further reduce size for very small screens */
+  }
 }

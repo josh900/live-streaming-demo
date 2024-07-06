@@ -30,7 +30,7 @@ const streamingStatusLabel = document.getElementById('streaming-status-label');
 
 const presenterInputByService = {
   talks: {
-    source_url: 'https://d-id-public-bucket.s3.amazonaws.com/or-roman.jpg',
+    source_url: 'https://skoop-general.s3.amazonaws.com/brad_idle.png',
   },
   clips: {
     presenter_id: 'rian-lZC6MmWfC1',

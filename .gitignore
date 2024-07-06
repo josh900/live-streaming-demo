@@ -4,15 +4,6 @@ api.json
 /git2gpt
 /git2gpt
 git2gpt/The following text is a Git repository w.js
-/context
-context/kroger_context_v3_csv
-context/Kroger_Context1.csv
-context/Kroger_Context2.txt
-context/Kroger_Context3.txt
-context/Kroger_Context4.txt
-context/Kroger_Context5.txt
-context/Kroger_Context6.txt
-context/layout
-LICENSE
-context/Kroger_Context2.csv
-package-lock.json
+api.js
+api.js
+api.js
