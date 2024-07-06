@@ -102,7 +102,7 @@ export async function initialize() {
   }
 }
 
-async function updateAvatarSelector() {
+export async function updateAvatarSelector() {
   const avatarSelect = document.getElementById('avatar-select');
   avatarSelect.innerHTML = '';
 
@@ -128,7 +128,7 @@ async function updateAvatarSelector() {
   }
 }
 
-function openAvatarModal(avatarToEdit = null) {
+export function openAvatarModal(avatarToEdit = null) {
   const modal = document.getElementById('avatar-modal');
   const modalTitle = document.getElementById('avatar-modal-title');
   const avatarForm = document.getElementById('avatar-form');
@@ -177,7 +177,7 @@ function openAvatarModal(avatarToEdit = null) {
   modal.style.display = 'block';
 }
 
-async function handleAvatarChange() {
+export async function handleAvatarChange() {
   const avatarSelect = document.getElementById('avatar-select');
   const selectedValue = avatarSelect.value;
 
@@ -395,7 +395,7 @@ function updateTranscript(text, isFinal) {
   msgHistory.scrollTop = msgHistory.scrollHeight;
 }
 
-function handleTextInput(text) {
+export function handleTextInput(text) {
   if (text.trim() === '') return;
 
   const textInput = document.getElementById('text-input');
@@ -415,7 +415,7 @@ function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
 }
 
-function updateContext(action) {
+export function updateContext(action) {
   const contextInput = document.getElementById('context-input');
   const newContext = contextInput.value.trim();
 
@@ -1291,7 +1291,7 @@ autoSpeakInProgress = false;
 }
 }
 
-function toggleAutoSpeak() {
+export function toggleAutoSpeak() {
 autoSpeakMode = !autoSpeakMode;
 const toggleButton = document.getElementById('auto-speak-toggle');
 const startButton = document.getElementById('start-button');
@@ -1386,13 +1386,3 @@ if (document.readyState === 'loading') {
 } else {
   initialize();
 }
-
-export {
-  initialize,
-  handleAvatarChange,
-  openAvatarModal,
-  updateAvatarSelector,
-  handleTextInput,
-  toggleAutoSpeak,
-  updateContext
-};
