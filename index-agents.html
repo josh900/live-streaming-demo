@@ -1,29 +1,30 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Avatar Demo</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@300;400;700&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@300;400;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style-agents.css">
   <link rel="icon" type="image/png" sizes="192x192" href="https://cdn.prod.website-files.com/6316d11d553f411d6f1fa732/6343f55adbb1a12a532f2769_skoop-favicon.png">
 </head>
-
+<body>
   <div id="content">
     <div id="left-column">
       <div id="status">
         <h4>WebRTC Connection Status</h4>
-        ICE gathering status: <label id="ice-gathering-status-label"></label><br />
-        ICE status: <label id="ice-status-label"></label><br />
-        Peer connection status: <label id="peer-status-label"></label><br />
-        Signaling status: <label id="signaling-status-label"></label><br />
-        Streaming status: <label id="streaming-status-label"></label><br />
-        <!--Pre-Loading status: <label id="preloading-status-label"></label><br />-->
+        ICE gathering status: <label id="ice-gathering-status-label"></label><br>
+        ICE status: <label id="ice-status-label"></label><br>
+        Peer connection status: <label id="peer-status-label"></label><br>
+        Signaling status: <label id="signaling-status-label"></label><br>
+        Streaming status: <label id="streaming-status-label"></label><br>
         <br>
         <div id="buttons">
-          <select id="avatar-select">
-          </select>
+          <select id="avatar-select"></select>
+          <button id="create-avatar-button" type="button">Create Avatar</button>
+          <button id="edit-avatar-button" type="button">Edit Avatar</button>
           <button id="connect-button" type="button">Connect</button>
           <button id="destroy-button" type="button">Destroy</button>
         </div>
@@ -31,12 +32,11 @@
 
       <div id="video-wrapper">
         <div>
-          <video id="idle-video-element" width="400" height="400" src="brad_idle.mp4" autoplay loop muted></video>
+          <video id="idle-video-element" width="400" height="400" autoplay loop muted></video>
           <video id="stream-video-element" width="400" height="400" autoplay></video>        
         </div>
       </div>
     </div>
-
 
     <div id="right-column">
       <div id="context-wrapper">
@@ -61,51 +61,45 @@
         <input type="text" id="text-input" placeholder="Type your message here">
         <button id="send-text-button" type="button">Send</button>
       </div>
-
     </div>
   </div>
 
-  <script>
-    // AudioWorklet implementation
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  <div id="avatar-modal" class="modal">
+    <div class="modal-content">
+      <h2 id="avatar-modal-title">Create New Avatar</h2>
+      <form id="avatar-form">
+        <label for="avatar-name">Avatar Name:</label>
+        <input type="text" id="avatar-name" name="avatar-name" required>
 
-    // AudioWorklet processor code
-    const workletCode = `
-      class AudioProcessor extends AudioWorkletProcessor {
-        process(inputs, outputs, parameters) {
-          const input = inputs[0];
-          const output = outputs[0];
+        <label for="avatar-image">Avatar Image (PNG):</label>
+        <input type="file" id="avatar-image" name="avatar-image" accept=".png" required>
 
-          for (let channel = 0; channel < input.length; channel++) {
-            const inputChannel = input[channel];
-            const outputChannel = output[channel];
-            for (let i = 0; i < inputChannel.length; i++) {
-              outputChannel[i] = inputChannel[i];
-            }
-          }
+        <label for="avatar-voice">Voice ID:</label>
+        <input type="text" id="avatar-voice" name="avatar-voice" required>
 
-          return true;
-        }
-      }
-
-      registerProcessor('audio-processor', AudioProcessor);
-    `;
-
-    const blob = new Blob([workletCode], { type: 'application/javascript' });
-    const workletUrl = URL.createObjectURL(blob);
-
-    audioContext.audioWorklet.addModule(workletUrl).then(() => {
-      const audioProcessor = new AudioWorkletNode(audioContext, 'audio-processor');
-      // Connect the audio processor to the audio context destination
-      audioProcessor.connect(audioContext.destination);
-    }).catch(err => console.error('Error loading AudioWorklet:', err));
-  </script>
+        <button type="submit">Save Avatar</button>
+        <button type="button" id="close-modal">Cancel</button>
+      </form>
+    </div>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@deepgram/sdk"></script>
-  <script type="module" src="./agents-client-api.js"></script>
+  <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1386.0.min.js"></script>
+  <script type="module">
+    import { initialize, handleAvatarChange, openAvatarModal, updateAvatarSelector, handleTextInput, toggleAutoSpeak, updateContext, setLogLevel } from './agents-client-api.js';
 
+    // Set up event listeners
+    document.getElementById('avatar-select').addEventListener('change', handleAvatarChange);
+    document.getElementById('create-avatar-button').addEventListener('click', () => openAvatarModal());
+    document.getElementById('edit-avatar-button').addEventListener('click', () => openAvatarModal(document.getElementById('avatar-select').value));
+    document.getElementById('send-text-button').addEventListener('click', () => handleTextInput(document.getElementById('text-input').value));
+    document.getElementById('auto-speak-toggle').addEventListener('click', toggleAutoSpeak);
+    document.getElementById('replace-context-button').addEventListener('click', () => updateContext('replace'));
+    document.getElementById('close-modal').addEventListener('click', () => document.getElementById('avatar-modal').style.display = 'none');
 
-
+    // Initialize the application
+    setLogLevel('DEBUG');
+    initialize();
+  </script>
 </body>
-
 </html>
