@@ -14,8 +14,7 @@ const s3Client = new S3Client(DID_API.awsConfig);
 
 export async function createOrUpdateAvatar(name, imageFile, voiceId) {
     try {
-        let avatars = await getAvatars();
-        let avatar = avatars.find(a => a.name === name);
+        let avatar = await getAvatarByName(name);
         const isNewAvatar = !avatar;
         const isImageChanged = imageFile !== undefined;
 
@@ -37,10 +36,10 @@ export async function createOrUpdateAvatar(name, imageFile, voiceId) {
             } else {
                 avatar = { ...avatar, imageUrl, voiceId };
             }
-        } else if (isNewAvatar || (avatar && avatar.voiceId !== voiceId)) {
+        } else if (isNewAvatar || avatar.voiceId !== voiceId) {
             // If only voice changed or it's a new avatar without image
-            const silentVideoUrl = await generateSilentVideo(avatar ? avatar.imageUrl : '', voiceId);
-            avatar = { ...(avatar || {}), name, voiceId, silentVideoUrl };
+            const silentVideoUrl = await generateSilentVideo(avatar.imageUrl, voiceId);
+            avatar = { ...avatar, voiceId, silentVideoUrl };
         } else {
             // No changes, return existing avatar
             return avatar;
@@ -191,10 +190,6 @@ async function saveAvatarDetails(avatar) {
         }
     }
 
-    if (!Array.isArray(avatars)) {
-        avatars = [];
-    }
-
     const existingIndex = avatars.findIndex(a => a.name === avatar.name);
     if (existingIndex !== -1) {
         avatars[existingIndex] = avatar;
@@ -208,10 +203,14 @@ async function saveAvatarDetails(avatar) {
 export async function getAvatars() {
     try {
         const data = await fs.readFile(path.join(__dirname, 'avatars.json'), 'utf8');
-        const avatars = JSON.parse(data);
-        return Array.isArray(avatars) ? avatars : [];
+        return JSON.parse(data);
     } catch (err) {
         console.error("Error reading avatars file:", err);
         return [];
     }
+}
+
+async function getAvatarByName(name) {
+    const avatars = await getAvatars();
+    return avatars.find(avatar => avatar.name === name);
 }
