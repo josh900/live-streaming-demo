@@ -4,41 +4,5 @@
       "idleImage": "https://skoop-general.s3.amazonaws.com/brad_idle.png",
       "idleVideo": "https://skoop-general.s3.amazonaws.com/brad_idle.mp4",
       "voice": "en-US-ChristopherNeural"
-    },
-    "Ava": {
-      "name": "Ava",
-      "idleImage": "https://skoop-general.s3.amazonaws.com/ava_idle.png",
-      "idleVideo": "https://skoop-general.s3.amazonaws.com/ava_idle.mp4",
-      "voice": "en-US-AvaNeural"
-    },
-    "joshc": {
-      "name": "joshc",
-      "idleImage": "https://skoop-general.s3.amazonaws.com/joshc_idle.png",
-      "idleVideo": "https://skoop-general.s3.amazonaws.com/joshc_idle.mp4",
-      "voice": "en-US-GuyNeural"
-    },
-    "aric": {
-      "name": "aric",
-      "idleImage": "https://skoop-general.s3.amazonaws.com/aric_idle.png",
-      "idleVideo": "https://skoop-general.s3.amazonaws.com/aric_idle.mp4",
-      "voice": "en-US-GuyNeural"
-    },
-    "Joshm1": {
-      "name": "Joshm1",
-      "idleImage": "https://skoop-general.s3.amazonaws.com/joshm1_idle.png",
-      "idleVideo": "https://skoop-general.s3.amazonaws.com/joshm1_idle.mp4",
-      "voice": "en-US-GuyNeural"
-    },
-    "Joshm2": {
-      "name": "Joshm2",
-      "idleImage": "https://skoop-general.s3.amazonaws.com/joshm2_idle.png",
-      "idleVideo": "https://skoop-general.s3.amazonaws.com/joshm2_idle.mp4",
-      "voice": "en-US-GuyNeural"
-    },
-    "Arshi": {
-      "name": "Arshi",
-      "idleImage": "https://skoop-general.s3.amazonaws.com/arshi_idle.png",
-      "idleVideo": "https://skoop-general.s3.amazonaws.com/arshi_idle.mp4",
-      "voice": "en-US-AvaNeural"
     }
   }
