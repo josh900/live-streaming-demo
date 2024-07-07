@@ -132,7 +132,7 @@ async function destroyConnection() {
   }
 }
 
-function smoothTransition(toStreaming, duration = 250) {
+function smoothTransition(toStreaming, duration = 50) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
 
@@ -686,10 +686,10 @@ function downloadStreamVideo(stream) {
 
   mediaRecorder.start();
 
-  // Stop recording after 10 seconds (adjust as needed)
+  // Stop recording after 20 seconds (adjust as needed)
   setTimeout(() => {
     mediaRecorder.stop();
-  }, 10000);
+  }, 20000);
 }
 
 function onTrack(event) {
@@ -1079,7 +1079,6 @@ async function startStreaming(assistantReply) {
   } finally {
     // Ensure we always transition back to idle state if something goes wrong
     setTimeout(() => {
-      smoothTransition(false);
     }, 1000);
   }
 }
@@ -1177,7 +1176,7 @@ async function startRecording() {
       language: "en-US",
       smart_format: true,
       interim_results: true,
-      utterance_end_ms: 1000,
+      utterance_end_ms: 750,
       punctuate: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate,
@@ -1188,7 +1187,7 @@ async function startRecording() {
       language: "en-US",
       smart_format: true,
       interim_results: true,
-      utterance_end_ms: 1000,
+      utterance_end_ms: 750,
       punctuate: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate,
