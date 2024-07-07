@@ -165,20 +165,32 @@ function smoothTransition(toStreaming, duration = 200) {
     const elapsed = currentTime - startTime;
     const progress = Math.min(elapsed / duration, 1);
 
+    if (!transitionCtx) {
+      logger.error('Transition context not found');
+      isTransitioning = false;
+      return;
+    }
+
     transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
 
-    if (toStreaming) {
-      transitionCtx.globalAlpha = 1;
-      transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+    try {
+      if (toStreaming) {
+        transitionCtx.globalAlpha = 1;
+        transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
 
-      transitionCtx.globalAlpha = progress;
-      transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-    } else {
-      transitionCtx.globalAlpha = 1;
-      transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+        transitionCtx.globalAlpha = progress;
+        transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+      } else {
+        transitionCtx.globalAlpha = 1;
+        transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
 
-      transitionCtx.globalAlpha = progress;
-      transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+        transitionCtx.globalAlpha = progress;
+        transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+      }
+    } catch (error) {
+      logger.error('Error during transition animation:', error);
+      isTransitioning = false;
+      return;
     }
 
     if (progress < 1) {
@@ -687,32 +699,41 @@ function onSignalingStateChange() {
 }
 
 function onVideoStatusChange(videoIsPlaying, stream) {
-  const { idle: idleVideoElement, stream: streamVideoElement } = getVideoElements();
-  let status;
+  let status = videoIsPlaying ? 'streaming' : 'empty';
 
-  if (videoIsPlaying) {
-    status = 'streaming';
+  // Only proceed if the status has actually changed
+  if (status === lastVideoStatus) {
+    logger.debug('Video status unchanged:', status);
+    return;
+  }
+
+  logger.debug('Video status changing from', lastVideoStatus, 'to', status);
+
+  const streamVideoElement = document.getElementById('stream-video-element');
+  const idleVideoElement = document.getElementById('idle-video-element');
+
+  if (!streamVideoElement || !idleVideoElement) {
+    logger.error('Video elements not found');
+    return;
+  }
+
+  if (status === 'streaming') {
     setStreamVideoElement(stream);
-    if (lastVideoStatus !== 'streaming') {
-      smoothTransition(true);  // Transition to streaming state
-    }
+    smoothTransition(true);
   } else {
-    status = 'empty';
-    if (lastVideoStatus !== 'empty') {
-      smoothTransition(false);  // Transition to idle state
-    }
+    smoothTransition(false);
   }
 
   lastVideoStatus = status;
 
-  const { streaming: streamingStatusLabel } = getStatusLabels();
+  const streamingStatusLabel = document.getElementById('streaming-status-label');
   if (streamingStatusLabel) {
     streamingStatusLabel.innerText = status;
     streamingStatusLabel.className = 'streamingState-' + status;
   }
+
   logger.debug('Video status changed:', status);
 }
-
 
 function setStreamVideoElement(stream) {
   const streamVideoElement = document.getElementById('stream-video-element');
