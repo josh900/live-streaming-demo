@@ -141,7 +141,7 @@ async function destroyConnection() {
 }
 
 
-function smoothTransition(toStreaming, duration = 200) {
+function smoothTransition(toStreaming, duration = 250) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
 
@@ -187,6 +187,11 @@ function smoothTransition(toStreaming, duration = 200) {
         transitionCtx.globalAlpha = progress;
         transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
       }
+
+      // Update the opacity of the video elements
+      streamVideoElement.style.opacity = toStreaming ? progress.toString() : (1 - progress).toString();
+      idleVideoElement.style.opacity = toStreaming ? (1 - progress).toString() : progress.toString();
+
     } catch (error) {
       logger.error('Error during transition animation:', error);
       isTransitioning = false;
@@ -198,13 +203,6 @@ function smoothTransition(toStreaming, duration = 200) {
     } else {
       cancelAnimationFrame(transitionAnimationFrame);
       transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
-      if (toStreaming) {
-        streamVideoElement.style.opacity = '1';
-        idleVideoElement.style.opacity = '0';
-      } else {
-        streamVideoElement.style.opacity = '0';
-        idleVideoElement.style.opacity = '1';
-      }
       logger.debug('Smooth transition completed');
       isTransitioning = false;
     }
@@ -213,6 +211,7 @@ function smoothTransition(toStreaming, duration = 200) {
   cancelAnimationFrame(transitionAnimationFrame);
   transitionAnimationFrame = requestAnimationFrame(animate);
 }
+
 
 function getVideoElements() {
   const idle = document.getElementById('idle-video-element');
@@ -748,11 +747,21 @@ function setStreamVideoElement(stream) {
 
   streamVideoElement.onloadedmetadata = () => {
     logger.debug('Stream video metadata loaded');
-    streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
+    streamVideoElement.play().then(() => {
+      logger.debug('Stream video playback started');
+    }).catch(e => logger.error('Error playing stream video:', e));
 
     if (isDebugMode) {
       downloadStreamVideo(stream);
     }
+  };
+
+  streamVideoElement.oncanplay = () => {
+    logger.debug('Stream video can play');
+  };
+
+  streamVideoElement.onerror = (e) => {
+    logger.error('Error with stream video:', e);
   };
 }
 
@@ -894,7 +903,7 @@ function closePC(pc = peerConnection) {
   }
 }
 
-async function fetchWithRetries(url, options, retries = 1) {
+async function fetchWithRetries(url, options, retries = 3) {
   try {
     const response = await fetch(url, options);
     if (!response.ok) {
@@ -1050,14 +1059,6 @@ async function startStreaming(assistantReply) {
       return;
     }
 
-    if (!streamId || !sessionId) {
-      logger.warn('Stream ID or Session ID is missing. Reinitializing connection...');
-      await reinitializeConnection();
-      if (!streamId || !sessionId) {
-        throw new Error('Failed to reinitialize connection: Stream ID or Session ID is still missing');
-      }
-    }
-
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'POST',
       headers: {
@@ -1094,7 +1095,7 @@ async function startStreaming(assistantReply) {
           align_driver: true,
           align_expand_factor: 0,
           auto_match: true,
-          motion_factor: 0.7,  // Increased from 0 to 0.7
+          motion_factor: 0.7,
           normalization_factor: 0,
           sharpen: true,
           result_format: "mp4"
@@ -1114,62 +1115,29 @@ async function startStreaming(assistantReply) {
     if (playResponseData.status === 'started') {
       logger.debug('Stream started successfully');
 
-      const { idle: idleVideoElement, stream: streamVideoElement } = getVideoElements();
+      const streamVideoElement = document.getElementById('stream-video-element');
+      const idleVideoElement = document.getElementById('idle-video-element');
 
-      if (!streamVideoElement) {
-        logger.error('Stream video element not found');
+      if (!streamVideoElement || !idleVideoElement) {
+        logger.error('Video elements not found');
         return;
       }
 
-      streamVideoElement.style.display = 'block';
+      // Ensure the stream video is hidden initially
+      streamVideoElement.style.opacity = '0';
+      idleVideoElement.style.opacity = '1';
 
-      logger.debug('Idle video element:', idleVideoElement.src);
-      logger.debug('Stream video element:', streamVideoElement.srcObject);
-
-      streamVideoElement.onloadedmetadata = () => {
-        logger.debug('Stream video metadata loaded');
-        streamVideoElement.play().then(() => {
-          logger.debug('Stream video playback started');
-          smoothTransition(true);
-        }).catch(e => logger.error('Error playing stream video:', e));
-      };
-
-      streamVideoElement.oncanplay = () => {
-        logger.debug('Stream video can play');
-      };
-
-      streamVideoElement.onerror = (e) => {
-        logger.error('Error with stream video:', e);
-      };
+      // Set up a timeout to switch to the stream video
+      setTimeout(() => {
+        smoothTransition(true, 500); // Increased duration for smoother transition
+      }, 100); // Small delay to ensure the stream has started
 
       const audioDuration = playResponseData.audio_duration * 1000;
 
-      if (autoSpeakMode) {
-        clearTimeout(speakTimeout);
-        autoSpeakInProgress = true;
-        const startButton = document.getElementById('start-button');
-        if (startButton) startButton.textContent = 'Stop';
-
-        speakTimeout = setTimeout(async () => {
-          if (!isRecording) {
-            try {
-              await startRecording();
-            } catch (error) {
-              logger.error('Failed to auto-start recording:', error);
-            }
-          }
-        }, audioDuration - 200);
-      } else {
-        setTimeout(() => {
-          const startButton = document.getElementById('start-button');
-          if (startButton) startButton.textContent = 'Speak';
-        }, audioDuration);
-      }
-
-      // Wait for the audio to finish playing before transitioning back to idle
+      // Set up a timeout to switch back to the idle video
       setTimeout(() => {
-        smoothTransition(false);
-      }, audioDuration);
+        smoothTransition(false, 500);
+      }, audioDuration - 200);
 
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
@@ -1178,9 +1146,6 @@ async function startStreaming(assistantReply) {
     logger.error('Error during streaming:', error);
     if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
       logger.warn('Stream not found or invalid session. Attempting to reinitialize connection.');
-      await reinitializeConnection();
-    } else if (isRecording) {
-      logger.warn('Error occurred while recording. Attempting to reinitialize connection.');
       await reinitializeConnection();
     }
   }
