@@ -1,6 +1,6 @@
-const express = require('express');
-const cors = require('cors');
-const Groq = require('groq-sdk');
+import express from 'express';
+import cors from 'cors';
+import Groq from 'groq-sdk';
 
 const app = express();
 const port = 3001;
@@ -9,7 +9,7 @@ const GROQ_API_KEY = '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';
 const groq = new Groq({ apiKey: GROQ_API_KEY });
 
 app.use(cors());
-app.use(express.json());;
+app.use(express.json());
 
 app.post('/chat', async (req, res) => {
   const { messages, model } = req.body;

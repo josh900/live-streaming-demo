@@ -1,11 +1,17 @@
-const express = require('express');
-const http = require('http');
-const WebSocket = require('ws');
-const cors = require('cors');
-const { createProxyMiddleware } = require('http-proxy-middleware');
-const compression = require('compression');
-const multer = require('multer');
-const { createOrUpdateAvatar, getAvatars } = require('./avatar-manager.js');
+import express from 'express';
+import http from 'http';
+import { WebSocketServer } from 'ws';
+import cors from 'cors';
+import { createProxyMiddleware } from 'http-proxy-middleware';
+import compression from 'compression';
+import multer from 'multer';
+import { createOrUpdateAvatar, getAvatars } from './avatar-manager.js';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import './groqServer.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const port = 3000;
 const upload = multer({ storage: multer.memoryStorage() });
@@ -25,11 +31,11 @@ app.use('/', express.static(__dirname, {
 }));
 
 app.get('/', function(req, res) {
-  res.sendFile(__dirname + '/index.html');
+  res.sendFile(join(__dirname, 'index.html'));
 });
 
 app.get('/agents', function(req, res) {
-  res.sendFile(__dirname + '/index-agents.html');
+  res.sendFile(join(__dirname, 'index-agents.html'));
 });
 
 app.use('/chat', createProxyMiddleware({ 
@@ -60,7 +66,7 @@ app.get('/avatars', async (req, res) => {
 
 const server = http.createServer(app);
 
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocketServer({ server });
 
 wss.on('connection', (ws) => {
   console.log('WebSocket client connected');
@@ -79,5 +85,3 @@ server.listen(port, () => {
   console.log(`http://localhost:${port}`);
   console.log(`http://localhost:${port}/agents`);
 });
-
-require('./groqServer');
