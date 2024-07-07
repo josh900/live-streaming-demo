@@ -1234,7 +1234,6 @@ function handleDeepgramError(err) {
   isRecording = false;
   const startButton = document.getElementById('start-button');
   startButton.textContent = 'Speak';
-  showErrorMessage('Connection to speech recognition service failed. Please check your internet connection and try again.');
   
   // Attempt to close the connection and clean up
   if (deepgramConnection) {
@@ -1252,15 +1251,6 @@ function handleDeepgramError(err) {
   }
 }
 
-function showErrorMessage(message) {
-  const errorDiv = document.createElement('div');
-  errorDiv.className = 'error-message';
-  errorDiv.textContent = message;
-  document.body.appendChild(errorDiv);
-  setTimeout(() => {
-    document.body.removeChild(errorDiv);
-  }, 5000);
-}
 
 function handleUtteranceEnd(data) {
   if (!isRecording) return;
