@@ -830,6 +830,10 @@ async function initializeConnection() {
     stopAllStreams();
     closePC();
 
+    if (!currentAvatar || !avatars[currentAvatar]) {
+      throw new Error('No avatar selected or avatar not found');
+    }
+
     const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
       method: 'POST',
       headers: {
