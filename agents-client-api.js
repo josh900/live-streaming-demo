@@ -745,15 +745,22 @@ function playIdleVideo() {
     logger.error('Idle video element not found');
     return;
   }
-  idleVideoElement.src = avatars[currentAvatar].silentVideoUrl;
+
+  if (!currentAvatar || !avatars[currentAvatar]) {
+    logger.warn(`No avatar selected or avatar ${currentAvatar} not found. Using default idle video.`);
+    idleVideoElement.src = 'path/to/default/idle/video.mp4'; // Replace with your default video path
+  } else {
+    idleVideoElement.src = avatars[currentAvatar].idleVideo;
+  }
+
   idleVideoElement.loop = true;
 
   idleVideoElement.onloadeddata = () => {
-    logger.debug(`Idle video loaded successfully for ${currentAvatar}`);
+    logger.debug(`Idle video loaded successfully for ${currentAvatar || 'default'}`);
   };
 
   idleVideoElement.onerror = (e) => {
-    logger.error(`Error loading idle video for ${currentAvatar}:`, e);
+    logger.error(`Error loading idle video for ${currentAvatar || 'default'}:`, e);
   };
 
   idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e));

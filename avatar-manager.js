@@ -2,6 +2,13 @@ import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3
 import DID_API from './api.js';
 import fetch from 'node-fetch';
 import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+
 
 const s3Client = new S3Client(DID_API.awsConfig);
 
@@ -115,13 +122,10 @@ async function saveAvatarDetails(avatar) {
 
 export async function getAvatars() {
     try {
-        const data = await fs.readFile('avatars.json', 'utf8');
-        return JSON.parse(data);
+      const data = await fs.readFile(path.join(__dirname, 'avatars.json'), 'utf8');
+      return JSON.parse(data);
     } catch (err) {
-        if (err.code === 'ENOENT') {
-            return [];
-        }
-        console.error("Error reading avatars file:", err);
-        throw err;
+      console.error("Error reading avatars file:", err);
+      return {};
     }
-}
+  }
