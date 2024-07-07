@@ -1253,14 +1253,6 @@ function handleDeepgramError(err) {
   }
 }
 
-  if (audioContext) {
-    audioContext.close().catch(closeError => {
-      logger.warn('Error while closing AudioContext:', closeError);
-    });
-  }
-}
-
-
 function handleUtteranceEnd(data) {
   if (!isRecording) return;
 
