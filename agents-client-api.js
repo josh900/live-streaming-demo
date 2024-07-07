@@ -41,6 +41,10 @@ let transitionCtx;
 let transitionAnimationFrame;
 let isDebugMode = false;
 let autoSpeakInProgress = false;
+let reconnectTimeout;
+const MAX_RECONNECT_DELAY = 30000; // Maximum delay between reconnection attempts (30 seconds)
+let reconnectAttempts = 0;
+
 
 
 export function setLogLevel(level) {
@@ -601,6 +605,27 @@ function onIceConnectionStateChange() {
   }
 }
 
+function scheduleReconnect() {
+  clearTimeout(reconnectTimeout);
+  const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
+  logger.debug(`Scheduling reconnection attempt in ${delay}ms`);
+  reconnectTimeout = setTimeout(attemptReconnect, delay);
+  reconnectAttempts++;
+}
+
+async function attemptReconnect() {
+  logger.info('Attempting to reconnect...');
+  try {
+    await reinitializeConnection();
+    logger.info('Reconnection successful');
+  } catch (error) {
+    logger.error('Reconnection attempt failed:', error);
+    scheduleReconnect();
+  }
+}
+
+
+
 function onConnectionStateChange() {
   const { peer: peerStatusLabel } = getStatusLabels();
   if (peerStatusLabel) {
@@ -608,6 +633,15 @@ function onConnectionStateChange() {
     peerStatusLabel.className = 'peerConnectionState-' + peerConnection.connectionState;
   }
   logger.debug('Peer connection state changed:', peerConnection.connectionState);
+
+  if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
+    logger.warn('Peer connection failed or disconnected. Attempting to reconnect...');
+    scheduleReconnect();
+  } else if (peerConnection.connectionState === 'connected') {
+    logger.info('Peer connection established successfully');
+    clearTimeout(reconnectTimeout);
+    reconnectAttempts = 0;
+  }
 }
 
 function onSignalingStateChange() {
@@ -832,6 +866,7 @@ async function initializeConnection() {
     stopAllStreams();
     closePC();
 
+
     if (!currentAvatar || !avatars[currentAvatar]) {
       throw new Error('No avatar selected or avatar not found');
     }
@@ -904,6 +939,7 @@ async function initializeConnection() {
 
     logger.info('Connection initialized successfully');
     startKeepAlive();
+    reconnectAttempts = 0; // Reset reconnect attempts on successful initialization
   } catch (error) {
     logger.error('Failed to initialize connection:', error);
     throw error;
@@ -1436,16 +1472,14 @@ async function reinitializeConnection() {
     const msgHistory = document.getElementById('msgHistory');
     msgHistory.innerHTML = msgHistory.innerHTML.slice(0, msgHistory.innerHTML.lastIndexOf('<span style=\'opacity:0.5\'><u>User:</u>'));
 
-    if (peerConnection && peerConnection.connectionState === 'connected') {
-      logger.debug('Existing connection is still active. Reusing connection.');
-      await startRecording();
-    } else {
-      await initializeConnection();
+    await initializeConnection();
+    if (isRecording) {
       await startRecording();
     }
   } catch (error) {
     logger.error('Error during reinitialization:', error);
     showErrorMessage('Failed to reinitialize connection. Please try again.');
+    throw error;
   } finally {
     isInitializing = false;
   }
