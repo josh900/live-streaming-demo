@@ -132,7 +132,7 @@ async function destroyConnection() {
   }
 }
 
-function smoothTransition(toStreaming, duration = 50) {
+function smoothTransition(toStreaming, duration = 0) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
 
