@@ -229,6 +229,10 @@ select {
   object-fit: cover;
 }
 
+#idle-video-element,
+#stream-video-element {
+  transition: none;
+}
 
 #idle-video-element {
   z-index: 1;
@@ -238,6 +242,9 @@ select {
   z-index: 2;
 }
 
+.animated {
+  transition: opacity 0.3s ease-in-out;
+}
 
 #context-wrapper {
   margin-bottom: 20px;
