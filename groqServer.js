@@ -1,12 +1,12 @@
 import express from 'express';
 import cors from 'cors';
 import Groq from 'groq-sdk';
+import DID_API from './api.js';
 
 const app = express();
 const port = 3001;
 
-const GROQ_API_KEY = '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';
-const groq = new Groq({ apiKey: GROQ_API_KEY });
+const groq = new Groq({ apiKey: DID_API.groqKey });
 
 app.use(cors());
 app.use(express.json());
@@ -40,5 +40,5 @@ app.post('/chat', async (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
+  console.log(`Groq server is running on port ${port}`);
 });
