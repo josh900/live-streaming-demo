@@ -40,6 +40,8 @@ let transitionCanvas;
 let transitionCtx;
 let transitionAnimationFrame;
 let isDebugMode = false;
+let autoSpeakInProgress = false;
+
 
 export function setLogLevel(level) {
   logger.setLogLevel(level);
@@ -1217,6 +1219,9 @@ async function startRecording() {
     });
 
     isRecording = true;
+    if (autoSpeakMode) {
+      autoSpeakInProgress = true;
+    }
     const startButton = document.getElementById('start-button');
     startButton.textContent = 'Stop';
 
