@@ -92,9 +92,46 @@ async function generateSilentVideo(imageUrl, voiceId) {
     }
 
     const data = await response.json();
-    console.log(`Silent video generated successfully: ${data.result_url}`);
-    return data.result_url;
+    
+    if (!data.id) {
+        throw new Error('Failed to get talk ID from response');
+    }
+
+    console.log(`Silent video generation started with ID: ${data.id}`);
+
+    // Poll for the result
+    let resultUrl;
+    for (let i = 0; i < 30; i++) { // Try for 5 minutes (30 * 10 seconds)
+        await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
+
+        const statusResponse = await fetch(`${DID_API.url}/talks/${data.id}`, {
+            headers: {
+                'Authorization': `Basic ${DID_API.key}`,
+            }
+        });
+
+        if (!statusResponse.ok) {
+            throw new Error(`Failed to get talk status: ${statusResponse.statusText}`);
+        }
+
+        const statusData = await statusResponse.json();
+
+        if (statusData.status === 'done') {
+            resultUrl = statusData.result_url;
+            break;
+        } else if (statusData.status === 'error') {
+            throw new Error(`Talk generation failed: ${statusData.error.message}`);
+        }
+    }
+
+    if (!resultUrl) {
+        throw new Error('Timed out waiting for silent video generation');
+    }
+
+    console.log(`Silent video generated successfully: ${resultUrl}`);
+    return resultUrl;
 }
+
 
 async function saveAvatarDetails(avatar) {
     const avatarsFile = path.join(__dirname, 'avatars.json');
