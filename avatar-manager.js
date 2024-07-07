@@ -5,11 +5,11 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const s3Client = new S3Client(DID_API.awsConfig);
+
 
 export async function createOrUpdateAvatar(name, imageFile, voiceId) {
     // Upload image to S3
@@ -26,6 +26,7 @@ export async function createOrUpdateAvatar(name, imageFile, voiceId) {
 
     return avatar;
 }
+
 
 
 async function uploadToS3(key, file) {
@@ -96,7 +97,6 @@ async function generateSilentVideo(imageUrl, voiceId) {
     return data.result_url;
 }
 
-
 async function saveAvatarDetails(avatar) {
     const avatarsFile = path.join(__dirname, 'avatars.json');
     let avatars = [];
@@ -134,3 +134,4 @@ export async function getAvatars() {
         return [];
     }
 }
+
