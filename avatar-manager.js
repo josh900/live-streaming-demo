@@ -5,7 +5,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { Readable } from 'stream';
-
+import sharp from 'sharp';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,16 +14,38 @@ const s3Client = new S3Client(DID_API.awsConfig);
 
 export async function createOrUpdateAvatar(name, imageFile, voiceId) {
     try {
-        // Upload image to S3
-        const imageKey = `avatars/${name}/image.png`;
-        await uploadToS3(imageKey, imageFile);
-        const imageUrl = `https://${DID_API.awsConfig.bucketName}.s3.${DID_API.awsConfig.region}.amazonaws.com/${imageKey}`;
+        let avatar = await getAvatarByName(name);
+        const isNewAvatar = !avatar;
+        const isImageChanged = imageFile !== undefined;
 
-        // Generate silent video
-        const silentVideoUrl = await generateSilentVideo(imageUrl, voiceId);
+        if (isImageChanged) {
+            // Crop image to 512x512 px using mode "Fill"
+            const croppedImageBuffer = await sharp(imageFile.buffer)
+                .resize(512, 512, { fit: 'cover' })
+                .toBuffer();
+
+            // Upload image to S3
+            const imageKey = `avatars/${name}/image.png`;
+            await uploadToS3(imageKey, croppedImageBuffer);
+            const imageUrl = `https://${DID_API.awsConfig.bucketName}.s3.${DID_API.awsConfig.region}.amazonaws.com/${imageKey}`;
+
+            if (isNewAvatar || avatar.voiceId !== voiceId) {
+                // Generate silent video only if it's a new avatar or voice changed
+                const silentVideoUrl = await generateSilentVideo(imageUrl, voiceId);
+                avatar = { name, imageUrl, voiceId, silentVideoUrl };
+            } else {
+                avatar = { ...avatar, imageUrl, voiceId };
+            }
+        } else if (isNewAvatar || avatar.voiceId !== voiceId) {
+            // If only voice changed or it's a new avatar without image
+            const silentVideoUrl = await generateSilentVideo(avatar.imageUrl, voiceId);
+            avatar = { ...avatar, voiceId, silentVideoUrl };
+        } else {
+            // No changes, return existing avatar
+            return avatar;
+        }
 
         // Save avatar details
-        const avatar = { name, imageUrl, voiceId, silentVideoUrl };
         await saveAvatarDetails(avatar);
 
         console.log(`Avatar created/updated successfully:`, JSON.stringify(avatar));
@@ -49,7 +71,6 @@ async function uploadToS3(key, file) {
         throw err;
     }
 }
-
 
 async function generateSilentVideo(imageUrl, voiceId) {
     console.log(`Generating silent video for image: ${imageUrl}, voice: ${voiceId}`);
@@ -155,8 +176,6 @@ async function generateSilentVideo(imageUrl, voiceId) {
     return s3Url;
 }
 
-
-
 async function saveAvatarDetails(avatar) {
     const avatarsFile = path.join(__dirname, 'avatars.json');
     let avatars = [];
@@ -189,4 +208,9 @@ export async function getAvatars() {
         console.error("Error reading avatars file:", err);
         return [];
     }
+}
+
+async function getAvatarByName(name) {
+    const avatars = await getAvatars();
+    return avatars.find(avatar => avatar.name === name);
 }

@@ -46,21 +46,21 @@ app.use('/chat', createProxyMiddleware({
 app.post('/avatar', upload.single('image'), async (req, res) => {
   try {
     const { name, voiceId } = req.body;
-    const avatar = await createOrUpdateAvatar(name, req.file.buffer, voiceId);
-    res.json(avatar);
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive'
+    });
+    res.write('data: {"status": "processing"}\n\n');
+
+    const avatar = await createOrUpdateAvatar(name, req.file, voiceId || 'en-US-GuyNeural');
+    
+    res.write('data: {"status": "completed", "avatar": ' + JSON.stringify(avatar) + '}\n\n');
+    res.end();
   } catch (error) {
     console.error('Error creating/updating avatar:', error);
-    res.status(500).json({ error: 'Failed to create/update avatar' });
-  }
-});
-
-app.get('/avatars', async (req, res) => {
-  try {
-    const avatars = await getAvatars();
-    res.json(avatars);
-  } catch (error) {
-    console.error('Error getting avatars:', error);
-    res.status(500).json({ error: 'Failed to get avatars' });
+    res.write('data: {"status": "error", "message": "Failed to create/update avatar"}\n\n');
+    res.end();
   }
 });
 

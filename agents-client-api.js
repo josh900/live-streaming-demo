@@ -386,19 +386,20 @@ function openAvatarModal(avatarName = null) {
   const saveButton = document.getElementById('save-avatar-button');
 
   if (avatarName && avatars[avatarName]) {
-    nameInput.value = avatars[avatarName].name;
-    voiceInput.value = avatars[avatarName].voiceId;
-    imagePreview.src = avatars[avatarName].imageUrl;
-    saveButton.textContent = 'Update Avatar';
+      nameInput.value = avatars[avatarName].name;
+      voiceInput.value = avatars[avatarName].voiceId;
+      imagePreview.src = avatars[avatarName].imageUrl;
+      saveButton.textContent = 'Update Avatar';
   } else {
-    nameInput.value = '';
-    voiceInput.value = '';
-    imagePreview.src = '';
-    saveButton.textContent = 'Create Avatar';
+      nameInput.value = '';
+      voiceInput.value = 'en-US-GuyNeural';
+      imagePreview.src = '';
+      saveButton.textContent = 'Create Avatar';
   }
 
   modal.style.display = 'block';
 }
+
 
 function closeAvatarModal() {
   document.getElementById('avatar-modal').style.display = 'none';
@@ -406,37 +407,58 @@ function closeAvatarModal() {
 
 async function saveAvatar() {
   const name = document.getElementById('avatar-name').value;
-  const voiceId = document.getElementById('avatar-voice').value;
+  const voiceId = document.getElementById('avatar-voice').value || 'en-US-GuyNeural';
   const imageFile = document.getElementById('avatar-image').files[0];
 
-  if (!name || !voiceId || !imageFile) {
-    showErrorMessage('Please fill all fields and select an image.');
-    return;
+  if (!name) {
+      showErrorMessage('Please fill in the avatar name.');
+      return;
   }
 
   const formData = new FormData();
   formData.append('name', name);
   formData.append('voiceId', voiceId);
-  formData.append('image', imageFile);
+  if (imageFile) {
+      formData.append('image', imageFile);
+  }
+
+  showToast('Saving avatar...', 0);
 
   try {
-    const response = await fetch('/avatar', {
-      method: 'POST',
-      body: formData
-    });
+      const response = await fetch('/avatar', {
+          method: 'POST',
+          body: formData
+      });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
 
-    const avatar = await response.json();
-    avatars[name] = avatar;
-    populateAvatarSelect();
-    closeAvatarModal();
-    showToast('Avatar saved successfully');
+      while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const events = chunk.split('\n\n');
+
+          for (const event of events) {
+              if (event.startsWith('data: ')) {
+                  const data = JSON.parse(event.slice(6));
+                  if (data.status === 'processing') {
+                      showToast('Processing avatar...', 0);
+                  } else if (data.status === 'completed') {
+                      avatars[name] = data.avatar;
+                      populateAvatarSelect();
+                      closeAvatarModal();
+                      showToast('Avatar created successfully!', 3000);
+                  } else if (data.status === 'error') {
+                      showErrorMessage(data.message);
+                  }
+              }
+          }
+      }
   } catch (error) {
-    logger.error('Error saving avatar:', error);
-    showErrorMessage('Failed to save avatar. Please try again.');
+      console.error('Error saving avatar:', error);
+      showErrorMessage('Failed to save avatar. Please try again.');
   }
 }
 
