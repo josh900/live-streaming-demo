@@ -1171,7 +1171,7 @@ async function startRecording() {
     source.connect(audioWorkletNode);
     logger.debug('Media stream source connected to audio worklet node');
 
-    deepgramConnection = deepgramClient.listen.live({
+    const deepgramOptions = {
       model: "nova-2",
       language: "en-US",
       smart_format: true,
@@ -1180,18 +1180,11 @@ async function startRecording() {
       punctuate: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate,
-    });
+    };
 
-    logger.debug('Deepgram connection created with options:', {
-      model: "nova-2",
-      language: "en-US",
-      smart_format: true,
-      interim_results: true,
-      utterance_end_ms: 750,
-      punctuate: true,
-      encoding: "linear16",
-      sample_rate: audioContext.sampleRate,
-    });
+    logger.debug('Creating Deepgram connection with options:', deepgramOptions);
+
+    deepgramConnection = deepgramClient.listen.live(deepgramOptions);
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
       logger.debug('Deepgram WebSocket Connection opened');
@@ -1214,6 +1207,7 @@ async function startRecording() {
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
       logger.error('Deepgram error:', err);
+      handleDeepgramError(err);
     });
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Warning, (warning) => {
@@ -1230,8 +1224,42 @@ async function startRecording() {
     isRecording = false;
     const startButton = document.getElementById('start-button');
     startButton.textContent = 'Speak';
+    showErrorMessage('Failed to start recording. Please try again.');
     throw error;
   }
+}
+
+function handleDeepgramError(err) {
+  logger.error('Deepgram error:', err);
+  isRecording = false;
+  const startButton = document.getElementById('start-button');
+  startButton.textContent = 'Speak';
+  showErrorMessage('Connection to speech recognition service failed. Please check your internet connection and try again.');
+  
+  // Attempt to close the connection and clean up
+  if (deepgramConnection) {
+    try {
+      deepgramConnection.finish();
+    } catch (closeError) {
+      logger.warn('Error while closing Deepgram connection:', closeError);
+    }
+  }
+
+  if (audioContext) {
+    audioContext.close().catch(closeError => {
+      logger.warn('Error while closing AudioContext:', closeError);
+    });
+  }
+}
+
+function showErrorMessage(message) {
+  const errorDiv = document.createElement('div');
+  errorDiv.className = 'error-message';
+  errorDiv.textContent = message;
+  document.body.appendChild(errorDiv);
+  setTimeout(() => {
+    document.body.removeChild(errorDiv);
+  }, 5000);
 }
 
 function handleUtteranceEnd(data) {
