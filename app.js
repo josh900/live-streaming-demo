@@ -64,6 +64,16 @@ app.post('/avatar', upload.single('image'), async (req, res) => {
   }
 });
 
+app.get('/avatars', async (req, res) => {
+  try {
+    const avatars = await getAvatars();
+    res.json(avatars);
+  } catch (error) {
+    console.error('Error getting avatars:', error);
+    res.status(500).json({ error: 'Failed to get avatars' });
+  }
+});
+
 const server = http.createServer(app);
 
 const wss = new WebSocketServer({ server });
