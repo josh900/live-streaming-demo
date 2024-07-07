@@ -8,27 +8,24 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+
+
 const s3Client = new S3Client(DID_API.awsConfig);
 
 export async function createOrUpdateAvatar(name, imageFile, voiceId) {
-    try {
-        // Upload image to S3
-        const imageKey = `avatars/${name}/image.png`;
-        await uploadToS3(imageKey, imageFile);
-        const imageUrl = `https://${DID_API.awsConfig.bucketName}.s3.${DID_API.awsConfig.region}.amazonaws.com/${imageKey}`;
+    // Upload image to S3
+    const imageKey = `avatars/${name}/image.png`;
+    await uploadToS3(imageKey, imageFile);
+    const imageUrl = `https://${DID_API.awsConfig.bucketName}.s3.${DID_API.awsConfig.region}.amazonaws.com/${imageKey}`;
 
-        // Generate silent video
-        const silentVideoUrl = await generateSilentVideo(imageUrl, voiceId);
+    // Generate silent video
+    const silentVideoUrl = await generateSilentVideo(imageUrl, voiceId);
 
-        // Save avatar details
-        const avatar = { name, imageUrl, voiceId, silentVideoUrl };
-        await saveAvatarDetails(avatar);
+    // Save avatar details
+    const avatar = { name, imageUrl, voiceId, silentVideoUrl };
+    await saveAvatarDetails(avatar);
 
-        return avatar;
-    } catch (error) {
-        console.error("Error in createOrUpdateAvatar:", error);
-        throw error;
-    }
+    return avatar;
 }
 
 async function uploadToS3(key, file) {
@@ -100,7 +97,7 @@ async function generateSilentVideo(imageUrl, voiceId) {
 }
 
 async function saveAvatarDetails(avatar) {
-    const avatarsFile = path.join(__dirname, 'avatars.json');
+    const avatarsFile = 'avatars.json';
     let avatars = [];
 
     try {
@@ -125,10 +122,10 @@ async function saveAvatarDetails(avatar) {
 
 export async function getAvatars() {
     try {
-        const data = await fs.readFile(path.join(__dirname, 'avatars.json'), 'utf8');
-        return JSON.parse(data);
+      const data = await fs.readFile(path.join(__dirname, 'avatars.json'), 'utf8');
+      return JSON.parse(data);
     } catch (err) {
-        console.error("Error reading avatars file:", err);
-        return {};
+      console.error("Error reading avatars file:", err);
+      return {};
     }
-}
+  }
