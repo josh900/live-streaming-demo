@@ -5,10 +5,9 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-
 
 const s3Client = new S3Client(DID_API.awsConfig);
 
@@ -27,6 +26,7 @@ export async function createOrUpdateAvatar(name, imageFile, voiceId) {
 
     return avatar;
 }
+
 
 async function uploadToS3(key, file) {
     const command = new PutObjectCommand({
@@ -96,8 +96,9 @@ async function generateSilentVideo(imageUrl, voiceId) {
     return data.result_url;
 }
 
+
 async function saveAvatarDetails(avatar) {
-    const avatarsFile = 'avatars.json';
+    const avatarsFile = path.join(__dirname, 'avatars.json');
     let avatars = [];
 
     try {
@@ -108,6 +109,10 @@ async function saveAvatarDetails(avatar) {
             console.error("Error reading avatars file:", err);
             throw err;
         }
+    }
+
+    if (!Array.isArray(avatars)) {
+        avatars = [];
     }
 
     const existingIndex = avatars.findIndex(a => a.name === avatar.name);
@@ -122,10 +127,10 @@ async function saveAvatarDetails(avatar) {
 
 export async function getAvatars() {
     try {
-      const data = await fs.readFile(path.join(__dirname, 'avatars.json'), 'utf8');
-      return JSON.parse(data);
+        const data = await fs.readFile(path.join(__dirname, 'avatars.json'), 'utf8');
+        return JSON.parse(data);
     } catch (err) {
-      console.error("Error reading avatars file:", err);
-      return {};
+        console.error("Error reading avatars file:", err);
+        return [];
     }
-  }
+}
