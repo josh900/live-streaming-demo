@@ -1176,15 +1176,17 @@ async function startRecording() {
       language: "en-US",
       smart_format: true,
       interim_results: true,
-      utterance_end_ms: 750,
+      utterance_end_ms: 1000,
       punctuate: true,
+      endpointing: 300,
+      vad_events: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate,
     };
 
     logger.debug('Creating Deepgram connection with options:', deepgramOptions);
 
-    deepgramConnection = deepgramClient.listen.live(deepgramOptions);
+    deepgramConnection = await deepgramClient.listen.live(deepgramOptions);
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
       logger.debug('Deepgram WebSocket Connection opened');
@@ -1243,6 +1245,13 @@ function handleDeepgramError(err) {
       logger.warn('Error while closing Deepgram connection:', closeError);
     }
   }
+
+  if (audioContext) {
+    audioContext.close().catch(closeError => {
+      logger.warn('Error while closing AudioContext:', closeError);
+    });
+  }
+}
 
   if (audioContext) {
     audioContext.close().catch(closeError => {
