@@ -91,16 +91,9 @@ function prepareForStreaming() {
   streamVideoElement.style.opacity = '0';
   idleVideoElement.style.opacity = '1';
 
-  // Create a placeholder canvas
-  const placeholderCanvas = document.createElement('canvas');
-  placeholderCanvas.width = idleVideoElement.videoWidth;
-  placeholderCanvas.height = idleVideoElement.videoHeight;
-  const ctx = placeholderCanvas.getContext('2d');
-  ctx.drawImage(idleVideoElement, 0, 0, placeholderCanvas.width, placeholderCanvas.height);
-
-  // Set the placeholder as the source for the stream video
+  // Instead of creating a placeholder, we'll just hide the stream video
   streamVideoElement.srcObject = null;
-  streamVideoElement.poster = placeholderCanvas.toDataURL();
+  streamVideoElement.style.display = 'none';
 
   isPreparing = false;
 }
@@ -179,7 +172,7 @@ async function destroyConnection() {
 }
 
 
-function smoothTransition(toStreaming, duration = 300) {
+function smoothTransition(toStreaming, duration = 250) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
 
@@ -247,10 +240,14 @@ function smoothTransition(toStreaming, duration = 300) {
       // Ensure final state is set correctly
       if (toStreaming) {
         streamVideoElement.style.opacity = '1';
+        streamVideoElement.style.display = 'block';
         idleVideoElement.style.opacity = '0';
+        idleVideoElement.style.display = 'none';
       } else {
         streamVideoElement.style.opacity = '0';
+        streamVideoElement.style.display = 'none';
         idleVideoElement.style.opacity = '1';
+        idleVideoElement.style.display = 'block';
       }
     }
   }
@@ -1173,10 +1170,12 @@ async function startStreaming(assistantReply) {
         return;
       }
 
-      // Set up a timeout to switch to the stream video
-      setTimeout(() => {
-        smoothTransition(true, 300); // Reduced duration for quicker transition
-      }, 50); // Reduced delay to start transition sooner
+      // Wait for the stream to be ready
+      streamVideoElement.oncanplay = () => {
+        logger.debug('Stream video can play');
+        streamVideoElement.style.display = 'block';
+        smoothTransition(true, 300);
+      };
 
       const audioDuration = playResponseData.audio_duration * 1000;
 
