@@ -44,6 +44,8 @@ let autoSpeakInProgress = false;
 let reconnectTimeout;
 const MAX_RECONNECT_DELAY = 30000; // Maximum delay between reconnection attempts (30 seconds)
 let reconnectAttempts = 0;
+let isTransitioning = false;
+let lastVideoStatus = null;
 
 
 
@@ -138,7 +140,8 @@ async function destroyConnection() {
   }
 }
 
-function smoothTransition(toStreaming, duration = 0) {
+
+function smoothTransition(toStreaming, duration = 200) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
 
@@ -147,6 +150,12 @@ function smoothTransition(toStreaming, duration = 0) {
     return;
   }
 
+  if (isTransitioning) {
+    logger.debug('Transition already in progress, skipping');
+    return;
+  }
+
+  isTransitioning = true;
   logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
 
   let startTime = null;
@@ -185,6 +194,7 @@ function smoothTransition(toStreaming, duration = 0) {
         idleVideoElement.style.opacity = '1';
       }
       logger.debug('Smooth transition completed');
+      isTransitioning = false;
     }
   }
 
@@ -683,11 +693,17 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   if (videoIsPlaying) {
     status = 'streaming';
     setStreamVideoElement(stream);
-    smoothTransition(true);  // Transition to streaming state
+    if (lastVideoStatus !== 'streaming') {
+      smoothTransition(true);  // Transition to streaming state
+    }
   } else {
     status = 'empty';
-    smoothTransition(false);  // Transition to idle state
+    if (lastVideoStatus !== 'empty') {
+      smoothTransition(false);  // Transition to idle state
+    }
   }
+
+  lastVideoStatus = status;
 
   const { streaming: streamingStatusLabel } = getStatusLabels();
   if (streamingStatusLabel) {
@@ -696,6 +712,7 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   }
   logger.debug('Video status changed:', status);
 }
+
 
 function setStreamVideoElement(stream) {
   const streamVideoElement = document.getElementById('stream-video-element');
@@ -793,7 +810,7 @@ function onTrack(event) {
     } else {
       logger.debug('Peer connection not ready for stats.');
     }
-  }, 1000);
+  }, 2000);  // Changed from 1000ms to 2000ms
 
   setStreamVideoElement(event.streams[0]);
 }
