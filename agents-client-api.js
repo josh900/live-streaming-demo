@@ -46,6 +46,7 @@ const MAX_RECONNECT_DELAY = 30000; // Maximum delay between reconnection attempt
 let reconnectAttempts = 0;
 let isTransitioning = false;
 let lastVideoStatus = null;
+let isPreparing = false;
 
 
 
@@ -67,6 +68,43 @@ const maxDelaySec = 4;
 let context = `
 You are a helpful, harmless, and honest grocery store assistant. Please answer the users questions briefly, be concise.
 `;
+
+function prepareForStreaming() {
+  if (isPreparing) {
+    logger.debug('Already preparing for streaming, skipping');
+    return;
+  }
+
+  isPreparing = true;
+  logger.debug('Preparing for streaming');
+
+  const idleVideoElement = document.getElementById('idle-video-element');
+  const streamVideoElement = document.getElementById('stream-video-element');
+
+  if (!idleVideoElement || !streamVideoElement) {
+    logger.error('Video elements not found');
+    isPreparing = false;
+    return;
+  }
+
+  // Ensure the stream video is hidden
+  streamVideoElement.style.opacity = '0';
+  idleVideoElement.style.opacity = '1';
+
+  // Create a placeholder canvas
+  const placeholderCanvas = document.createElement('canvas');
+  placeholderCanvas.width = idleVideoElement.videoWidth;
+  placeholderCanvas.height = idleVideoElement.videoHeight;
+  const ctx = placeholderCanvas.getContext('2d');
+  ctx.drawImage(idleVideoElement, 0, 0, placeholderCanvas.width, placeholderCanvas.height);
+
+  // Set the placeholder as the source for the stream video
+  streamVideoElement.srcObject = null;
+  streamVideoElement.poster = placeholderCanvas.toDataURL();
+
+  isPreparing = false;
+}
+
 
 function initializeTransitionCanvas() {
   transitionCanvas = document.createElement('canvas');
@@ -141,7 +179,7 @@ async function destroyConnection() {
 }
 
 
-function smoothTransition(toStreaming, duration = 250) {
+function smoothTransition(toStreaming, duration = 300) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
 
@@ -205,6 +243,15 @@ function smoothTransition(toStreaming, duration = 250) {
       transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
       logger.debug('Smooth transition completed');
       isTransitioning = false;
+
+      // Ensure final state is set correctly
+      if (toStreaming) {
+        streamVideoElement.style.opacity = '1';
+        idleVideoElement.style.opacity = '0';
+      } else {
+        streamVideoElement.style.opacity = '0';
+        idleVideoElement.style.opacity = '1';
+      }
     }
   }
 
@@ -1059,6 +1106,9 @@ async function startStreaming(assistantReply) {
       return;
     }
 
+    // Prepare for streaming immediately
+    prepareForStreaming();
+
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'POST',
       headers: {
@@ -1123,21 +1173,17 @@ async function startStreaming(assistantReply) {
         return;
       }
 
-      // Ensure the stream video is hidden initially
-      streamVideoElement.style.opacity = '0';
-      idleVideoElement.style.opacity = '1';
-
       // Set up a timeout to switch to the stream video
       setTimeout(() => {
-        smoothTransition(true, 500); // Increased duration for smoother transition
-      }, 100); // Small delay to ensure the stream has started
+        smoothTransition(true, 300); // Reduced duration for quicker transition
+      }, 50); // Reduced delay to start transition sooner
 
       const audioDuration = playResponseData.audio_duration * 1000;
 
       // Set up a timeout to switch back to the idle video
       setTimeout(() => {
-        smoothTransition(false, 500);
-      }, audioDuration - 200);
+        smoothTransition(false, 300);
+      }, audioDuration - 100);
 
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
