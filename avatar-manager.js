@@ -13,27 +13,33 @@ const __dirname = path.dirname(__filename);
 const s3Client = new S3Client(DID_API.awsConfig);
 
 export async function createOrUpdateAvatar(name, imageFile, voiceId) {
-    // Upload image to S3
-    const imageKey = `avatars/${name}/image.png`;
-    await uploadToS3(imageKey, imageFile);
-    const imageUrl = `https://${DID_API.awsConfig.bucketName}.s3.${DID_API.awsConfig.region}.amazonaws.com/${imageKey}`;
+    try {
+        // Upload image to S3
+        const imageKey = `avatars/${name}/image.png`;
+        await uploadToS3(imageKey, imageFile);
+        const imageUrl = `https://${DID_API.awsConfig.bucketName}.s3.${DID_API.awsConfig.region}.amazonaws.com/${imageKey}`;
 
-    // Generate silent video
-    const silentVideoUrl = await generateSilentVideo(imageUrl, voiceId);
+        // Generate silent video
+        const silentVideoUrl = await generateSilentVideo(imageUrl, voiceId);
 
-    // Save avatar details
-    const avatar = { name, imageUrl, voiceId, silentVideoUrl };
-    await saveAvatarDetails(avatar);
+        // Save avatar details
+        const avatar = { name, imageUrl, voiceId, silentVideoUrl };
+        await saveAvatarDetails(avatar);
 
-    return avatar;
+        console.log(`Avatar created/updated successfully:`, JSON.stringify(avatar));
+        return avatar;
+    } catch (error) {
+        console.error(`Error creating/updating avatar:`, error);
+        throw error;
+    }
 }
 
-async function uploadToS3(key, body) {
+async function uploadToS3(key, file) {
     const command = new PutObjectCommand({
         Bucket: DID_API.awsConfig.bucketName,
         Key: key,
-        Body: body,
-        ContentType: 'video/mp4'
+        Body: file,
+        ContentType: 'image/png'
     });
 
     try {
@@ -44,7 +50,111 @@ async function uploadToS3(key, body) {
     }
 }
 
+
 async function generateSilentVideo(imageUrl, voiceId) {
+    console.log(`Generating silent video for image: ${imageUrl}, voice: ${voiceId}`);
+    const response = await fetch(`${DID_API.url}/talks`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Basic ${DID_API.key}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            source_url: imageUrl,
+            driver_url: "bank://lively/driver-06",
+            script: {
+                type: "text",
+                ssml: true,
+                input: "<break time=\"5000ms\"/>",
+                provider: {
+                    type: "microsoft",
+                    voice_id: voiceId
+                }
+            },
+            config: {
+                fluent: true,
+                pad_audio: 0,
+                driver_expressions: {
+                    expressions: [
+                        {
+                            start_frame: 0,
+                            expression: "neutral",
+                            intensity: 0
+                        }
+                    ],
+                    transition_frames: 0
+                },
+                align_driver: true,
+                align_expand_factor: 0,
+                auto_match: true,
+                motion_factor: 0.7,
+                normalization_factor: 0,
+                sharpen: true,
+                stitch: true,
+                result_format: "mp4"
+            }
+        })
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to generate silent video: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    
+    if (!data.id) {
+        throw new Error('Failed to get talk ID from response');
+    }
+
+    console.log(`Silent video generation started with ID: ${data.id}`);
+
+    // Poll for the result
+    let resultUrl;
+    for (let i = 0; i < 30; i++) { // Try for 5 minutes (30 * 10 seconds)
+        await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
+
+        const statusResponse = await fetch(`${DID_API.url}/talks/${data.id}`, {
+            headers: {
+                'Authorization': `Basic ${DID_API.key}`,
+            }
+        });
+
+        if (!statusResponse.ok) {
+            throw new Error(`Failed to get talk status: ${statusResponse.statusText}`);
+        }
+
+        const statusData = await statusResponse.json();
+
+        if (statusData.status === 'done') {
+            resultUrl = statusData.result_url;
+            break;
+        } else if (statusData.status === 'error') {
+            throw new Error(`Talk generation failed: ${statusData.error.message}`);
+        }
+    }
+
+    if (!resultUrl) {
+        throw new Error('Timed out waiting for silent video generation');
+    }
+
+    console.log(`Silent video generated successfully: ${resultUrl}`);
+
+    // Download the video
+    const videoResponse = await fetch(resultUrl);
+    if (!videoResponse.ok) {
+        throw new Error(`Failed to download video: ${videoResponse.statusText}`);
+    }
+
+    // Upload to S3
+    const s3Key = `avatars/${voiceId}/silent_video.mp4`;
+    await uploadToS3(s3Key, await videoResponse.buffer());
+
+    const s3Url = `https://${DID_API.awsConfig.bucketName}.s3.${DID_API.awsConfig.region}.amazonaws.com/${s3Key}`;
+    console.log(`Silent video uploaded to S3: ${s3Url}`);
+
+    return s3Url;
+}
+
 
 
 async function saveAvatarDetails(avatar) {
