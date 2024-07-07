@@ -3,7 +3,6 @@ import DID_API from './api.js';
 import logger from './logger.js';
 const { createClient, LiveTranscriptionEvents } = deepgram;
 
-
 if (DID_API.key == '🤫') alert('Please put your api key inside ./api.js and restart..');
 
 const deepgramClient = createClient(DID_API.deepgramKey);
@@ -1160,12 +1159,8 @@ async function startRecording() {
     audioContext = new AudioContext();
     logger.debug('Audio context created. Sample rate:', audioContext.sampleRate);
 
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    logger.debug('Audio worklet module added successfully');
-
     await audioContext.audioWorklet.addModule('audio-processor.js');
     logger.debug('Audio worklet module added successfully');
-
 
     const source = audioContext.createMediaStreamSource(stream);
     logger.debug('Media stream source created');
@@ -1191,32 +1186,34 @@ async function startRecording() {
 
     deepgramConnection = deepgramClient.listen.live(deepgramOptions);
 
-    
-    deepgramConnection.addListener('open', () => {
+    deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
       logger.debug('Deepgram WebSocket Connection opened');
       startSendingAudioData();
     });
 
-    deepgramConnection.addListener('close', () => {
+    deepgramConnection.addListener(LiveTranscriptionEvents.Close, () => {
       logger.debug('Deepgram WebSocket connection closed');
     });
 
-    deepgramConnection.addListener('transcriptReceived', (data) => {
+    deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
       logger.debug('Received transcription:', JSON.stringify(data));
       handleTranscription(data);
     });
 
-    deepgramConnection.addListener('error', (err) => {
-      logger.error('Deepgram error:', err);
-    });
-    
-    deepgramConnection.addListener('UtteranceEnd', (data) => {
+    deepgramConnection.addListener(LiveTranscriptionEvents.UtteranceEnd, (data) => {
       logger.debug('Utterance end event received:', data);
       handleUtteranceEnd(data);
     });
 
+    deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
+      logger.error('Deepgram error:', err);
+      handleDeepgramError(err);
+    });
 
-    // Set recording state
+    deepgramConnection.addListener(LiveTranscriptionEvents.Warning, (warning) => {
+      logger.warn('Deepgram warning:', warning);
+    });
+
     isRecording = true;
     const startButton = document.getElementById('start-button');
     startButton.textContent = 'Stop';
@@ -1227,6 +1224,7 @@ async function startRecording() {
     isRecording = false;
     const startButton = document.getElementById('start-button');
     startButton.textContent = 'Speak';
+    showErrorMessage('Failed to start recording. Please try again.');
     throw error;
   }
 }
