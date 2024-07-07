@@ -1,104 +1,127 @@
-// avatar-manager.js
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import DID_API from './api.js';
-import AWS from 'aws-sdk';
-import logger from './logger.js';
+import fetch from 'node-fetch';
+import fs from 'fs/promises';
 
-const s3 = new AWS.S3({
-  accessKeyId: DID_API.awsAccessKeyId,
-  secretAccessKey: DID_API.awsSecretAccessKey,
-  region: DID_API.awsRegion
-});
+const s3Client = new S3Client(DID_API.awsConfig);
 
-export async function createOrUpdateAvatar(avatarData) {
-  try {
+export async function createOrUpdateAvatar(name, imageFile, voiceId) {
     // Upload image to S3
-    const imageKey = `avatars/${Date.now()}-${avatarData.imageName}`;
-    await uploadToS3(avatarData.imageFile, imageKey);
-    const imageUrl = `https://${DID_API.awsBucketName}.s3.amazonaws.com/${imageKey}`;
+    const imageKey = `avatars/${name}/image.png`;
+    await uploadToS3(imageKey, imageFile);
+    const imageUrl = `https://${DID_API.awsConfig.bucketName}.s3.${DID_API.awsConfig.region}.amazonaws.com/${imageKey}`;
 
     // Generate silent video
-    const silentVideoUrl = await generateSilentVideo(imageUrl, avatarData.voiceId);
+    const silentVideoUrl = await generateSilentVideo(imageUrl, voiceId);
 
-    // Save avatar data
-    const avatar = {
-      name: avatarData.name,
-      imageUrl: imageUrl,
-      idleVideoUrl: silentVideoUrl,
-      voice: avatarData.voiceId
-    };
-
-    // Update avatars in local storage
-    const avatars = JSON.parse(localStorage.getItem('avatars') || '{}');
-    avatars[avatar.name] = avatar;
-    localStorage.setItem('avatars', JSON.stringify(avatars));
+    // Save avatar details
+    const avatar = { name, imageUrl, voiceId, silentVideoUrl };
+    await saveAvatarDetails(avatar);
 
     return avatar;
-  } catch (error) {
-    logger.error('Error creating/updating avatar:', error);
-    throw error;
-  }
 }
 
-async function uploadToS3(file, key) {
-  const params = {
-    Bucket: DID_API.awsBucketName,
-    Key: key,
-    Body: file,
-    ACL: 'public-read'
-  };
-
-  return new Promise((resolve, reject) => {
-    s3.upload(params, (err, data) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(data.Location);
-      }
+async function uploadToS3(key, file) {
+    const command = new PutObjectCommand({
+        Bucket: DID_API.awsConfig.bucketName,
+        Key: key,
+        Body: file,
+        ContentType: 'image/png'
     });
-  });
+
+    try {
+        await s3Client.send(command);
+    } catch (err) {
+        console.error("Error uploading file to S3:", err);
+        throw err;
+    }
 }
 
 async function generateSilentVideo(imageUrl, voiceId) {
-  const response = await fetch(`${DID_API.url}/${DID_API.service}/talks`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      source_url: imageUrl,
-      driver_url: "bank://lively/driver-06",
-      script: {
-        type: "text",
-        ssml: true,
-        input: "<break time=\"5000ms\"/>",
-        provider: {
-          type: "microsoft",
-          voice_id: voiceId
+    const response = await fetch(`${DID_API.url}/talks`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Basic ${DID_API.key}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            source_url: imageUrl,
+            driver_url: "bank://lively/driver-06",
+            script: {
+                type: "text",
+                ssml: true,
+                input: "<break time=\"5000ms\"/>",
+                provider: {
+                    type: "microsoft",
+                    voice_id: voiceId
+                }
+            },
+            config: {
+                fluent: true,
+                pad_audio: 0,
+                driver_expressions: {
+                    expressions: [
+                        {
+                            start_frame: 0,
+                            expression: "neutral",
+                            intensity: 0
+                        }
+                    ],
+                    transition_frames: 0
+                },
+                align_driver: true,
+                align_expand_factor: 0,
+                auto_match: true,
+                motion_factor: 0,
+                normalization_factor: 0,
+                sharpen: true,
+                stitch: true,
+                result_format: "mp4"
+            }
+        })
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to generate silent video: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.result_url;
+}
+
+async function saveAvatarDetails(avatar) {
+    const avatarsFile = 'avatars.json';
+    let avatars = [];
+
+    try {
+        const data = await fs.readFile(avatarsFile, 'utf8');
+        avatars = JSON.parse(data);
+    } catch (err) {
+        if (err.code !== 'ENOENT') {
+            console.error("Error reading avatars file:", err);
+            throw err;
         }
-      },
-      config: {
-        fluent: true,
-        stitch: true,
-        pad_audio: 0
-      }
-    }),
-  });
+    }
 
-  if (!response.ok) {
-    throw new Error(`Failed to generate silent video: ${response.statusText}`);
-  }
+    const existingIndex = avatars.findIndex(a => a.name === avatar.name);
+    if (existingIndex !== -1) {
+        avatars[existingIndex] = avatar;
+    } else {
+        avatars.push(avatar);
+    }
 
-  const data = await response.json();
-  return data.result_url;
+    await fs.writeFile(avatarsFile, JSON.stringify(avatars, null, 2));
 }
 
-export function getAvatars() {
-  return JSON.parse(localStorage.getItem('avatars') || '{}');
-}
-
-export function deleteAvatar(avatarName) {
-  const avatars = getAvatars();
-  delete avatars[avatarName];
-  localStorage.setItem('avatars', JSON.stringify(avatars));
+export async function getAvatars() {
+    try {
+        const data = await fs.readFile('avatars.json', 'utf8');
+        return JSON.parse(data);
+    } catch (err) {
+        if (err.code === 'ENOENT') {
+            return [];
+        }
+        console.error("Error reading avatars file:", err);
+        throw err;
+    }
 }

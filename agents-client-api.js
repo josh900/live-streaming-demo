@@ -1,7 +1,6 @@
 'use strict';
 import DID_API from './api.js';
 import logger from './logger.js';
-import { createOrUpdateAvatar, getAvatars, deleteAvatar } from './avatar-manager.js';
 const { createClient, LiveTranscriptionEvents } = deepgram;
 
 if (DID_API.key == '🤫') alert('Please put your api key inside ./api.js and restart..');
@@ -41,7 +40,6 @@ let transitionCanvas;
 let transitionCtx;
 let transitionAnimationFrame;
 let isDebugMode = false;
-let currentAvatar = null;
 
 export function setLogLevel(level) {
   logger.setLogLevel(level);
@@ -49,155 +47,43 @@ export function setLogLevel(level) {
   logger.debug(`Log level set to ${level}. Debug mode is ${isDebugMode ? 'enabled' : 'disabled'}.`);
 }
 
-export async function initialize() {
-  setLogLevel('DEBUG');
+let avatars = {};
+let currentAvatar = '';
 
-  const { idle, stream } = getVideoElements();
-  idleVideoElement = idle;
-  streamVideoElement = stream;
+const avatarSelect = document.getElementById('avatar-select');
+avatarSelect.addEventListener('change', handleAvatarChange);
 
-  if (idleVideoElement) idleVideoElement.setAttribute('playsinline', '');
-  if (streamVideoElement) streamVideoElement.setAttribute('playsinline', '');
+const maxRetryCount = 3;
+const maxDelaySec = 4;
 
-  initializeTransitionCanvas();
+let context = `
+You are a helpful, harmless, and honest grocery store assistant. Please answer the users questions briefly, be concise.
+`;
 
-  await updateAvatarSelector();
+function initializeTransitionCanvas() {
+  transitionCanvas = document.createElement('canvas');
+  transitionCanvas.width = 400;
+  transitionCanvas.height = 400;
+  transitionCtx = transitionCanvas.getContext('2d');
 
-  const contextInput = document.getElementById('context-input');
-  contextInput.value = context.trim();
-  contextInput.addEventListener('input', () => {
-    if (!contextInput.value.includes('Original Context:')) {
-      context = contextInput.value.trim();
-    }
-  });
-
-  const sendTextButton = document.getElementById('send-text-button');
-  const textInput = document.getElementById('text-input');
-  const replaceContextButton = document.getElementById('replace-context-button');
-  const autoSpeakToggle = document.getElementById('auto-speak-toggle');
-  const createAvatarButton = document.getElementById('create-avatar-button');
-  const editAvatarButton = document.getElementById('edit-avatar-button');
-
-  sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
-  textInput.addEventListener('keypress', (event) => {
-    if (event.key === 'Enter') handleTextInput(textInput.value);
-  });
-  replaceContextButton.addEventListener('click', () => updateContext('replace'));
-  autoSpeakToggle.addEventListener('click', toggleAutoSpeak);
-  createAvatarButton.addEventListener('click', openAvatarModal);
-  editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatar));
-
-  initializeWebSocket();
-  playIdleVideo();
-
-  showLoadingSymbol();
-  try {
-    await initializeConnection();
-    startKeepAlive();
-    hideLoadingSymbol();
-  } catch (error) {
-    logger.error('Error during initialization:', error);
-    hideLoadingSymbol();
-    showErrorMessage('Failed to connect. Please try again.');
-  }
+  transitionCanvas.style.position = 'absolute';
+  transitionCanvas.style.top = '0';
+  transitionCanvas.style.left = '0';
+  transitionCanvas.style.zIndex = '3';
+  transitionCanvas.style.borderRadius = '50%';
+  document.querySelector('#video-wrapper').appendChild(transitionCanvas);
 }
 
-export async function updateAvatarSelector() {
-  const avatarSelect = document.getElementById('avatar-select');
-  avatarSelect.innerHTML = '';
-
-  const avatars = getAvatars();
-  for (const [key, value] of Object.entries(avatars)) {
-    const option = document.createElement('option');
-    option.value = key;
-    option.textContent = key;
-    avatarSelect.appendChild(option);
-  }
-
-  const createNewOption = document.createElement('option');
-  createNewOption.value = 'create_new';
-  createNewOption.textContent = 'Create New Avatar';
-  avatarSelect.appendChild(createNewOption);
-
-  avatarSelect.addEventListener('change', handleAvatarChange);
-
-  if (avatarSelect.options.length > 1) {
-    currentAvatar = avatarSelect.options[1].value;
-    avatarSelect.value = currentAvatar;
-    await handleAvatarChange();
-  }
-}
-
-export function openAvatarModal(avatarToEdit = null) {
-  const modal = document.getElementById('avatar-modal');
-  const modalTitle = document.getElementById('avatar-modal-title');
-  const avatarForm = document.getElementById('avatar-form');
-  const avatarNameInput = document.getElementById('avatar-name');
-  const avatarImageInput = document.getElementById('avatar-image');
-  const avatarVoiceInput = document.getElementById('avatar-voice');
-
-  modalTitle.textContent = avatarToEdit ? 'Edit Avatar' : 'Create New Avatar';
-
-  if (avatarToEdit) {
-    const avatars = getAvatars();
-    const avatar = avatars[avatarToEdit];
-    avatarNameInput.value = avatarToEdit;
-    avatarVoiceInput.value = avatar.voice;
-    avatarNameInput.disabled = true;
-  } else {
-    avatarNameInput.value = '';
-    avatarVoiceInput.value = '';
-    avatarNameInput.disabled = false;
-  }
-
-  avatarImageInput.value = '';
-
-  avatarForm.onsubmit = async (e) => {
-    e.preventDefault();
-    const formData = new FormData(avatarForm);
-    const avatarData = {
-      name: formData.get('avatar-name'),
-      imageFile: formData.get('avatar-image'),
-      imageName: formData.get('avatar-image').name,
-      voiceId: formData.get('avatar-voice')
-    };
-
-    try {
-      showLoadingSymbol();
-      await createOrUpdateAvatar(avatarData);
-      hideLoadingSymbol();
-      modal.style.display = 'none';
-      await updateAvatarSelector();
-    } catch (error) {
-      hideLoadingSymbol();
-      showErrorMessage('Failed to create/update avatar. Please try again.');
-    }
-  };
-
-  modal.style.display = 'block';
-}
-
-export async function handleAvatarChange() {
-  const avatarSelect = document.getElementById('avatar-select');
-  const selectedValue = avatarSelect.value;
-
-  if (selectedValue === 'create_new') {
+async function handleAvatarChange() {
+  currentAvatar = avatarSelect.value;
+  if (currentAvatar === 'create-new') {
     openAvatarModal();
-    return;
-  }
-
-  currentAvatar = selectedValue;
-  const avatars = getAvatars();
-  const avatar = avatars[currentAvatar];
-
-  if (!avatar) {
-    logger.error(`Avatar not found: ${currentAvatar}`);
     return;
   }
 
   const idleVideoElement = document.getElementById('idle-video-element');
   if (idleVideoElement) {
-    idleVideoElement.src = avatar.idleVideoUrl;
+    idleVideoElement.src = avatars[currentAvatar].silentVideoUrl;
     try {
       await idleVideoElement.load();
       logger.debug(`Idle video loaded for ${currentAvatar}`);
@@ -212,31 +98,14 @@ export async function handleAvatarChange() {
   }
 
   await stopRecording();
-
   currentUtterance = '';
   interimMessageAdded = false;
-
   const msgHistory = document.getElementById('msgHistory');
   msgHistory.innerHTML = '';
-
   chatHistory = [];
 
   await destroyConnection();
   await initializeConnection();
-}
-
-function initializeTransitionCanvas() {
-  transitionCanvas = document.createElement('canvas');
-  transitionCanvas.width = 400;
-  transitionCanvas.height = 400;
-  transitionCtx = transitionCanvas.getContext('2d');
-
-  transitionCanvas.style.position = 'absolute';
-  transitionCanvas.style.top = '0';
-  transitionCanvas.style.left = '0';
-  transitionCanvas.style.zIndex = '3';
-  transitionCanvas.style.borderRadius = '50%';
-  document.querySelector('#video-wrapper').appendChild(transitionCanvas);
 }
 
 async function destroyConnection() {
@@ -395,7 +264,7 @@ function updateTranscript(text, isFinal) {
   msgHistory.scrollTop = msgHistory.scrollHeight;
 }
 
-export function handleTextInput(text) {
+function handleTextInput(text) {
   if (text.trim() === '') return;
 
   const textInput = document.getElementById('text-input');
@@ -415,7 +284,157 @@ function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
 }
 
-export function updateContext(action) {
+async function initialize() {
+  setLogLevel('DEBUG');
+
+  const { idle, stream } = getVideoElements();
+  idleVideoElement = idle;
+  streamVideoElement = stream;
+
+  if (idleVideoElement) idleVideoElement.setAttribute('playsinline', '');
+  if (streamVideoElement) streamVideoElement.setAttribute('playsinline', '');
+
+  initializeTransitionCanvas();
+
+  await loadAvatars();
+  populateAvatarSelect();
+
+  const contextInput = document.getElementById('context-input');
+  contextInput.value = context.trim();
+  contextInput.addEventListener('input', () => {
+    if (!contextInput.value.includes('Original Context:')) {
+      context = contextInput.value.trim();
+    }
+  });
+
+  const sendTextButton = document.getElementById('send-text-button');
+  const textInput = document.getElementById('text-input');
+  const replaceContextButton = document.getElementById('replace-context-button');
+  const autoSpeakToggle = document.getElementById('auto-speak-toggle');
+  const editAvatarButton = document.getElementById('edit-avatar-button');
+
+  sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
+  textInput.addEventListener('keypress', (event) => {
+    if (event.key === 'Enter') handleTextInput(textInput.value);
+  });
+  replaceContextButton.addEventListener('click', () => updateContext('replace'));
+  autoSpeakToggle.addEventListener('click', toggleAutoSpeak);
+  editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatar));
+
+  initializeWebSocket();
+  playIdleVideo();
+
+  showLoadingSymbol();
+  try {
+    await initializeConnection();
+    startKeepAlive();
+    hideLoadingSymbol();
+  } catch (error) {
+    logger.error('Error during initialization:', error);
+    hideLoadingSymbol();
+    showErrorMessage('Failed to connect. Please try again.');
+  }
+}
+
+async function loadAvatars() {
+  try {
+    const response = await fetch('/avatars');
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    avatars = await response.json();
+    logger.debug('Avatars loaded:', avatars);
+  } catch (error) {
+    logger.error('Error loading avatars:', error);
+    showErrorMessage('Failed to load avatars. Please try again.');
+  }
+}
+
+function populateAvatarSelect() {
+  const avatarSelect = document.getElementById('avatar-select');
+  avatarSelect.innerHTML = '';
+  
+  const createNewOption = document.createElement('option');
+  createNewOption.value = 'create-new';
+  createNewOption.textContent = 'Create New Avatar';
+  avatarSelect.appendChild(createNewOption);
+
+  for (const [key, value] of Object.entries(avatars)) {
+    const option = document.createElement('option');
+    option.value = key;
+    option.textContent = value.name;
+    avatarSelect.appendChild(option);
+  }
+
+  if (Object.keys(avatars).length > 0) {
+    currentAvatar = Object.keys(avatars)[0];
+    avatarSelect.value = currentAvatar;
+  }
+}
+
+function openAvatarModal(avatarName = null) {
+  const modal = document.getElementById('avatar-modal');
+  const nameInput = document.getElementById('avatar-name');
+  const voiceInput = document.getElementById('avatar-voice');
+  const imagePreview = document.getElementById('avatar-image-preview');
+  const saveButton = document.getElementById('save-avatar-button');
+
+  if (avatarName && avatars[avatarName]) {
+    nameInput.value = avatars[avatarName].name;
+    voiceInput.value = avatars[avatarName].voiceId;
+    imagePreview.src = avatars[avatarName].imageUrl;
+    saveButton.textContent = 'Update Avatar';
+  } else {
+    nameInput.value = '';
+    voiceInput.value = '';
+    imagePreview.src = '';
+    saveButton.textContent = 'Create Avatar';
+  }
+
+  modal.style.display = 'block';
+}
+
+function closeAvatarModal() {
+  document.getElementById('avatar-modal').style.display = 'none';
+}
+
+async function saveAvatar() {
+  const name = document.getElementById('avatar-name').value;
+  const voiceId = document.getElementById('avatar-voice').value;
+  const imageFile = document.getElementById('avatar-image').files[0];
+
+  if (!name || !voiceId || !imageFile) {
+    showErrorMessage('Please fill all fields and select an image.');
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('name', name);
+  formData.append('voiceId', voiceId);
+  formData.append('image', imageFile);
+
+  try {
+    const response = await fetch('/avatar', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const avatar = await response.json();
+    avatars[name] = avatar;
+    populateAvatarSelect();
+    closeAvatarModal();
+    showToast('Avatar saved successfully');
+  } catch (error) {
+    logger.error('Error saving avatar:', error);
+    showErrorMessage('Failed to save avatar. Please try again.');
+  }
+}
+
+function updateContext(action) {
   const contextInput = document.getElementById('context-input');
   const newContext = contextInput.value.trim();
 
@@ -441,7 +460,7 @@ function displayBothContexts(original, updated) {
 
   setTimeout(() => {
     contextInput.value = updated;
-  }, 0);
+  }, 3000);
 }
 
 function showToast(message) {
@@ -466,6 +485,12 @@ function showToast(message) {
       document.body.removeChild(toast);
     }, 500);
   }, 3000);
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initialize);
+} else {
+  initialize();
 }
 
 function showLoadingSymbol() {
@@ -599,10 +624,10 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   if (videoIsPlaying) {
     status = 'streaming';
     setStreamVideoElement(stream);
-    smoothTransition(true);
+    smoothTransition(true);  // Transition to streaming state
   } else {
     status = 'empty';
-    smoothTransition(false);
+    smoothTransition(false);  // Transition to idle state
   }
 
   const { streaming: streamingStatusLabel } = getStatusLabels();
@@ -661,6 +686,7 @@ function downloadStreamVideo(stream) {
 
   mediaRecorder.start();
 
+  // Stop recording after 10 seconds (adjust as needed)
   setTimeout(() => {
     mediaRecorder.stop();
   }, 10000);
@@ -719,7 +745,7 @@ function playIdleVideo() {
     logger.error('Idle video element not found');
     return;
   }
-  idleVideoElement.src = getAvatars()[currentAvatar].idleVideoUrl;
+  idleVideoElement.src = avatars[currentAvatar].silentVideoUrl;
   idleVideoElement.loop = true;
 
   idleVideoElement.onloadeddata = () => {
@@ -764,9 +790,6 @@ function closePC(pc = peerConnection) {
   }
 }
 
-const maxRetryCount = 3;
-const maxDelaySec = 4;
-
 async function fetchWithRetries(url, options, retries = 1) {
   try {
     const response = await fetch(url, options);
@@ -807,21 +830,29 @@ async function initializeConnection() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        source_url: getAvatars()[currentAvatar].imageUrl,
-        stream_warmup: true,
-        output_resolution: 512,
+        source_url: avatars[currentAvatar].imageUrl,
+        driver_url: "bank://lively/driver-06",
         config: {
           stitch: true,
-          fluent: false,
-          pad_audio: 1.0,
+          fluent: true,
+          pad_audio: 0,
+          driver_expressions: {
+            expressions: [
+              {
+                start_frame: 0,
+                expression: "neutral",
+                intensity: 0
+              }
+            ],
+            transition_frames: 0
+          },
+          align_driver: true,
+          align_expand_factor: 0,
           auto_match: true,
-          expressions: [
-            {
-              start_frame: 0,
-              expression: 'neutral',
-              intensity: 1
-            }
-          ]
+          motion_factor: 0,
+          normalization_factor: 0,
+          sharpen: true,
+          result_format: "mp4"
         }
       }),
     });
@@ -855,475 +886,486 @@ async function initializeConnection() {
     });
 
     if (!sdpResponse.ok) {
-  throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
-}
+      throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
+    }
 
-logger.info('Connection initialized successfully');
-startKeepAlive();
-} catch (error) {
-logger.error('Failed to initialize connection:', error);
-throw error;
-} finally {
-isInitializing = false;
-}
+    logger.info('Connection initialized successfully');
+    startKeepAlive();
+  } catch (error) {
+    logger.error('Failed to initialize connection:', error);
+    throw error;
+  } finally {
+    isInitializing = false;
+  }
 }
 
 function startKeepAlive() {
-if (keepAliveInterval) {
-clearInterval(keepAliveInterval);
-}
-keepAliveInterval = setInterval(async () => {
-try {
-  await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/keepalive`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ session_id: sessionId }),
-  });
-  logger.debug('Keep-alive sent successfully');
-} catch (error) {
-  logger.warn('Error sending keep-alive:', error);
-}
-}, 100000);
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval);
+  }
+  keepAliveInterval = setInterval(async () => {
+    try {
+      await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/keepalive`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      logger.debug('Keep-alive sent successfully');
+    } catch (error) {
+      logger.warn('Error sending keep-alive:', error);
+    }
+  }, 30000);
 }
 
 function stopKeepAlive() {
-if (keepAliveInterval) {
-clearInterval(keepAliveInterval);
-keepAliveInterval = null;
-}
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval);
+    keepAliveInterval = null;
+  }
 }
 
 async function startStreaming(assistantReply) {
-try {
-logger.debug('Starting streaming with reply:', assistantReply);
-const avatars = getAvatars();
-const avatar = avatars[currentAvatar];
-
-const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
-  method: 'POST',
-  headers: {
-    Authorization: `Basic ${DID_API.key}`,
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({
-    script: {
-      type: 'text',
-      input: assistantReply,
-      provider: {
-        type: 'microsoft',
-        voice_id: avatar.voice,
-        voice_config: {
-          rate: 'medium'
-        }
+  try {
+    logger.debug('Starting streaming with reply:', assistantReply);
+    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
       },
-      ssml: false,
-    },
-    config: {
-      stitch: true,
-      fluent: true,
-      pad_audio: 0,
-      align_driver: true,
-      auto_match: true,
-      normalization_factor: 0.6,
-      driver_url: "bank://lively/driver-06"
-    },
-    session_id: sessionId,
-  }),
-});
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: assistantReply,
+          provider: {
+            type: 'microsoft',
+            voice_id: avatars[currentAvatar].voiceId,
+            voice_config: {
+              rate: 'medium'
+            }
+          },
+          ssml: false,
+        },
+        config: {
+          stitch: true,
+          fluent: true,
+          pad_audio: 0,
+          driver_expressions: {
+            expressions: [
+              {
+                start_frame: 0,
+                expression: "neutral",
+                intensity: 0
+              }
+            ],
+            transition_frames: 0
+          },
+          align_driver: true,
+          align_expand_factor: 0,
+          auto_match: true,
+          motion_factor: 0,
+          normalization_factor: 0,
+          sharpen: true,
+          result_format: "mp4"
+        },
+        driver_url: "bank://lively/driver-06",
+        session_id: sessionId,
+      }),
+    });
 
-const playResponseData = await playResponse.json();
-logger.debug('Streaming response:', playResponseData);
+    const playResponseData = await playResponse.json();
+    logger.debug('Streaming response:', playResponseData);
 
-if (playResponseData.status === 'started') {
-  logger.debug('Stream started successfully');
+    if (playResponseData.status === 'started') {
+      logger.debug('Stream started successfully');
 
-  const { idle: idleVideoElement, stream: streamVideoElement } = getVideoElements();
+      const { idle: idleVideoElement, stream: streamVideoElement } = getVideoElements();
 
-  streamVideoElement.style.display = 'block';
+      streamVideoElement.style.display = 'block';
 
-  logger.debug('Idle video element:', idleVideoElement.src);
-  logger.debug('Stream video element:', streamVideoElement.srcObject);
+      logger.debug('Idle video element:', idleVideoElement.src);
+      logger.debug('Stream video element:', streamVideoElement.srcObject);
 
-  streamVideoElement.onloadedmetadata = () => {
-    logger.debug('Stream video metadata loaded');
-    streamVideoElement.play().then(() => {
-      logger.debug('Stream video playback started');
-    }).catch(e => logger.error('Error playing stream video:', e));
-  };
+      streamVideoElement.onloadedmetadata = () => {
+        logger.debug('Stream video metadata loaded');
+        streamVideoElement.play().then(() => {
+          logger.debug('Stream video playback started');
+        }).catch(e => logger.error('Error playing stream video:', e));
+      };
 
-  streamVideoElement.oncanplay = () => {
-    logger.debug('Stream video can play');
-  };
+      streamVideoElement.oncanplay = () => {
+        logger.debug('Stream video can play');
+      };
 
-  streamVideoElement.onerror = (e) => {
-    logger.error('Error with stream video:', e);
-  };
+      streamVideoElement.onerror = (e) => {
+        logger.error('Error with stream video:', e);
+      };
 
-  const audioDuration = playResponseData.audio_duration * 1000;
+      const audioDuration = playResponseData.audio_duration * 1000;
 
-  if (autoSpeakMode) {
-    clearTimeout(speakTimeout);
-    autoSpeakInProgress = true;
-    const startButton = document.getElementById('start-button');
-    startButton.textContent = 'Stop';
+      if (autoSpeakMode) {
+        clearTimeout(speakTimeout);
+        autoSpeakInProgress = true;
+        const startButton = document.getElementById('start-button');
+        startButton.textContent = 'Stop';
 
-    speakTimeout = setTimeout(async () => {
-      if (!isRecording) {
-        try {
-          await startRecording();
-        } catch (error) {
-          logger.error('Failed to auto-start recording:', error);
-        }
+        speakTimeout = setTimeout(async () => {
+          if (!isRecording) {
+            try {
+              await startRecording();
+            } catch (error) {
+              logger.error('Failed to auto-start recording:', error);
+            }
+          }
+        }, audioDuration - 200);
+      } else {
+        setTimeout(() => {
+          const startButton = document.getElementById('start-button');
+          startButton.textContent = 'Speak';
+        }, audioDuration);
       }
-    }, audioDuration - 200);
-  } else {
-    setTimeout(() => {
-      const startButton = document.getElementById('start-button');
-      startButton.textContent = 'Speak';
-    }, audioDuration);
+    } else {
+      logger.warn('Unexpected response status:', playResponseData.status);
+    }
+  } catch (error) {
+    logger.error('Error during streaming:', error);
+    if (isRecording) {
+      await reinitializeConnection();
+    }
   }
-} else {
-  logger.warn('Unexpected response status:', playResponseData.status);
-}
-} catch (error) {
-logger.error('Error during streaming:', error);
-if (isRecording) {
-  await reinitializeConnection();
-}
-}
 }
 
 function startSendingAudioData() {
-logger.debug('Starting to send audio data...');
+  logger.debug('Starting to send audio data...');
 
-let packetCount = 0;
-let totalBytesSent = 0;
+  let packetCount = 0;
+  let totalBytesSent = 0;
 
-audioWorkletNode.port.onmessage = (event) => {
-const audioData = event.data;
+  audioWorkletNode.port.onmessage = (event) => {
+    const audioData = event.data;
 
-if (!(audioData instanceof ArrayBuffer)) {
-  logger.warn('Received non-ArrayBuffer data from AudioWorklet:', typeof audioData);
-  return;
-}
-
-if (deepgramConnection && deepgramConnection.getReadyState() === WebSocket.OPEN) {
-  try {
-    deepgramConnection.send(audioData);
-    packetCount++;
-    totalBytesSent += audioData.byteLength;
-
-    if (packetCount % 100 === 0) {
-      logger.debug(`Sent ${packetCount} audio packets to Deepgram. Total bytes: ${totalBytesSent}`);
+    if (!(audioData instanceof ArrayBuffer)) {
+      logger.warn('Received non-ArrayBuffer data from AudioWorklet:', typeof audioData);
+      return;
     }
-  } catch (error) {
-    logger.error('Error sending audio data to Deepgram:', error);
-  }
-} else {
-  logger.warn('Deepgram connection not open, cannot send audio data. ReadyState:', deepgramConnection ? deepgramConnection.getReadyState() : 'undefined');
-}
-};
 
-logger.debug('Audio data sending setup complete');
+    if (deepgramConnection && deepgramConnection.getReadyState() === WebSocket.OPEN) {
+      try {
+        deepgramConnection.send(audioData);
+        packetCount++;
+        totalBytesSent += audioData.byteLength;
+
+        if (packetCount % 100 === 0) {
+          logger.debug(`Sent ${packetCount} audio packets to Deepgram. Total bytes: ${totalBytesSent}`);
+        }
+      } catch (error) {
+        logger.error('Error sending audio data to Deepgram:', error);
+      }
+    } else {
+      logger.warn('Deepgram connection not open, cannot send audio data. ReadyState:', deepgramConnection ? deepgramConnection.getReadyState() : 'undefined');
+    }
+  };
+
+  logger.debug('Audio data sending setup complete');
 }
 
 function handleTranscription(data) {
-if (!isRecording) return;
+  if (!isRecording) return;
 
-const transcript = data.channel.alternatives[0].transcript;
-if (data.is_final) {
-logger.debug('Final transcript:', transcript);
-if (transcript.trim()) {
-  currentUtterance += transcript + ' ';
-  updateTranscript(currentUtterance.trim(), true);
-  chatHistory.push({
-    role: 'user',
-    content: currentUtterance.trim(),
-  });
-  sendChatToGroq();
-}
-currentUtterance = '';
-interimMessageAdded = false;
-} else {
-logger.debug('Interim transcript:', transcript);
-updateTranscript(currentUtterance + transcript, false);
-}
-}
-
-async function startRecording() {
-if (isRecording) {
-logger.warn('Recording is already in progress. Stopping current recording.');
-await stopRecording();
-return;
-}
-
-logger.debug('Starting recording process...');
-
-currentUtterance = '';
-interimMessageAdded = false;
-
-try {
-const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-logger.info('Microphone stream obtained');
-
-audioContext = new AudioContext();
-logger.debug('Audio context created. Sample rate:', audioContext.sampleRate);
-
-await audioContext.audioWorklet.addModule('audio-processor.js');
-logger.debug('Audio worklet module added successfully');
-
-const source = audioContext.createMediaStreamSource(stream);
-logger.debug('Media stream source created');
-
-audioWorkletNode = new AudioWorkletNode(audioContext, 'audio-processor');
-logger.debug('Audio worklet node created');
-
-source.connect(audioWorkletNode);
-logger.debug('Media stream source connected to audio worklet node');
-
-deepgramConnection = deepgramClient.listen.live({
-  model: "nova-2",
-  language: "en-US",
-  smart_format: true,
-  interim_results: true,
-  utterance_end_ms: 1000,
-  punctuate: true,
-  encoding: "linear16",
-  sample_rate: audioContext.sampleRate,
-});
-
-logger.debug('Deepgram connection created with options:', {
-  model: "nova-2",
-  language: "en-US",
-  smart_format: true,
-  interim_results: true,
-  utterance_end_ms: 1000,
-  punctuate: true,
-  encoding: "linear16",
-  sample_rate: audioContext.sampleRate,
-});
-
-deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
-  logger.debug('Deepgram WebSocket Connection opened');
-  startSendingAudioData();
-});
-
-deepgramConnection.addListener(LiveTranscriptionEvents.Close, () => {
-  logger.debug('Deepgram WebSocket connection closed');
-});
-
-deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
-  logger.debug('Received transcription:', JSON.stringify(data));
-  handleTranscription(data);
-});
-
-deepgramConnection.addListener(LiveTranscriptionEvents.UtteranceEnd, (data) => {
-  logger.debug('Utterance end event received:', data);
-  handleUtteranceEnd(data);
-});
-
-deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
-  logger.error('Deepgram error:', err);
-});
-
-deepgramConnection.addListener(LiveTranscriptionEvents.Warning, (warning) => {
-  logger.warn('Deepgram warning:', warning);
-});
-
-isRecording = true;
-const startButton = document.getElementById('start-button');
-startButton.textContent = 'Stop';
-
-logger.debug('Recording and transcription started successfully');
-} catch (error) {
-logger.error('Error starting recording:', error);
-isRecording = false;
-const startButton = document.getElementById('start-button');
-startButton.textContent = 'Speak';
-throw error;
-}
-}
-
-function handleUtteranceEnd(data) {
-if (!isRecording) return;
-
-logger.debug('Utterance end detected:', data);
-if (currentUtterance.trim()) {
-updateTranscript(currentUtterance.trim(), true);
-chatHistory.push({
-  role: 'user',
-  content: currentUtterance.trim(),
-});
-sendChatToGroq();
-currentUtterance = '';
-interimMessageAdded = false;
-}
-}
-
-async function stopRecording() {
-if (isRecording) {
-logger.info('Stopping recording...');
-
-if (audioContext) {
-  await audioContext.close();
-  logger.debug('AudioContext closed');
-}
-
-if (deepgramConnection) {
-  deepgramConnection.finish();
-  logger.debug('Deepgram connection finished');
-}
-
-isRecording = false;
-autoSpeakInProgress = false;
-const startButton = document.getElementById('start-button');
-startButton.textContent = 'Speak';
-
-logger.debug('Recording and transcription stopped');
-}
-}
-
-async function sendChatToGroq() {
-if (chatHistory.length === 0 || chatHistory[chatHistory.length - 1].content.trim() === '') {
-logger.debug('No new content to send to Groq. Skipping request.');
-return;
-}
-
-logger.debug('Sending chat to Groq...');
-try {
-const startTime = Date.now();
-const currentContext = document.getElementById('context-input').value.trim();
-const requestBody = {
-  messages: [
-    {
-      role: 'system',
-      content: currentContext || context,
-    },
-    ...chatHistory,
-  ],
-  model: 'llama3-8b-8192',
-};
-logger.debug('Request body:', JSON.stringify(requestBody));
-
-const response = await fetch('/chat', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify(requestBody),
-});
-
-logger.debug('Groq response status:', response.status);
-
-if (!response.ok) {
-  throw new Error(`HTTP error ${response.status}`);
-}
-
-const reader = response.body.getReader();
-let assistantReply = '';
-let done = false;
-
-const msgHistory = document.getElementById('msgHistory');
-const assistantSpan = document.createElement('span');
-assistantSpan.innerHTML = '<u>Assistant:</u> ';
-msgHistory.appendChild(assistantSpan);
-msgHistory.appendChild(document.createElement('br'));
-
-while (!done) {
-  const { value, done: readerDone } = await reader.read();
-  done = readerDone;
-
-  if (value) {
-    const chunk = new TextDecoder().decode(value);
-    logger.debug('Received chunk:', chunk);
-    const lines = chunk.split('\n');
-
-    for (const line of lines) {
-      if (line.startsWith('data:')) {
-        const data = line.substring(5).trim();
-        if (data === '[DONE]') {
-          done = true;
-          break;
-        }
-
-        try {
-          const parsed = JSON.parse(data);
-          const content = parsed.choices[0]?.delta?.content || '';
-          assistantReply += content;
-          assistantSpan.innerHTML += content;
-          logger.debug('Parsed content:', content);
-        } catch (error) {
-          logger.error('Error parsing JSON:', error);
-        }
-      }
+  const transcript = data.channel.alternatives[0].transcript;
+  if (data.is_final) {
+    logger.debug('Final transcript:', transcript);
+    if (transcript.trim()) {
+      currentUtterance += transcript + ' ';
+      updateTranscript(currentUtterance.trim(), true);
+      chatHistory.push({
+        role: 'user',
+        content: currentUtterance.trim(),
+      });
+      sendChatToGroq();
     }
-
-    msgHistory.scrollTop = msgHistory.scrollHeight;
+    currentUtterance = '';
+    interimMessageAdded = false;
+  } else {
+    logger.debug('Interim transcript:', transcript);
+    updateTranscript(currentUtterance + transcript, false);
   }
 }
 
-const endTime = Date.now();
-const processingTime = endTime - startTime;
-logger.debug(`Groq processing completed in ${processingTime}ms`);
+async function startRecording() {
+  if (isRecording) {
+    logger.warn('Recording is already in progress. Stopping current recording.');
+    await stopRecording();
+    return;
+  }
 
-chatHistory.push({
-  role: 'assistant',
-  content: assistantReply,
-});
+  logger.debug('Starting recording process...');
 
-logger.debug('Assistant reply:', assistantReply);
+  currentUtterance = '';
+  interimMessageAdded = false;
 
-await startStreaming(assistantReply);
-} catch (error) {
-logger.error('Error in sendChatToGroq:', error);
-const msgHistory = document.getElementById('msgHistory');
-msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
-msgHistory.scrollTop = msgHistory.scrollHeight;
-} finally {
-await stopRecording();
-const startButton = document.getElementById('start-button');
-startButton.textContent = 'Speak';
-isRecording = false;
-autoSpeakInProgress = false;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    logger.info('Microphone stream obtained');
+
+    audioContext = new AudioContext();
+    logger.debug('Audio context created. Sample rate:', audioContext.sampleRate);
+
+    await audioContext.audioWorklet.addModule('audio-processor.js');
+    logger.debug('Audio worklet module added successfully');
+
+    const source = audioContext.createMediaStreamSource(stream);
+    logger.debug('Media stream source created');
+
+    audioWorkletNode = new AudioWorkletNode(audioContext, 'audio-processor');
+    logger.debug('Audio worklet node created');
+
+    source.connect(audioWorkletNode);
+    logger.debug('Media stream source connected to audio worklet node');
+
+    deepgramConnection = deepgramClient.listen.live({
+      model: "nova-2",
+      language: "en-US",
+      smart_format: true,
+      interim_results: true,
+      utterance_end_ms: 1000,
+      punctuate: true,
+      encoding: "linear16",
+      sample_rate: audioContext.sampleRate,
+    });
+
+    logger.debug('Deepgram connection created with options:', {
+      model: "nova-2",
+      language: "en-US",
+      smart_format: true,
+      interim_results: true,
+      utterance_end_ms: 1000,
+      punctuate: true,
+      encoding: "linear16",
+      sample_rate: audioContext.sampleRate,
+    });
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
+      logger.debug('Deepgram WebSocket Connection opened');
+      startSendingAudioData();
+    });
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.Close, () => {
+      logger.debug('Deepgram WebSocket connection closed');
+    });
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
+      logger.debug('Received transcription:', JSON.stringify(data));
+      handleTranscription(data);
+    });
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.UtteranceEnd, (data) => {
+      logger.debug('Utterance end event received:', data);
+      handleUtteranceEnd(data);
+    });
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
+      logger.error('Deepgram error:', err);
+    });
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.Warning, (warning) => {
+      logger.warn('Deepgram warning:', warning);
+    });
+
+    isRecording = true;
+    const startButton = document.getElementById('start-button');
+    startButton.textContent = 'Stop';
+
+    logger.debug('Recording and transcription started successfully');
+  } catch (error) {
+    logger.error('Error starting recording:', error);
+    isRecording = false;
+    const startButton = document.getElementById('start-button');
+    startButton.textContent = 'Speak';
+    throw error;
+  }
 }
+
+function handleUtteranceEnd(data) {
+  if (!isRecording) return;
+
+  logger.debug('Utterance end detected:', data);
+  if (currentUtterance.trim()) {
+    updateTranscript(currentUtterance.trim(), true);
+    chatHistory.push({
+      role: 'user',
+      content: currentUtterance.trim(),
+    });
+    sendChatToGroq();
+    currentUtterance = '';
+    interimMessageAdded = false;
+  }
 }
 
-export function toggleAutoSpeak() {
-autoSpeakMode = !autoSpeakMode;
-const toggleButton = document.getElementById('auto-speak-toggle');
-const startButton = document.getElementById('start-button');
-toggleButton.textContent = `Auto-Speak: ${autoSpeakMode ? 'On' : 'Off'}`;
-if (autoSpeakMode) {
-startButton.textContent = 'Stop';
-} else {
-startButton.textContent = isRecording ? 'Stop' : 'Speak';
+async function stopRecording() {
+  if (isRecording) {
+    logger.info('Stopping recording...');
+
+    if (audioContext) {
+      await audioContext.close();
+      logger.debug('AudioContext closed');
+    }
+
+    if (deepgramConnection) {
+      deepgramConnection.finish();
+      logger.debug('Deepgram connection finished');
+    }
+
+    isRecording = false;
+    autoSpeakInProgress = false;
+    const startButton = document.getElementById('start-button');
+    startButton.textContent = 'Speak';
+
+    logger.debug('Recording and transcription stopped');
+  }
 }
+
+async function sendChatToGroq() {
+  if (chatHistory.length === 0 || chatHistory[chatHistory.length - 1].content.trim() === '') {
+    logger.debug('No new content to send to Groq. Skipping request.');
+    return;
+  }
+
+  logger.debug('Sending chat to Groq...');
+  try {
+    const startTime = Date.now();
+    const currentContext = document.getElementById('context-input').value.trim();
+    const requestBody = {
+      messages: [
+        {
+          role: 'system',
+          content: currentContext || context,
+        },
+        ...chatHistory,
+      ],
+      model: 'llama3-8b-8192',
+    };
+    logger.debug('Request body:', JSON.stringify(requestBody));
+
+    const response = await fetch('/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    logger.debug('Groq response status:', response.status);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error ${response.status}`);
+    }
+
+    const reader = response.body.getReader();
+    let assistantReply = '';
+    let done = false;
+
+    const msgHistory = document.getElementById('msgHistory');
+    const assistantSpan = document.createElement('span');
+    assistantSpan.innerHTML = '<u>Assistant:</u> ';
+    msgHistory.appendChild(assistantSpan);
+    msgHistory.appendChild(document.createElement('br'));
+
+    while (!done) {
+      const { value, done: readerDone } = await reader.read();
+      done = readerDone;
+
+      if (value) {
+        const chunk = new TextDecoder().decode(value);
+        logger.debug('Received chunk:', chunk);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data:')) {
+            const data = line.substring(5).trim();
+            if (data === '[DONE]') {
+              done = true;
+              break;
+            }
+
+            try {
+              const parsed = JSON.parse(data);
+              const content = parsed.choices[0]?.delta?.content || '';
+              assistantReply += content;
+              assistantSpan.innerHTML += content;
+              logger.debug('Parsed content:', content);
+            } catch (error) {
+              logger.error('Error parsing JSON:', error);
+            }
+          }
+        }
+
+        msgHistory.scrollTop = msgHistory.scrollHeight;
+      }
+    }
+
+    const endTime = Date.now();
+    const processingTime = endTime - startTime;
+    logger.debug(`Groq processing completed in ${processingTime}ms`);
+
+    chatHistory.push({
+      role: 'assistant',
+      content: assistantReply,
+    });
+
+    logger.debug('Assistant reply:', assistantReply);
+
+    await startStreaming(assistantReply);
+  } catch (error) {
+    logger.error('Error in sendChatToGroq:', error);
+    const msgHistory = document.getElementById('msgHistory');
+    msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
+    msgHistory.scrollTop = msgHistory.scrollHeight;
+  } finally {
+    await stopRecording();
+    const startButton = document.getElementById('start-button');
+    startButton.textContent = 'Speak';
+    isRecording = false;
+    autoSpeakInProgress = false;
+  }
+}
+
+function toggleAutoSpeak() {
+  autoSpeakMode = !autoSpeakMode;
+  const toggleButton = document.getElementById('auto-speak-toggle');
+  const startButton = document.getElementById('start-button');
+  toggleButton.textContent = `Auto-Speak: ${autoSpeakMode ? 'On' : 'Off'}`;
+  if (autoSpeakMode) {
+    startButton.textContent = 'Stop';
+  } else {
+    startButton.textContent = isRecording ? 'Stop' : 'Speak';
+  }
 }
 
 async function reinitializeConnection() {
-if (isInitializing) {
-logger.warn('Connection initialization already in progress. Skipping reinitialize.');
-return;
-}
+  if (isInitializing) {
+    logger.warn('Connection initialization already in progress. Skipping reinitialize.');
+    return;
+  }
 
-isInitializing = true;
-logger.debug('Reinitializing connection...');
+  isInitializing = true;
+  logger.debug('Reinitializing connection...');
 
-try {
-stopAllStreams();
-closePC();
+  try {
+    stopAllStreams();
+    closePC();
 
-clearInterval(transcriptionTimer);
-clearTimeout(inactivityTimeout);
+    clearInterval(transcriptionTimer);
+    clearTimeout(inactivityTimeout);
 
-transcript = '';
-chatHistory = chatHistory.slice(0, -1);
+    transcript = '';
+    chatHistory = chatHistory.slice(0, -1);
 
-const msgHistory = document.getElementById('msgHistory');
-msgHistory.innerHTML = msgHistory.innerHTML.slice(0, msgHistory.innerHTML.lastIndexOf('<span style=\'opacity:0.5\'><u>User:</u>'));
+    const msgHistory = document.getElementById('msgHistory');
+    msgHistory.innerHTML = msgHistory.innerHTML.slice(0, msgHistory.innerHTML.lastIndexOf('<span style=\'opacity:0.5\'><u>User:</u>'));
 
     if (peerConnection && peerConnection.connectionState === 'connected') {
       logger.debug('Existing connection is still active. Reusing connection.');
@@ -1380,9 +1422,30 @@ startButton.onclick = async () => {
   }
 };
 
-// Initialize the application when the DOM is ready
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initialize);
-} else {
-  initialize();
-}
+const saveAvatarButton = document.getElementById('save-avatar-button');
+saveAvatarButton.onclick = saveAvatar;
+
+const avatarImageInput = document.getElementById('avatar-image');
+avatarImageInput.onchange = (event) => {
+  const file = event.target.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      document.getElementById('avatar-image-preview').src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+};
+
+// Export functions and variables that need to be accessed from other modules
+export {
+  setLogLevel,
+  initialize,
+  handleAvatarChange,
+  openAvatarModal,
+  closeAvatarModal,
+  saveAvatar,
+  updateContext,
+  handleTextInput,
+  toggleAutoSpeak
+};
