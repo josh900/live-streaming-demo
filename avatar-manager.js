@@ -14,7 +14,8 @@ const s3Client = new S3Client(DID_API.awsConfig);
 
 export async function createOrUpdateAvatar(name, imageFile, voiceId) {
     try {
-        let avatar = await getAvatarByName(name);
+        let avatars = await getAvatars();
+        let avatar = avatars[name];
         const isNewAvatar = !avatar;
         const isImageChanged = imageFile !== undefined;
 
@@ -36,17 +37,17 @@ export async function createOrUpdateAvatar(name, imageFile, voiceId) {
             } else {
                 avatar = { ...avatar, imageUrl, voiceId };
             }
-        } else if (isNewAvatar || avatar.voiceId !== voiceId) {
+        } else if (isNewAvatar || (avatar && avatar.voiceId !== voiceId)) {
             // If only voice changed or it's a new avatar without image
-            const silentVideoUrl = await generateSilentVideo(avatar.imageUrl, voiceId);
-            avatar = { ...avatar, voiceId, silentVideoUrl };
+            const silentVideoUrl = await generateSilentVideo(avatar ? avatar.imageUrl : '', voiceId);
+            avatar = { ...(avatar || {}), name, voiceId, silentVideoUrl };
         } else {
             // No changes, return existing avatar
             return avatar;
         }
 
         // Save avatar details
-        await saveAvatarDetails(avatar);
+        await saveAvatarDetails(name, avatar);
 
         console.log(`Avatar created/updated successfully:`, JSON.stringify(avatar));
         return avatar;
@@ -176,9 +177,9 @@ async function generateSilentVideo(imageUrl, voiceId) {
     return s3Url;
 }
 
-async function saveAvatarDetails(avatar) {
+async function saveAvatarDetails(name, avatar) {
     const avatarsFile = path.join(__dirname, 'avatars.json');
-    let avatars = [];
+    let avatars = {};
 
     try {
         const data = await fs.readFile(avatarsFile, 'utf8');
@@ -190,12 +191,7 @@ async function saveAvatarDetails(avatar) {
         }
     }
 
-    const existingIndex = avatars.findIndex(a => a.name === avatar.name);
-    if (existingIndex !== -1) {
-        avatars[existingIndex] = avatar;
-    } else {
-        avatars.push(avatar);
-    }
+    avatars[name] = avatar;
 
     await fs.writeFile(avatarsFile, JSON.stringify(avatars, null, 2));
 }
@@ -205,12 +201,10 @@ export async function getAvatars() {
         const data = await fs.readFile(path.join(__dirname, 'avatars.json'), 'utf8');
         return JSON.parse(data);
     } catch (err) {
+        if (err.code === 'ENOENT') {
+            return {};
+        }
         console.error("Error reading avatars file:", err);
-        return [];
+        return {};
     }
-}
-
-async function getAvatarByName(name) {
-    const avatars = await getAvatars();
-    return avatars.find(avatar => avatar.name === name);
 }
