@@ -46,13 +46,17 @@ app.use('/chat', createProxyMiddleware({
 app.post('/avatar', upload.single('image'), async (req, res) => {
   try {
     const { name, voiceId } = req.body;
+    if (!name || !voiceId || !req.file) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
     const avatar = await createOrUpdateAvatar(name, req.file.buffer, voiceId);
     res.json(avatar);
   } catch (error) {
     console.error('Error creating/updating avatar:', error);
-    res.status(500).json({ error: 'Failed to create/update avatar' });
+    res.status(500).json({ error: 'Failed to create/update avatar', details: error.message });
   }
 });
+
 
 app.get('/avatars', async (req, res) => {
   try {
