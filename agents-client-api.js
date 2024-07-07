@@ -402,7 +402,8 @@ function openAvatarModal(avatarName = null) {
 
 
 function closeAvatarModal() {
-  document.getElementById('avatar-modal').style.display = 'none';
+  const modal = document.getElementById('avatar-modal');
+  modal.style.display = 'none';  
 }
 
 async function saveAvatar() {

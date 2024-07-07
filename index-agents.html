@@ -111,6 +111,12 @@
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/@deepgram/sdk"></script>
-    <script type="module" src="./agents-client-api.js"></script>
-</body>
+    <script type="module">
+      import { initialize, handleAvatarChange, openAvatarModal, closeAvatarModal, saveAvatar, updateContext, handleTextInput, toggleAutoSpeak } from './agents-client-api.js';
+     
+  
+      // Make closeAvatarModal available globally
+      window.closeAvatarModal = closeAvatarModal;
+  </script>
+  </body>
 </html>
