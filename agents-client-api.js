@@ -989,6 +989,14 @@ async function startStreaming(assistantReply) {
       return;
     }
 
+    if (!streamId || !sessionId) {
+      logger.warn('Stream ID or Session ID is missing. Reinitializing connection...');
+      await reinitializeConnection();
+      if (!streamId || !sessionId) {
+        throw new Error('Failed to reinitialize connection: Stream ID or Session ID is still missing');
+      }
+    }
+
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'POST',
       headers: {
@@ -1107,17 +1115,13 @@ async function startStreaming(assistantReply) {
     }
   } catch (error) {
     logger.error('Error during streaming:', error);
-    if (error.message.includes('HTTP error! status: 404')) {
-      logger.warn('Stream not found. Attempting to reinitialize connection.');
+    if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
+      logger.warn('Stream not found or invalid session. Attempting to reinitialize connection.');
       await reinitializeConnection();
     } else if (isRecording) {
       logger.warn('Error occurred while recording. Attempting to reinitialize connection.');
       await reinitializeConnection();
     }
-  } finally {
-    // Ensure we always transition back to idle state if something goes wrong
-    setTimeout(() => {
-    }, 1000);
   }
 }
 
@@ -1463,19 +1467,33 @@ async function reinitializeConnection() {
     stopAllStreams();
     closePC();
 
+    // Clear any existing timers
     clearInterval(transcriptionTimer);
     clearTimeout(inactivityTimeout);
+    clearInterval(keepAliveInterval);
 
+    // Reset connection-related variables
+    streamId = null;
+    sessionId = null;
+    peerConnection = null;
+
+    // Clear chat history and transcripts
     transcript = '';
-    chatHistory = chatHistory.slice(0, -1);
+    chatHistory = [];
 
     const msgHistory = document.getElementById('msgHistory');
-    msgHistory.innerHTML = msgHistory.innerHTML.slice(0, msgHistory.innerHTML.lastIndexOf('<span style=\'opacity:0.5\'><u>User:</u>'));
+    msgHistory.innerHTML = '';
 
+    // Reinitialize the connection
     await initializeConnection();
+
+    // If recording was in progress, restart it
     if (isRecording) {
+      await stopRecording();
       await startRecording();
     }
+
+    logger.info('Connection reinitialized successfully');
   } catch (error) {
     logger.error('Error during reinitialization:', error);
     showErrorMessage('Failed to reinitialize connection. Please try again.');
@@ -1484,7 +1502,6 @@ async function reinitializeConnection() {
     isInitializing = false;
   }
 }
-
 const connectButton = document.getElementById('connect-button');
 connectButton.onclick = initializeConnection;
 
