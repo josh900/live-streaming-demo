@@ -14,7 +14,8 @@ const s3Client = new S3Client(DID_API.awsConfig);
 
 export async function createOrUpdateAvatar(name, imageFile, voiceId) {
     try {
-        let avatar = await getAvatarByName(name);
+        let avatars = await getAvatars();
+        let avatar = avatars.find(a => a.name === name);
         const isNewAvatar = !avatar;
         const isImageChanged = imageFile !== undefined;
 
@@ -36,10 +37,11 @@ export async function createOrUpdateAvatar(name, imageFile, voiceId) {
             } else {
                 avatar = { ...avatar, imageUrl, voiceId };
             }
-        } else if (isNewAvatar || avatar.voiceId !== voiceId) {
+        } else if (isNewAvatar || (avatar && avatar.voiceId !== voiceId)) {
             // If only voice changed or it's a new avatar without image
-            const silentVideoUrl = await generateSilentVideo(avatar.imageUrl, voiceId);
-            avatar = { ...avatar, voiceId, silentVideoUrl };
+            const imageUrl = avatar ? avatar.imageUrl : null;
+            const silentVideoUrl = await generateSilentVideo(imageUrl, voiceId);
+            avatar = { ...avatar, name, voiceId, silentVideoUrl };
         } else {
             // No changes, return existing avatar
             return avatar;
@@ -205,12 +207,11 @@ export async function getAvatars() {
         const data = await fs.readFile(path.join(__dirname, 'avatars.json'), 'utf8');
         return JSON.parse(data);
     } catch (err) {
+        if (err.code === 'ENOENT') {
+            // If the file doesn't exist, return an empty array
+            return [];
+        }
         console.error("Error reading avatars file:", err);
-        return [];
+        throw err;
     }
-}
-
-async function getAvatarByName(name) {
-    const avatars = await getAvatars();
-    return avatars.find(avatar => avatar.name === name);
 }
