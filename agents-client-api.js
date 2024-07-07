@@ -750,7 +750,7 @@ function playIdleVideo() {
     logger.warn(`No avatar selected or avatar ${currentAvatar} not found. Using default idle video.`);
     idleVideoElement.src = 'path/to/default/idle/video.mp4'; // Replace with your default video path
   } else {
-    idleVideoElement.src = avatars[currentAvatar].idleVideo;
+    idleVideoElement.src = avatars[currentAvatar].silentVideoUrl;
   }
 
   idleVideoElement.loop = true;
@@ -941,6 +941,16 @@ function stopKeepAlive() {
 async function startStreaming(assistantReply) {
   try {
     logger.debug('Starting streaming with reply:', assistantReply);
+    if (!streamId || !sessionId) {
+      logger.error('Stream ID or Session ID is missing. Cannot start streaming.');
+      return;
+    }
+
+    if (!currentAvatar || !avatars[currentAvatar]) {
+      logger.error('No avatar selected or avatar not found. Cannot start streaming.');
+      return;
+    }
+
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'POST',
       headers: {
@@ -987,6 +997,10 @@ async function startStreaming(assistantReply) {
       }),
     });
 
+    if (!playResponse.ok) {
+      throw new Error(`HTTP error! status: ${playResponse.status}`);
+    }
+
     const playResponseData = await playResponse.json();
     logger.debug('Streaming response:', playResponseData);
 
@@ -994,6 +1008,11 @@ async function startStreaming(assistantReply) {
       logger.debug('Stream started successfully');
 
       const { idle: idleVideoElement, stream: streamVideoElement } = getVideoElements();
+
+      if (!streamVideoElement) {
+        logger.error('Stream video element not found');
+        return;
+      }
 
       streamVideoElement.style.display = 'block';
 
@@ -1004,6 +1023,7 @@ async function startStreaming(assistantReply) {
         logger.debug('Stream video metadata loaded');
         streamVideoElement.play().then(() => {
           logger.debug('Stream video playback started');
+          smoothTransition(true);
         }).catch(e => logger.error('Error playing stream video:', e));
       };
 
@@ -1021,7 +1041,7 @@ async function startStreaming(assistantReply) {
         clearTimeout(speakTimeout);
         autoSpeakInProgress = true;
         const startButton = document.getElementById('start-button');
-        startButton.textContent = 'Stop';
+        if (startButton) startButton.textContent = 'Stop';
 
         speakTimeout = setTimeout(async () => {
           if (!isRecording) {
@@ -1035,7 +1055,7 @@ async function startStreaming(assistantReply) {
       } else {
         setTimeout(() => {
           const startButton = document.getElementById('start-button');
-          startButton.textContent = 'Speak';
+          if (startButton) startButton.textContent = 'Speak';
         }, audioDuration);
       }
     } else {
@@ -1043,7 +1063,11 @@ async function startStreaming(assistantReply) {
     }
   } catch (error) {
     logger.error('Error during streaming:', error);
-    if (isRecording) {
+    if (error.message.includes('HTTP error! status: 404')) {
+      logger.warn('Stream not found. Attempting to reinitialize connection.');
+      await reinitializeConnection();
+    } else if (isRecording) {
+      logger.warn('Error occurred while recording. Attempting to reinitialize connection.');
       await reinitializeConnection();
     }
   }
