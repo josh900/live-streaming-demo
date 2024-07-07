@@ -94,7 +94,6 @@ async function generateSilentVideo(imageUrl, voiceId) {
     }
 
     const data = await response.json();
-    console.log("Silent video generated successfully:", data.result_url);
     return data.result_url;
 }
 
@@ -112,6 +111,10 @@ async function saveAvatarDetails(avatar) {
         }
     }
 
+    if (!Array.isArray(avatars)) {
+        avatars = [];
+    }
+
     const existingIndex = avatars.findIndex(a => a.name === avatar.name);
     if (existingIndex !== -1) {
         avatars[existingIndex] = avatar;
@@ -122,7 +125,6 @@ async function saveAvatarDetails(avatar) {
     await fs.writeFile(avatarsFile, JSON.stringify(avatars, null, 2));
 }
 
-
 export async function getAvatars() {
     try {
         const data = await fs.readFile(path.join(__dirname, 'avatars.json'), 'utf8');
@@ -132,5 +134,4 @@ export async function getAvatars() {
         return [];
     }
 }
-
 

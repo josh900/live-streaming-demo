@@ -74,8 +74,6 @@ function initializeTransitionCanvas() {
   document.querySelector('#video-wrapper').appendChild(transitionCanvas);
 }
 
-
-
 async function handleAvatarChange() {
   currentAvatar = avatarSelect.value;
   if (currentAvatar === 'create-new') {
@@ -83,7 +81,16 @@ async function handleAvatarChange() {
     return;
   }
 
-  playIdleVideo();
+  const idleVideoElement = document.getElementById('idle-video-element');
+  if (idleVideoElement) {
+    idleVideoElement.src = avatars[currentAvatar].silentVideoUrl;
+    try {
+      await idleVideoElement.load();
+      logger.debug(`Idle video loaded for ${currentAvatar}`);
+    } catch (error) {
+      logger.error(`Error loading idle video for ${currentAvatar}:`, error);
+    }
+  }
 
   const streamVideoElement = document.getElementById('stream-video-element');
   if (streamVideoElement) {
@@ -100,8 +107,6 @@ async function handleAvatarChange() {
   await destroyConnection();
   await initializeConnection();
 }
-
-
 
 async function destroyConnection() {
   if (streamId) {
@@ -345,7 +350,6 @@ async function loadAvatars() {
   }
 }
 
-
 function populateAvatarSelect() {
   const avatarSelect = document.getElementById('avatar-select');
   avatarSelect.innerHTML = '';
@@ -355,19 +359,18 @@ function populateAvatarSelect() {
   createNewOption.textContent = 'Create New Avatar';
   avatarSelect.appendChild(createNewOption);
 
-  for (const avatar of avatars) {
+  for (const [key, value] of Object.entries(avatars)) {
     const option = document.createElement('option');
-    option.value = avatar.name;
-    option.textContent = avatar.name;
+    option.value = key;
+    option.textContent = value.name;
     avatarSelect.appendChild(option);
   }
 
-  if (avatars.length > 0) {
-    currentAvatar = avatars[0].name;
+  if (Object.keys(avatars).length > 0) {
+    currentAvatar = Object.keys(avatars)[0];
     avatarSelect.value = currentAvatar;
   }
 }
-
 
 function openAvatarModal(avatarName = null) {
   const modal = document.getElementById('avatar-modal');
@@ -737,18 +740,17 @@ function onTrack(event) {
 }
 
 function playIdleVideo() {
-  const idleVideoElement = document.getElementById('idle-video-element');
+  const { idle: idleVideoElement } = getVideoElements();
   if (!idleVideoElement) {
     logger.error('Idle video element not found');
     return;
   }
 
-  const avatar = avatars.find(a => a.name === currentAvatar);
-  if (!avatar) {
-    logger.warn(`Avatar ${currentAvatar} not found. Using default idle video.`);
+  if (!currentAvatar || !avatars[currentAvatar]) {
+    logger.warn(`No avatar selected or avatar ${currentAvatar} not found. Using default idle video.`);
     idleVideoElement.src = 'path/to/default/idle/video.mp4'; // Replace with your default video path
   } else {
-    idleVideoElement.src = avatar.silentVideoUrl;
+    idleVideoElement.src = avatars[currentAvatar].idleVideo;
   }
 
   idleVideoElement.loop = true;
@@ -939,11 +941,6 @@ function stopKeepAlive() {
 async function startStreaming(assistantReply) {
   try {
     logger.debug('Starting streaming with reply:', assistantReply);
-    const avatar = avatars.find(a => a.name === currentAvatar);
-    if (!avatar) {
-      throw new Error(`Avatar ${currentAvatar} not found`);
-    }
-
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'POST',
       headers: {
@@ -956,7 +953,7 @@ async function startStreaming(assistantReply) {
           input: assistantReply,
           provider: {
             type: 'microsoft',
-            voice_id: avatar.voiceId,
+            voice_id: avatars[currentAvatar].voiceId,
             voice_config: {
               rate: 'medium'
             }
@@ -996,24 +993,26 @@ async function startStreaming(assistantReply) {
     if (playResponseData.status === 'started') {
       logger.debug('Stream started successfully');
 
-      const streamVideoElement = document.getElementById('stream-video-element');
-      const idleVideoElement = document.getElementById('idle-video-element');
+      const { idle: idleVideoElement, stream: streamVideoElement } = getVideoElements();
 
       streamVideoElement.style.display = 'block';
-      idleVideoElement.style.opacity = '0';
+
+      logger.debug('Idle video element:', idleVideoElement.src);
+      logger.debug('Stream video element:', streamVideoElement.srcObject);
 
       streamVideoElement.onloadedmetadata = () => {
         logger.debug('Stream video metadata loaded');
         streamVideoElement.play().then(() => {
           logger.debug('Stream video playback started');
-          streamVideoElement.style.opacity = '1';
         }).catch(e => logger.error('Error playing stream video:', e));
       };
 
-      streamVideoElement.onended = () => {
-        logger.debug('Stream video ended');
-        streamVideoElement.style.opacity = '0';
-        idleVideoElement.style.opacity = '1';
+      streamVideoElement.oncanplay = () => {
+        logger.debug('Stream video can play');
+      };
+
+      streamVideoElement.onerror = (e) => {
+        logger.error('Error with stream video:', e);
       };
 
       const audioDuration = playResponseData.audio_duration * 1000;
