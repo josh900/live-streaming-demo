@@ -987,7 +987,7 @@ async function startStreaming(assistantReply) {
           align_driver: true,
           align_expand_factor: 0,
           auto_match: true,
-          motion_factor: 0,
+          motion_factor: 0.7,  // Increased from 0 to 0.7
           normalization_factor: 0,
           sharpen: true,
           result_format: "mp4"
@@ -1058,6 +1058,12 @@ async function startStreaming(assistantReply) {
           if (startButton) startButton.textContent = 'Speak';
         }, audioDuration);
       }
+
+      // Wait for the audio to finish playing before transitioning back to idle
+      setTimeout(() => {
+        smoothTransition(false);
+      }, audioDuration);
+
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
     }
@@ -1070,6 +1076,11 @@ async function startStreaming(assistantReply) {
       logger.warn('Error occurred while recording. Attempting to reinitialize connection.');
       await reinitializeConnection();
     }
+  } finally {
+    // Ensure we always transition back to idle state if something goes wrong
+    setTimeout(() => {
+      smoothTransition(false);
+    }, 1000);
   }
 }
 
