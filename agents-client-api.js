@@ -734,7 +734,7 @@ function onTrack(event) {
     } else {
       logger.debug('Peer connection not ready for stats.');
     }
-  }, 1000);
+  }, 2000);
 
   setStreamVideoElement(event.streams[0]);
 }
@@ -797,7 +797,7 @@ function closePC(pc = peerConnection) {
   }
 }
 
-async function fetchWithRetries(url, options, retries = 1) {
+async function fetchWithRetries(url, options, retries = 3) {
   try {
     const response = await fetch(url, options);
     if (!response.ok) {
@@ -1079,7 +1079,7 @@ async function startStreaming(assistantReply) {
   } finally {
     // Ensure we always transition back to idle state if something goes wrong
     setTimeout(() => {
-    }, 1000);
+    }, 500);
   }
 }
 
