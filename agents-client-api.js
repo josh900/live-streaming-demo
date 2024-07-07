@@ -74,12 +74,23 @@ function initializeTransitionCanvas() {
   transitionCanvas.height = 400;
   transitionCtx = transitionCanvas.getContext('2d');
 
+  if (!transitionCtx) {
+    logger.error('Failed to get 2D context for transition canvas');
+    return;
+  }
+
   transitionCanvas.style.position = 'absolute';
   transitionCanvas.style.top = '0';
   transitionCanvas.style.left = '0';
   transitionCanvas.style.zIndex = '3';
   transitionCanvas.style.borderRadius = '50%';
-  document.querySelector('#video-wrapper').appendChild(transitionCanvas);
+  
+  const videoWrapper = document.querySelector('#video-wrapper');
+  if (videoWrapper) {
+    videoWrapper.appendChild(transitionCanvas);
+  } else {
+    logger.error('Video wrapper element not found');
+  }
 }
 
 async function handleAvatarChange() {
@@ -743,17 +754,33 @@ function setStreamVideoElement(stream) {
   }
 
   logger.debug('Setting stream video element');
+  
+  // Remove any existing tracks
+  if (streamVideoElement.srcObject) {
+    streamVideoElement.srcObject.getTracks().forEach(track => track.stop());
+  }
+  
   streamVideoElement.srcObject = stream;
   streamVideoElement.style.opacity = '0';
 
   streamVideoElement.onloadedmetadata = () => {
     logger.debug('Stream video metadata loaded');
-    streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
-
-    if (isDebugMode) {
-      downloadStreamVideo(stream);
-    }
+    streamVideoElement.play()
+      .then(() => {
+        logger.debug('Stream video playback started');
+        onVideoStatusChange(true, stream);
+      })
+      .catch(e => logger.error('Error playing stream video:', e));
   };
+
+  streamVideoElement.onended = () => {
+    logger.debug('Stream video ended');
+    onVideoStatusChange(false, null);
+  };
+
+  if (isDebugMode) {
+    downloadStreamVideo(stream);
+  }
 }
 
 function downloadStreamVideo(stream) {
@@ -797,29 +824,38 @@ function onTrack(event) {
     clearInterval(statsIntervalId);
   }
 
+  const videoTrack = event.streams[0].getVideoTracks()[0];
+  if (!videoTrack) {
+    logger.warn('No video track found in the stream');
+    return;
+  }
+
+  setStreamVideoElement(event.streams[0]);
+
   statsIntervalId = setInterval(async () => {
     if (peerConnection && peerConnection.connectionState === 'connected') {
       try {
-        const stats = await peerConnection.getStats(event.track);
+        const stats = await peerConnection.getStats(videoTrack);
         let videoStatsFound = false;
         stats.forEach((report) => {
           if (report.type === 'inbound-rtp' && report.kind === 'video') {
             videoStatsFound = true;
-            const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
+            const currentBytesReceived = report.bytesReceived;
+            const videoStatusChanged = videoIsPlaying !== (currentBytesReceived > lastBytesReceived);
 
             logger.debug('Video stats:', {
-              bytesReceived: report.bytesReceived,
+              bytesReceived: currentBytesReceived,
               lastBytesReceived,
               videoIsPlaying,
               videoStatusChanged
             });
 
             if (videoStatusChanged) {
-              videoIsPlaying = report.bytesReceived > lastBytesReceived;
+              videoIsPlaying = currentBytesReceived > lastBytesReceived;
               logger.debug('Video status changed:', videoIsPlaying);
               onVideoStatusChange(videoIsPlaying, event.streams[0]);
             }
-            lastBytesReceived = report.bytesReceived;
+            lastBytesReceived = currentBytesReceived;
           }
         });
         if (!videoStatsFound) {
@@ -831,9 +867,7 @@ function onTrack(event) {
     } else {
       logger.debug('Peer connection not ready for stats.');
     }
-  }, 2000);  // Changed from 1000ms to 2000ms
-
-  setStreamVideoElement(event.streams[0]);
+  }, 2000);  // Check every 2 seconds
 }
 
 function playIdleVideo() {
@@ -926,7 +960,6 @@ async function initializeConnection() {
   try {
     stopAllStreams();
     closePC();
-
 
     if (!currentAvatar || !avatars[currentAvatar]) {
       throw new Error('No avatar selected or avatar not found');
