@@ -1117,33 +1117,26 @@ function startSendingAudioData() {
   logger.debug('Audio data sending setup complete');
 }
 
-function handleTranscription(transcription) {
+function handleTranscription(data) {
   if (!isRecording) return;
 
-  if (transcription.type === 'Results') {
-    const transcript = transcription.channel.alternatives[0].transcript;
-    const isFinal = transcription.is_final;
-    const speechFinal = transcription.speech_final;
-
-    logger.debug('Received transcription:', { transcript, isFinal, speechFinal });
-
+  const transcript = data.channel.alternatives[0].transcript;
+  if (data.is_final) {
+    logger.debug('Final transcript:', transcript);
     if (transcript.trim()) {
-      if (isFinal || speechFinal) {
-        currentUtterance += transcript + ' ';
-        updateTranscript(currentUtterance.trim(), true);
-        
-        if (speechFinal) {
-          chatHistory.push({
-            role: 'user',
-            content: currentUtterance.trim(),
-          });
-          sendChatToGroq();
-          currentUtterance = '';
-        }
-      } else {
-        updateTranscript(currentUtterance + transcript, false);
-      }
+      currentUtterance += transcript + ' ';
+      updateTranscript(currentUtterance.trim(), true);
+      chatHistory.push({
+        role: 'user',
+        content: currentUtterance.trim(),
+      });
+      sendChatToGroq();
     }
+    currentUtterance = '';
+    interimMessageAdded = false;
+  } else {
+    logger.debug('Interim transcript:', transcript);
+    updateTranscript(currentUtterance + transcript, false);
   }
 }
 
@@ -1204,12 +1197,14 @@ async function startRecording() {
       logger.debug('Deepgram WebSocket connection closed');
     });
 
-    deepgramConnection.addListener('transcriptReceived', (message) => {
-      if (message.type === 'Results' || message.type === 'Metadata') {
-        handleTranscription(message);
-      } else if (message.type === 'UtteranceEnd') {
-        handleUtteranceEnd(message);
-      }
+    deepgramConnection.addListener('transcriptReceived', (transcription) => {
+      logger.debug('Received transcription:', JSON.stringify(transcription));
+      handleTranscription(transcription);
+    });
+
+    deepgramConnection.addListener('utteranceEnd', (utteranceEnd) => {
+      logger.debug('Utterance end event received:', utteranceEnd);
+      handleUtteranceEnd(utteranceEnd);
     });
 
     deepgramConnection.addListener('error', (err) => {
@@ -1253,8 +1248,10 @@ function handleDeepgramError(err) {
 }
 
 
-function handleUtteranceEnd(utteranceEnd) {
-  logger.debug('Utterance end detected:', utteranceEnd);
+function handleUtteranceEnd(data) {
+  if (!isRecording) return;
+
+  logger.debug('Utterance end detected:', data);
   if (currentUtterance.trim()) {
     updateTranscript(currentUtterance.trim(), true);
     chatHistory.push({
@@ -1263,6 +1260,7 @@ function handleUtteranceEnd(utteranceEnd) {
     });
     sendChatToGroq();
     currentUtterance = '';
+    interimMessageAdded = false;
   }
 }
 
