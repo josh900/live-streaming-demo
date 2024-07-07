@@ -1439,7 +1439,7 @@ avatarImageInput.onchange = (event) => {
 
 // Export functions and variables that need to be accessed from other modules
 export {
-  setLogLevel,
+  
   initialize,
   handleAvatarChange,
   openAvatarModal,
