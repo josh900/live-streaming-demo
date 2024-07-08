@@ -1410,15 +1410,7 @@ function startKeepAlive() {
   }
   keepAliveInterval = setInterval(async () => {
     try {
-      await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/keepalive`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${DID_API.key}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ session_id: sessionId }),
-      });
-      logger.debug('Keep-alive sent successfully');
+     await reinitializeConnection();
     } catch (error) {
       logger.warn('Error sending keep-alive:', error);
     }
@@ -1550,7 +1542,7 @@ async function startStreaming(assistantReply) {
       currentStreamTimeout = setTimeout(() => {
         isCurrentlyStreaming = false;
         smoothTransition(false, 250);
-      }, audioDuration + 250); // Increased buffer time slightly
+      }, audioDuration + 100); // Increased buffer time slightly
 
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
