@@ -43,7 +43,7 @@ let isDebugMode = false;
 let autoSpeakInProgress = false;
 let reconnectTimeout;
 const MAX_RECONNECT_DELAY = 30000; // Maximum delay between reconnection attempts (30 seconds)
-let reconnectAttempts = 0;
+let reconnectAttempts = 10;
 let isTransitioning = false;
 let lastVideoStatus = null;
 let isPreparing = false;
@@ -1091,7 +1091,7 @@ function startKeepAlive() {
     } catch (error) {
       logger.warn('Error sending keep-alive:', error);
     }
-  }, 30000);
+  }, 10000);
 }
 
 function stopKeepAlive() {
