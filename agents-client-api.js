@@ -1150,8 +1150,7 @@ async function startStreaming(assistantReply) {
                 expression: "neutral",
                 intensity: 0
               }
-            ],
-            transition_frames: 10
+            ]
           },
           align_driver: true,
           align_expand_factor: 0,
@@ -1160,8 +1159,6 @@ async function startStreaming(assistantReply) {
           normalization_factor: 0,
           sharpen: true,
           result_format: "mp4",
-          fluent_silence: true,
-          stream_audio: true
 
         },
         driver_url: "bank://lively/driver-06",
