@@ -1658,6 +1658,9 @@ async function startRecording() {
       smart_format: true,
       interim_results: true,
       utterance_end_ms: 750,
+      punctuate: true,
+      endpointing: 300,
+      vad_events: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate
     };
