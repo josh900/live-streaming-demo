@@ -765,7 +765,7 @@ async function loadAvatars() {
 function populateAvatarSelect() {
   const avatarSelect = document.getElementById('avatar-select');
   avatarSelect.innerHTML = '';
-  
+
   const createNewOption = document.createElement('option');
   createNewOption.value = 'create-new';
   createNewOption.textContent = 'Create New Avatar';
@@ -792,15 +792,15 @@ function openAvatarModal(avatarName = null) {
   const saveButton = document.getElementById('save-avatar-button');
 
   if (avatarName && avatars[avatarName]) {
-      nameInput.value = avatars[avatarName].name;
-      voiceInput.value = avatars[avatarName].voiceId;
-      imagePreview.src = avatars[avatarName].imageUrl;
-      saveButton.textContent = 'Update Avatar';
+    nameInput.value = avatars[avatarName].name;
+    voiceInput.value = avatars[avatarName].voiceId;
+    imagePreview.src = avatars[avatarName].imageUrl;
+    saveButton.textContent = 'Update Avatar';
   } else {
-      nameInput.value = '';
-      voiceInput.value = 'en-US-GuyNeural';
-      imagePreview.src = '';
-      saveButton.textContent = 'Create Avatar';
+    nameInput.value = '';
+    voiceInput.value = 'en-US-GuyNeural';
+    imagePreview.src = '';
+    saveButton.textContent = 'Create Avatar';
   }
 
   modal.style.display = 'block';
@@ -809,7 +809,7 @@ function openAvatarModal(avatarName = null) {
 
 function closeAvatarModal() {
   const modal = document.getElementById('avatar-modal');
-  modal.style.display = 'none';  
+  modal.style.display = 'none';
 }
 
 async function saveAvatar() {
@@ -818,54 +818,54 @@ async function saveAvatar() {
   const imageFile = document.getElementById('avatar-image').files[0];
 
   if (!name) {
-      showErrorMessage('Please fill in the avatar name.');
-      return;
+    showErrorMessage('Please fill in the avatar name.');
+    return;
   }
 
   const formData = new FormData();
   formData.append('name', name);
   formData.append('voiceId', voiceId);
   if (imageFile) {
-      formData.append('image', imageFile);
+    formData.append('image', imageFile);
   }
 
   showToast('Saving avatar...', 0);
 
   try {
-      const response = await fetch('/avatar', {
-          method: 'POST',
-          body: formData
-      });
+    const response = await fetch('/avatar', {
+      method: 'POST',
+      body: formData
+    });
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
 
-      while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-          const chunk = decoder.decode(value);
-          const events = chunk.split('\n\n');
+      const chunk = decoder.decode(value);
+      const events = chunk.split('\n\n');
 
-          for (const event of events) {
-              if (event.startsWith('data: ')) {
-                  const data = JSON.parse(event.slice(6));
-                  if (data.status === 'processing') {
-                      showToast('Processing avatar...', 0);
-                  } else if (data.status === 'completed') {
-                      avatars[name] = data.avatar;
-                      populateAvatarSelect();
-                      closeAvatarModal();
-                      showToast('Avatar created successfully!', 3000);
-                  } else if (data.status === 'error') {
-                      showErrorMessage(data.message);
-                  }
-              }
+      for (const event of events) {
+        if (event.startsWith('data: ')) {
+          const data = JSON.parse(event.slice(6));
+          if (data.status === 'processing') {
+            showToast('Processing avatar...', 0);
+          } else if (data.status === 'completed') {
+            avatars[name] = data.avatar;
+            populateAvatarSelect();
+            closeAvatarModal();
+            showToast('Avatar created successfully!', 3000);
+          } else if (data.status === 'error') {
+            showErrorMessage(data.message);
           }
+        }
       }
+    }
   } catch (error) {
-      console.error('Error saving avatar:', error);
-      showErrorMessage('Failed to save avatar. Please try again.');
+    console.error('Error saving avatar:', error);
+    showErrorMessage('Failed to save avatar. Please try again.');
   }
 }
 
@@ -1335,11 +1335,11 @@ async function initializeConnection() {
       body: JSON.stringify({
         source_url: avatars[currentAvatar].imageUrl,
         driver_url: "bank://lively/driver-06",
-        stream_warmup: true,
+        stream_warmup: "true",
         output_resolution: 512,
         config: {
           stitch: true,
-          fluent: true
+          motion_factor: 0.7
         }
       }),
     });
@@ -1450,17 +1450,25 @@ async function startStreaming(assistantReply) {
               rate: 'medium'
             }
           },
-          ssml: false,
+          ssml: "false",
         },
         config: {
           stitch: true,
-          fluent: true,
-          pad_audio: 1.0,
+          fluent: "true",
+          pad_audio: "1.0",
           normalization_factor: 0,
           result_format: "mp4",
+          auto_match: true,
+          driver_expressions: {
+            expressions: [
+              {
+                expression: "neutral"
+              }
+            ]
+          }
         },
         session_id: sessionId,
-        audio_optimization: 0
+        audio_optimization: "0"
       }),
     });
 
@@ -1511,7 +1519,7 @@ async function startStreaming(assistantReply) {
 
       // Start loading the video
       streamVideoElement.src = playResponseData.result_url;
-      
+
       const audioDuration = playResponseData.audio_duration * 1000;
 
       // Set up a timeout to switch back to the idle video
@@ -1688,7 +1696,7 @@ function handleDeepgramError(err) {
   isRecording = false;
   const startButton = document.getElementById('start-button');
   startButton.textContent = 'Speak';
-  
+
   // Attempt to close the connection and clean up
   if (deepgramConnection) {
     try {
@@ -1967,7 +1975,7 @@ avatarImageInput.onchange = (event) => {
 
 // Export functions and variables that need to be accessed from other modules
 export {
-  
+
   initialize,
   handleAvatarChange,
   openAvatarModal,
