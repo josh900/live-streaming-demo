@@ -1149,8 +1149,7 @@ async function startStreaming(assistantReply) {
                 expression: "neutral",
                 intensity: 0
               }
-            ],
-            transition_frames: 0
+            ]
           },
           align_driver: true,
           align_expand_factor: 0,
