@@ -1916,7 +1916,7 @@ async function reinitializeConnection() {
     return;
   }
 
-  isInitializing = true;
+  // isInitializing = true;
   isReconnecting = true;
   logger.debug('Reinitializing connection...');
 
