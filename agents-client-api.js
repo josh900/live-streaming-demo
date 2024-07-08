@@ -62,8 +62,8 @@ let currentAvatar = '';
 const avatarSelect = document.getElementById('avatar-select');
 avatarSelect.addEventListener('change', handleAvatarChange);
 
-const maxRetryCount = 6;
-const maxDelaySec = 6;
+const maxRetryCount = 10;
+const maxDelaySec = 5;
 
 let context = `
 You are a helpful, harmless, and honest grocery store assistant. Please answer the users questions briefly, be concise.
@@ -947,7 +947,7 @@ function closePC(pc = peerConnection) {
   }
 }
 
-async function fetchWithRetries(url, options, retries = 5) {
+async function fetchWithRetries(url, options, retries = 10) {
   try {
     const response = await fetch(url, options);
     if (!response.ok) {
@@ -957,7 +957,7 @@ async function fetchWithRetries(url, options, retries = 5) {
     return response;
   } catch (err) {
     if (retries <= maxRetryCount) {
-      const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 3000;
+      const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 1000;
       logger.warn(`Request failed, retrying ${retries}/${maxRetryCount} in ${delay}ms. Error: ${err.message}`);
       await new Promise((resolve) => setTimeout(resolve, delay));
       return fetchWithRetries(url, options, retries + 1);
