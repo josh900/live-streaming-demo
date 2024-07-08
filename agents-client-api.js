@@ -1335,6 +1335,7 @@ async function initializeConnection() {
       body: JSON.stringify({
         source_url: avatars[currentAvatar].imageUrl,
         driver_url: "bank://lively/driver-06",
+        stream_warmup: true,
         config: {
           stitch: true,
           fluent: true,
