@@ -1235,7 +1235,7 @@ function onTrack(event) {
     } else {
       logger.debug('Peer connection not ready for stats.');
     }
-  }, 2000);  // Check every 2 seconds
+  }, 3000);  // Check every 2 seconds
 
   if (event.streams && event.streams.length > 0) {
     const stream = event.streams[0];
@@ -1554,7 +1554,7 @@ async function startStreaming(assistantReply) {
           logger.warn('Video took too long to start, forcing playback');
           startPlaybackAndTransition();
         }
-      }, 2500); // Adjust this timeout as needed
+      }, 500); // Adjust this timeout as needed
 
       const audioDuration = playResponseData.audio_duration * 1000;
 
