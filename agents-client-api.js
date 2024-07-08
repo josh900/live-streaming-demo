@@ -66,8 +66,8 @@ let currentAvatar = '';
 const avatarSelect = document.getElementById('avatar-select');
 avatarSelect.addEventListener('change', handleAvatarChange);
 
-const maxRetryCount = 10;
-const maxDelaySec = 5;
+const maxRetryCount = 20;
+const maxDelaySec = 10;
 
 let context = `
 
