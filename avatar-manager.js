@@ -94,12 +94,20 @@ async function generateSilentVideo(imageUrl, voiceId, name) {
                 }
             },
             config: {
+                fluent: true,
+                motion_factor: 0.7,
+                pad_audio: 1,
+                output_resolution: 512,
+                normalization_factor: 0,           
                 stitch: true,
+                fluent: true,
                 result_format: "mp4",
                 driver_expressions: {
                     expressions: [
                         {
-                            expression: "neutral"
+                            start_frame: 0,
+                            expression: "neutral",
+                            intensity: 0
                         }
                     ]
                 }

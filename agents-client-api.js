@@ -1462,7 +1462,9 @@ async function startStreaming(assistantReply) {
           driver_expressions: {
             expressions: [
               {
-                expression: "neutral"
+                start_frame: 0,
+                expression: "neutral",
+                intensity: 0
               }
             ]
           }
