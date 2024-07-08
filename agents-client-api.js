@@ -404,37 +404,28 @@ Keep responses natural and focused solely on answering the customer's question.
 Don't be too formal. For example, instead of saying "Hello! How can I assist you today?", say something like "Hey! how's it going. What can I help you with?"
 `;
 
-function prepareForStreaming() {
-  if (isPreparing) {
-    logger.debug('Already preparing for streaming, skipping');
-    return;
+async function prepareForStreaming() {
+  if (!streamId || !sessionId) {
+    throw new Error('Stream ID or Session ID is missing. Cannot prepare for streaming.');
   }
 
-  isPreparing = true;
-  logger.debug('Preparing for streaming');
-
-  const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
+  const idleVideoElement = document.getElementById('idle-video-element');
 
-  if (!idleVideoElement || !streamVideoElement) {
-    logger.error('Video elements not found');
-    isPreparing = false;
-    return;
+  if (!streamVideoElement || !idleVideoElement) {
+    throw new Error('Video elements not found');
   }
 
-  // Ensure the stream video is hidden
-  streamVideoElement.style.opacity = '0';
-  idleVideoElement.style.opacity = '1';
-
-  // Instead of creating a placeholder, we'll just hide the stream video
+  // Reset video elements
   streamVideoElement.srcObject = null;
+  streamVideoElement.src = '';
   streamVideoElement.style.display = 'none';
 
-  isPreparing = false;
+  idleVideoElement.style.display = 'block';
+  idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e));
+
+  logger.debug('Prepared for streaming');
 }
-
-
-
 
 
 function initializeTransitionCanvas() {
@@ -468,24 +459,6 @@ async function handleAvatarChange() {
       logger.error(`Error loading idle video for ${currentAvatar}:`, error);
     }
   }
-
-  function showStreamingVideo() {
-    const streamVideoElement = document.getElementById('stream-video-element');
-    const idleVideoElement = document.getElementById('idle-video-element');
-  
-    if (!streamVideoElement || !idleVideoElement) {
-      logger.error('Video elements not found');
-      return;
-    }
-  
-    // Fade out the idle video and fade in the stream video
-    streamVideoElement.style.display = 'block';
-    setTimeout(() => {
-      streamVideoElement.style.opacity = '1';
-      idleVideoElement.style.opacity = '0';
-    }, 50); // Small delay to ensure display change has taken effect
-  }
-
 
   const streamVideoElement = document.getElementById('stream-video-element');
   if (streamVideoElement) {
@@ -1457,7 +1430,7 @@ async function warmUpStream() {
     return;
   }
 
-  logger.info('Warming up the stream invisibly...');
+  logger.info('Warming up the stream...');
 
   try {
     const warmUpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
@@ -1473,7 +1446,9 @@ async function warmUpStream() {
           provider: {
             type: 'microsoft',
             voice_id: avatars[currentAvatar].voiceId
-          }
+          },
+          ssml: true
+
         },
         config: {
           stitch: true,
@@ -1501,8 +1476,6 @@ async function warmUpStream() {
     logger.debug('Warm-up response:', warmUpData);
 
     if (warmUpData.status === 'started') {
-      // Handle the warm-up video invisibly
-      await handleInvisibleWarmUp(warmUpData.result_url);
       logger.info('Stream warmed up successfully');
     } else {
       logger.warn('Unexpected warm-up response status:', warmUpData.status);
@@ -1510,9 +1483,9 @@ async function warmUpStream() {
 
   } catch (error) {
     logger.error('Error during stream warm-up:', error);
+    // We don't throw the error here to avoid breaking the connection process
   }
 }
-
 
 
 
@@ -1551,7 +1524,7 @@ async function startStreaming(assistantReply) {
               rate: 'medium'
             }
           },
-          ssml: "false",
+          ssml: false,
         },
         config: {
           stitch: true,
@@ -1643,7 +1616,7 @@ async function startStreaming(assistantReply) {
           logger.warn('Video took too long to start, forcing playback');
           startPlaybackAndTransition();
         }
-      }, 5000); // Adjust this timeout as needed
+      }, 1000); // Adjust this timeout as needed
 
       const audioDuration = playResponseData.audio_duration * 1000;
 
@@ -1652,7 +1625,7 @@ async function startStreaming(assistantReply) {
         clearTimeout(videoStartTimeout);
         isCurrentlyStreaming = false;
         smoothTransition(false, 250);
-      }, audioDuration + 500); // Added a small buffer
+      }, audioDuration + 100); // Added a small buffer
 
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
@@ -1665,7 +1638,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
 
 
 function isValidUrl(string) {
