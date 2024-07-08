@@ -1085,7 +1085,6 @@ function onSignalingStateChange() {
 function onVideoStatusChange(videoIsPlaying, stream) {
   let status = videoIsPlaying ? 'streaming' : 'empty';
 
-  // Only proceed if the status has actually changed
   if (status === lastVideoStatus) {
     logger.debug('Video status unchanged:', status);
     return;
@@ -1127,7 +1126,12 @@ function setStreamVideoElement(stream) {
   }
 
   logger.debug('Setting stream video element');
-  streamVideoElement.srcObject = stream;
+  if (stream instanceof MediaStream) {
+    streamVideoElement.srcObject = stream;
+  } else {
+    logger.warn('Invalid stream provided to setStreamVideoElement');
+    return;
+  }
   streamVideoElement.style.opacity = '0';
 
   streamVideoElement.onloadedmetadata = () => {
@@ -1135,10 +1139,6 @@ function setStreamVideoElement(stream) {
     streamVideoElement.play().then(() => {
       logger.debug('Stream video playback started');
     }).catch(e => logger.error('Error playing stream video:', e));
-
-    if (isDebugMode) {
-      downloadStreamVideo(stream);
-    }
   };
 
   streamVideoElement.oncanplay = () => {
@@ -1149,6 +1149,7 @@ function setStreamVideoElement(stream) {
     logger.error('Error with stream video:', e);
   };
 }
+
 
 function downloadStreamVideo(stream) {
   logger.debug('Starting video download in debug mode');
@@ -1183,9 +1184,13 @@ function downloadStreamVideo(stream) {
   }, 30000);
 }
 
+
 function onTrack(event) {
   logger.debug('onTrack event:', event);
-  if (!event.track) return;
+  if (!event.track) {
+    logger.warn('No track in onTrack event');
+    return;
+  }
 
   if (statsIntervalId) {
     clearInterval(statsIntervalId);
@@ -1225,10 +1230,25 @@ function onTrack(event) {
     } else {
       logger.debug('Peer connection not ready for stats.');
     }
-  }, 2000);  // Changed from 1000ms to 2000ms
+  }, 2000);  // Check every 2 seconds
 
-  setStreamVideoElement(event.streams[0]);
+  if (event.streams && event.streams.length > 0) {
+    const stream = event.streams[0];
+    if (stream.getVideoTracks().length > 0) {
+      logger.debug('Setting stream video element with track:', event.track.id);
+      setStreamVideoElement(stream);
+    } else {
+      logger.warn('Stream does not contain any video tracks');
+    }
+  } else {
+    logger.warn('No streams found in onTrack event');
+  }
+
+  if (isDebugMode) {
+    downloadStreamVideo(event.streams[0]);
+  }
 }
+
 
 function playIdleVideo() {
   const { idle: idleVideoElement } = getVideoElements();
@@ -1359,9 +1379,15 @@ async function initializeConnection() {
     });
 
     const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+    
+    if (!newStreamId || !newSessionId) {
+      throw new Error('Failed to get valid stream ID or session ID from API');
+    }
+
     streamId = newStreamId;
     sessionId = newSessionId;
     logger.info('Stream created:', { streamId, sessionId });
+
 
     try {
       sessionClientAnswer = await createPeerConnection(offer, iceServers);
@@ -1434,6 +1460,7 @@ async function startStreaming(assistantReply) {
     logger.debug('Starting streaming with reply:', assistantReply);
     if (!streamId || !sessionId) {
       logger.error('Stream ID or Session ID is missing. Cannot start streaming.');
+      await reinitializeConnection();
       return;
     }
 
@@ -1487,7 +1514,7 @@ async function startStreaming(assistantReply) {
           }
         },
         session_id: sessionId,
-        audio_optimization: 10
+        audio_optimization: 0
       }),
     });
 
@@ -1537,7 +1564,12 @@ async function startStreaming(assistantReply) {
       };
 
       // Start loading the video
-      streamVideoElement.src = playResponseData.result_url;
+      if (playResponseData.result_url && isValidUrl(playResponseData.result_url)) {
+        setStreamVideoElement(playResponseData.result_url);
+      } else {
+        logger.error('Invalid or missing result_url in playResponseData:', playResponseData.result_url);
+        return;
+      }
 
       const audioDuration = playResponseData.audio_duration * 1000;
 
@@ -1556,6 +1588,15 @@ async function startStreaming(assistantReply) {
       logger.warn('Stream not found or invalid session. Attempting to reinitialize connection.');
       await reinitializeConnection();
     }
+  }
+}
+
+function isValidUrl(string) {
+  try {
+    new URL(string);
+    return true;
+  } catch (_) {
+    return false;
   }
 }
 
