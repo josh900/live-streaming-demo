@@ -43,7 +43,7 @@ let isDebugMode = false;
 let autoSpeakInProgress = false;
 let reconnectTimeout;
 const MAX_RECONNECT_DELAY = 30000; // Maximum delay between reconnection attempts (30 seconds)
-let reconnectAttempts = 0;
+let reconnectAttempts = 10;
 let isTransitioning = false;
 let lastVideoStatus = null;
 let isPreparing = false;
@@ -676,24 +676,6 @@ function updateTranscript(text, isFinal) {
   msgHistory.scrollTop = msgHistory.scrollHeight;
 }
 
-function updateChatDisplay() {
-  const msgHistory = document.getElementById('msgHistory');
-  
-  // Clear the existing messages in the UI
-  msgHistory.innerHTML = '';
-
-  // Repopulate with all messages from chatHistory
-  chatHistory.forEach(message => {
-    const messageElement = document.createElement('div');
-    messageElement.className = message.role;
-    messageElement.innerHTML = `<u>${message.role}:</u> ${message.content}`;
-    msgHistory.appendChild(messageElement);
-  });
-
-  // Scroll to the bottom of the chat history
-  msgHistory.scrollTop = msgHistory.scrollHeight;
-}
-
 function handleTextInput(text) {
   if (text.trim() === '') return;
 
@@ -1060,24 +1042,16 @@ function scheduleReconnect() {
   reconnectAttempts++;
 }
 
-
 async function attemptReconnect() {
   logger.info('Attempting to reconnect...');
   try {
     await reinitializeConnection();
     logger.info('Reconnection successful');
-    reconnectAttempts = 0;
   } catch (error) {
     logger.error('Reconnection attempt failed:', error);
-    if (reconnectAttempts < 10) { // Limit the number of reconnection attempts
-      scheduleReconnect();
-    } else {
-      logger.error('Max reconnection attempts reached. Please try manually reconnecting.');
-      // Optionally, you could trigger a UI notification here to inform the user
-    }
+    scheduleReconnect();
   }
 }
-
 
 
 
@@ -1090,19 +1064,14 @@ function onConnectionStateChange() {
   logger.debug('Peer connection state changed:', peerConnection.connectionState);
 
   if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
-    logger.warn('Peer connection failed or disconnected. Attempting to reinitialize...');
-    reinitializeConnection().catch(error => {
-      logger.error('Failed to reinitialize connection:', error);
-      // Implement further error handling or user notification here
-    });
+    logger.warn('Peer connection failed or disconnected. Attempting to reconnect...');
+    scheduleReconnect();
   } else if (peerConnection.connectionState === 'connected') {
     logger.info('Peer connection established successfully');
     clearTimeout(reconnectTimeout);
     reconnectAttempts = 0;
-  
   }
 }
-
 
 function onSignalingStateChange() {
   const { signaling: signalingStatusLabel } = getStatusLabels();
@@ -1463,12 +1432,20 @@ function startKeepAlive() {
     clearInterval(keepAliveInterval);
   }
   keepAliveInterval = setInterval(async () => {
-    if (peerConnection && peerConnection.connectionState === 'connected') {
-      await sendKeepAlive();
-    } else {
-      logger.debug('Skipping keep-alive, connection not ready');
+    try {
+      await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/keepalive`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      logger.debug('Keep-alive sent successfully');
+    } catch (error) {
+      logger.warn('Error sending keep-alive:', error);
     }
-  }, KEEP_ALIVE_INTERVAL);
+  }, 60000);
 }
 
 function stopKeepAlive() {
@@ -1969,7 +1946,7 @@ function toggleAutoSpeak() {
 
 async function reinitializeConnection() {
   if (isInitializing) {
-    logger.warn('Connection reinitialization already in progress. Skipping reinitialize.');
+    logger.warn('Connection initialization already in progress. Skipping reinitialize.');
     return;
   }
 
@@ -1977,14 +1954,11 @@ async function reinitializeConnection() {
   logger.debug('Reinitializing connection...');
 
   try {
-    // Stop all current streams and close existing peer connection
     stopAllStreams();
     closePC();
-    updateChatDisplay();
-
 
     // Clear any existing timers
-    clearInterval(statsIntervalId);
+    clearInterval(transcriptionTimer);
     clearTimeout(inactivityTimeout);
     clearInterval(keepAliveInterval);
 
@@ -1993,7 +1967,12 @@ async function reinitializeConnection() {
     sessionId = null;
     peerConnection = null;
 
-    // Note: We're not clearing chatHistory here
+    // Clear chat history and transcripts
+    currentUtterance = '';
+    // chatHistory = [];
+
+    const msgHistory = document.getElementById('msgHistory');
+    msgHistory.innerHTML = '';
 
     // Reinitialize the connection
     await initializeConnection();
@@ -2007,12 +1986,12 @@ async function reinitializeConnection() {
     logger.info('Connection reinitialized successfully');
   } catch (error) {
     logger.error('Error during reinitialization:', error);
+    showErrorMessage('Failed to reinitialize connection. Please try again.');
     throw error;
   } finally {
     isInitializing = false;
   }
 }
-
 
 const connectButton = document.getElementById('connect-button');
 connectButton.onclick = initializeConnection;
