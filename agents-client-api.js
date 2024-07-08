@@ -648,7 +648,7 @@ function initializeWebSocket() {
 
   socket.onclose = () => {
     logger.info('WebSocket connection closed');
-    setTimeout(initializeWebSocket, 5000);
+    setTimeout(initializeWebSocket, 10000);
   };
 }
 
@@ -1177,10 +1177,10 @@ function downloadStreamVideo(stream) {
 
   mediaRecorder.start();
 
-  // Stop recording after 20 seconds (adjust as needed)
+  // Stop recording after 30 seconds (adjust as needed)
   setTimeout(() => {
     mediaRecorder.stop();
-  }, 20000);
+  }, 30000);
 }
 
 function onTrack(event) {
