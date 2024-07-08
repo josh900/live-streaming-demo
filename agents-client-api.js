@@ -593,57 +593,6 @@ function smoothTransition(toStreaming, duration = 250) {
 }
 
 
-async function playWarmupVideo() {
-  if (!streamId || !sessionId) {
-    logger.error('Stream ID or Session ID is missing. Cannot play warmup video.');
-    return;
-  }
-
-  try {
-    const warmupResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: '<break time="500ms"/>',
-          ssml: true,
-        },
-        config: {
-          stitch: true,
-        },
-        session_id: sessionId,
-      }),
-    });
-
-    if (!warmupResponse.ok) {
-      throw new Error(`HTTP error! status: ${warmupResponse.status}`);
-    }
-
-    const warmupData = await warmupResponse.json();
-    logger.debug('Warmup video response:', warmupData);
-
-    if (warmupData.status === 'started') {
-      logger.debug('Warmup video started successfully');
-      
-      const streamVideoElement = document.getElementById('stream-video-element');
-      if (streamVideoElement) {
-        streamVideoElement.muted = true;
-        streamVideoElement.src = warmupData.result_url;
-        await streamVideoElement.play();
-        logger.debug('Warmup video played');
-      }
-    }
-  } catch (error) {
-    logger.error('Error playing warmup video:', error);
-  }
-}
-
-
-
 function getVideoElements() {
   const idle = document.getElementById('idle-video-element');
   const stream = document.getElementById('stream-video-element');
@@ -785,7 +734,6 @@ async function initialize() {
   showLoadingSymbol();
   try {
     await initializeConnection();
-    await playWarmupVideo(); // Add this line
     hideLoadingSymbol();
   } catch (error) {
     logger.error('Error during initialization:', error);
