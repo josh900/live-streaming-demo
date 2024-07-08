@@ -1580,11 +1580,13 @@ export function toggleSimpleMode() {
   if (content.style.display !== 'none') {
       // Entering simple mode
       content.style.display = 'none';
+      document.body.appendChild(videoWrapper); // Move video wrapper out of the hidden content
       videoWrapper.style.position = 'fixed';
       videoWrapper.style.top = '50%';
       videoWrapper.style.left = '50%';
       videoWrapper.style.transform = 'translate(-50%, -50%)';
-      simpleModeButton.textContent = 'Exit Simple Mode';
+      simpleModeButton.textContent = 'Exit';
+      simpleModeButton.classList.add('simple-mode');
       header.style.position = 'fixed';
       header.style.width = '100%';
       header.style.zIndex = '1000';
@@ -1597,11 +1599,14 @@ export function toggleSimpleMode() {
   } else {
       // Exiting simple mode
       content.style.display = 'flex';
+      const leftColumn = document.getElementById('left-column');
+      leftColumn.appendChild(videoWrapper); // Move video wrapper back to its original position
       videoWrapper.style.position = 'relative';
       videoWrapper.style.top = 'auto';
       videoWrapper.style.left = 'auto';
       videoWrapper.style.transform = 'none';
       simpleModeButton.textContent = 'Simple Mode';
+      simpleModeButton.classList.remove('simple-mode');
       header.style.position = 'static';
       header.style.width = 'auto';
       
