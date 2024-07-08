@@ -51,7 +51,7 @@ let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
 const INITIAL_RECONNECT_DELAY = 1000;
 const MAX_RECONNECT_DELAY = 30000;
-
+let isReconnecting = false;
 
 
 export function setLogLevel(level) {
@@ -1911,12 +1911,13 @@ function toggleAutoSpeak() {
 }
 
 async function reinitializeConnection() {
-  if (isInitializing) {
+  if (isInitializing && !isReconnecting) {
     logger.warn('Connection initialization already in progress. Skipping reinitialize.');
     return;
   }
 
   isInitializing = true;
+  isReconnecting = true;
   logger.debug('Reinitializing connection...');
 
   try {
@@ -1961,9 +1962,9 @@ async function reinitializeConnection() {
     throw error;
   } finally {
     isInitializing = false;
+    isReconnecting = false;
   }
 }
-
 
 
 const connectButton = document.getElementById('connect-button');
