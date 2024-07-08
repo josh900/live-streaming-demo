@@ -1412,6 +1412,9 @@ async function initializeConnection() {
       throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
     }
 
+    await warmUpStream();
+
+
     logger.info('Connection initialized successfully');
   } catch (error) {
     logger.error('Failed to initialize connection:', error);
@@ -1420,6 +1423,71 @@ async function initializeConnection() {
     isInitializing = false;
   }
 }
+
+async function warmUpStream() {
+  if (!streamId || !sessionId) {
+    logger.error('Cannot warm up stream: Stream ID or Session ID is missing');
+    return;
+  }
+
+  logger.info('Warming up the stream...');
+
+  try {
+    const warmUpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: '<break time="2s"/>', // This creates a 2-second pause
+          provider: {
+            type: 'microsoft',
+            voice_id: avatars[currentAvatar].voiceId
+          },
+          ssml: true
+
+        },
+        config: {
+          stitch: true,
+          fluent: true,
+          pad_audio: 0,
+          driver_expressions: {
+            expressions: [
+              {
+                start_frame: 0,
+                expression: "neutral",
+                intensity: 1
+              }
+            ]
+          }
+        },
+        session_id: sessionId,
+      }),
+    });
+
+    if (!warmUpResponse.ok) {
+      throw new Error(`Failed to warm up stream: ${warmUpResponse.status} ${warmUpResponse.statusText}`);
+    }
+
+    const warmUpData = await warmUpResponse.json();
+    logger.debug('Warm-up response:', warmUpData);
+
+    if (warmUpData.status === 'started') {
+      logger.info('Stream warmed up successfully');
+    } else {
+      logger.warn('Unexpected warm-up response status:', warmUpData.status);
+    }
+
+  } catch (error) {
+    logger.error('Error during stream warm-up:', error);
+    // We don't throw the error here to avoid breaking the connection process
+  }
+}
+
+
 
 async function startStreaming(assistantReply) {
   try {
@@ -1456,7 +1524,7 @@ async function startStreaming(assistantReply) {
               rate: 'medium'
             }
           },
-          ssml: "false",
+          ssml: false,
         },
         config: {
           stitch: true,
