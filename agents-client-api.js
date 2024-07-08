@@ -1563,7 +1563,7 @@ async function startStreaming(assistantReply) {
         clearTimeout(videoStartTimeout);
         isCurrentlyStreaming = false;
         smoothTransition(false, 250);
-      }, audioDuration + 00); // Added a small buffer
+      }, audioDuration + 100); // Added a small buffer
 
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
