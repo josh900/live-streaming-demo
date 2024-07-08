@@ -62,8 +62,8 @@ let currentAvatar = '';
 const avatarSelect = document.getElementById('avatar-select');
 avatarSelect.addEventListener('change', handleAvatarChange);
 
-const maxRetryCount = 3;
-const maxDelaySec = 4;
+const maxRetryCount = 6;
+const maxDelaySec = 6;
 
 let context = `
 You are a helpful, harmless, and honest grocery store assistant. Please answer the users questions briefly, be concise.
@@ -947,7 +947,7 @@ function closePC(pc = peerConnection) {
   }
 }
 
-async function fetchWithRetries(url, options, retries = 3) {
+async function fetchWithRetries(url, options, retries = 5) {
   try {
     const response = await fetch(url, options);
     if (!response.ok) {
