@@ -42,6 +42,7 @@
     <div class="header">
         <img src="https://cdn.prod.website-files.com/6316d11d553f411d6f1fa732/633ac440413e418b480baaf8_skoop-logo-p-500.png" alt="SKOOP logo">
         <h1>Avatar Demo</h1>
+        <button id="simple-mode-button">Simple Mode</button>
     </div>
     <div id="content">
         <div id="left-column">
@@ -150,5 +151,8 @@
       // Make closeAvatarModal available globally
       window.closeAvatarModal = closeAvatarModal;
   </script>
+  <script>
+    document.getElementById('simple-mode-button').addEventListener('click', toggleSimpleMode);
+</script>
   </body>
 </html>

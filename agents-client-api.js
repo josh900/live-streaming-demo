@@ -1571,6 +1571,38 @@ async function startStreaming(assistantReply) {
   }
 }
 
+function toggleSimpleMode() {
+  const content = document.getElementById('content');
+  const videoWrapper = document.getElementById('video-wrapper');
+  const simpleModeButton = document.getElementById('simple-mode-button');
+
+  if (content.style.display !== 'none') {
+      // Entering simple mode
+      content.style.display = 'none';
+      videoWrapper.style.position = 'fixed';
+      videoWrapper.style.top = '50%';
+      videoWrapper.style.left = '50%';
+      videoWrapper.style.transform = 'translate(-50%, -50%)';
+      simpleModeButton.textContent = 'Exit Simple Mode';
+      
+      // Simulate clicking the speak button
+      document.getElementById('start-button').click();
+  } else {
+      // Exiting simple mode
+      content.style.display = 'flex';
+      videoWrapper.style.position = 'relative';
+      videoWrapper.style.top = 'auto';
+      videoWrapper.style.left = 'auto';
+      videoWrapper.style.transform = 'none';
+      simpleModeButton.textContent = 'Simple Mode';
+      
+      // Stop recording if it's in progress
+      if (isRecording) {
+          document.getElementById('start-button').click();
+      }
+  }
+}
+
 
 function isValidUrl(string) {
   try {
@@ -2032,5 +2064,6 @@ export {
   saveAvatar,
   updateContext,
   handleTextInput,
-  toggleAutoSpeak
+  toggleAutoSpeak,
+  toggleSimpleMode
 };

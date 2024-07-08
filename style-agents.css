@@ -263,6 +263,27 @@ select {
 
 
 
+#simple-mode-button {
+  margin-left: auto;
+  padding: 10px 20px;
+  font-size: 16px;
+  background-color: #7459fe;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+#simple-mode-button:hover {
+  background-color: #5a3dd3;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
 
 @keyframes fadeInOut {
   0% { opacity: 0; }
