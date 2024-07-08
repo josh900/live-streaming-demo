@@ -1466,6 +1466,7 @@ async function startStreaming(assistantReply) {
           ssml: false,
         },
         config: {
+          stitch: true,
           fluent: true,
           pad_audio: 1.0,
           driver_expressions: {
@@ -1544,7 +1545,7 @@ async function startStreaming(assistantReply) {
       currentStreamTimeout = setTimeout(() => {
         isCurrentlyStreaming = false;
         smoothTransition(false, 250);
-      }, audioDuration + 250); // Increased buffer time slightly
+      }, audioDuration + 100); // Increased buffer time slightly
 
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
