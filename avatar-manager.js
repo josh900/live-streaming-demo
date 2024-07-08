@@ -95,19 +95,6 @@ async function generateSilentVideo(imageUrl, voiceId, name) {
             },
             config: {
                 fluent: true,
-                pad_audio: 1.0,
-                driver_expressions: {
-                    expressions: [
-                        {
-                            start_frame: 0,
-                            expression: "neutral",
-                            intensity: 0
-                        }
-                    ]
-                },
-                align_driver: true,
-                align_expand_factor: 0,
-                auto_match: true,
                 motion_factor: 0.7,
                 output_resolution: 512,
                 normalization_factor: 0,

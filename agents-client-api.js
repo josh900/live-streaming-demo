@@ -1336,23 +1336,11 @@ async function initializeConnection() {
         source_url: avatars[currentAvatar].imageUrl,
         driver_url: "bank://lively/driver-06",
         stream_warmup: true,
+        session_timeout: 250,
+        output_resolution: 512,
         config: {
           stitch: true,
-          fluent: true,
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: "neutral",
-                intensity: 0
-              }
-            ]
-          },
-          align_expand_factor: 0,
-          motion_factor: 0.7,
-          normalization_factor: 0,
-          session_timeout: 250,
-          output_resolution: 512
+          fluent: true
         }
       }),
     });
@@ -1469,25 +1457,11 @@ async function startStreaming(assistantReply) {
           stitch: true,
           fluent: true,
           pad_audio: 1.0,
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: "neutral",
-                intensity: 0
-              }
-            ]
-          },
-          align_driver: true,
-          align_expand_factor: 0,
-          auto_match: true,
-          motion_factor: 0.7,
           normalization_factor: 0,
           result_format: "mp4",
-          audio_optimization: 0
         },
-        driver_url: "bank://lively/driver-06",
         session_id: sessionId,
+        audio_optimization: 0
       }),
     });
 
