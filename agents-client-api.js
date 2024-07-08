@@ -1460,7 +1460,6 @@ async function startStreaming(assistantReply) {
     logger.debug('Starting streaming with reply:', assistantReply);
     if (!streamId || !sessionId) {
       logger.error('Stream ID or Session ID is missing. Cannot start streaming.');
-      await reinitializeConnection();
       return;
     }
 
@@ -1514,7 +1513,7 @@ async function startStreaming(assistantReply) {
           }
         },
         session_id: sessionId,
-        audio_optimization: 0
+        audio_optimization: 10
       }),
     });
 
@@ -1542,42 +1541,57 @@ async function startStreaming(assistantReply) {
       streamVideoElement.style.display = 'none';
       streamVideoElement.style.opacity = '0';
 
-      // Function to start playback and transition
-      const startPlayback = () => {
-        streamVideoElement.style.display = 'block';
-        // Introduce a small delay before playing the video
-        setTimeout(() => {
+      let playbackStarted = false;
+
+      const startPlaybackAndTransition = () => {
+        if (!playbackStarted) {
+          playbackStarted = true;
+          streamVideoElement.style.display = 'block';
           streamVideoElement.play().then(() => {
             if (!isCurrentlyStreaming) {
               isCurrentlyStreaming = true;
               smoothTransition(true, 250);
             }
           }).catch(e => logger.error('Error playing stream video:', e));
-        }, 100); // 100ms delay, adjust as needed
+        }
       };
 
+      // Preload the video
+      streamVideoElement.preload = 'auto';
+
       // Set up event listeners for the stream video
-      streamVideoElement.oncanplay = startPlayback;
+      streamVideoElement.oncanplay = startPlaybackAndTransition;
+      streamVideoElement.onplay = () => logger.debug('Video playback started');
+
       streamVideoElement.onerror = (e) => {
         logger.error('Error loading stream video:', e);
         isCurrentlyStreaming = false;
       };
 
       // Start loading the video
-      if (playResponseData.result_url && isValidUrl(playResponseData.result_url)) {
-        setStreamVideoElement(playResponseData.result_url);
+      if (playResponseData.result_url) {
+        streamVideoElement.src = playResponseData.result_url;
       } else {
-        logger.error('Invalid or missing result_url in playResponseData:', playResponseData.result_url);
+        logger.error('No result_url in playResponseData');
         return;
       }
+
+      // Set a timeout in case the video takes too long to start
+      const videoStartTimeout = setTimeout(() => {
+        if (!playbackStarted) {
+          logger.warn('Video took too long to start, forcing playback');
+          startPlaybackAndTransition();
+        }
+      }, 1000); // Adjust this timeout as needed
 
       const audioDuration = playResponseData.audio_duration * 1000;
 
       // Set up a timeout to switch back to the idle video
       currentStreamTimeout = setTimeout(() => {
+        clearTimeout(videoStartTimeout);
         isCurrentlyStreaming = false;
         smoothTransition(false, 250);
-      }, audioDuration + 100); // Increased buffer time slightly
+      }, audioDuration + 500); // Added a small buffer
 
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
@@ -1590,6 +1604,7 @@ async function startStreaming(assistantReply) {
     }
   }
 }
+
 
 function isValidUrl(string) {
   try {
