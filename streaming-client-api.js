@@ -249,8 +249,6 @@ function setVideoElement(stream) {
 }
 
 function playIdleVideo() {
-  videoElement.srcObject = undefined;
-  videoElement.src = DID_API.service == 'clips' ? 'rian_idle.mp4' : 'or_idle.mp4';
   videoElement.loop = true;
 }
 
