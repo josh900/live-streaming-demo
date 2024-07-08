@@ -172,7 +172,7 @@ async function destroyConnection() {
 }
 
 
-function smoothTransition(toStreaming, duration = 2050) {
+function smoothTransition(toStreaming, duration = 250) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
 
@@ -1103,9 +1103,6 @@ async function startStreaming(assistantReply) {
       return;
     }
 
-    // Prepare for streaming immediately
-    prepareForStreaming();
-
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'POST',
       headers: {
@@ -1170,12 +1167,15 @@ async function startStreaming(assistantReply) {
         return;
       }
 
-      // Wait for the stream to be ready
-      streamVideoElement.oncanplay = () => {
-        logger.debug('Stream video can play');
-        streamVideoElement.style.display = 'block';
+      // Prepare for streaming
+      streamVideoElement.style.display = 'block';
+      streamVideoElement.style.opacity = '0';
+      idleVideoElement.style.opacity = '1';
+
+      // Start the transition after a short delay
+      setTimeout(() => {
         smoothTransition(true, 300);
-      };
+      }, 50);
 
       const audioDuration = playResponseData.audio_duration * 1000;
 
