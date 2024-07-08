@@ -1118,6 +1118,19 @@ function onIceConnectionStateChange() {
   }
 }
 
+function scheduleReconnect() {
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    logger.error('Max reconnection attempts reached. Please refresh the page.');
+    showErrorMessage('Failed to reconnect after multiple attempts. Please refresh the page.');
+    return;
+  }
+
+  const delay = Math.min(INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
+  logger.debug(`Scheduling reconnection attempt in ${delay}ms`);
+  setTimeout(attemptReconnect, delay);
+  reconnectAttempts++;
+}
+
 async function attemptReconnect() {
   logger.info('Attempting to reconnect...');
   try {
