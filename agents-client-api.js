@@ -1332,7 +1332,7 @@ async function fetchWithRetries(url, options, retries = 0) {
   }
 }
 
-javascriptCopyasync function initializeConnection() {
+async function initializeConnection() {
   if (isInitializing) {
     logger.warn('Connection initialization already in progress. Skipping initialize.');
     return;
@@ -1554,7 +1554,7 @@ async function startStreaming(assistantReply) {
           logger.warn('Video took too long to start, forcing playback');
           startPlaybackAndTransition();
         }
-      }, 5000); // Adjust this timeout as needed
+      }, 1000); // Adjust this timeout as needed
 
       const audioDuration = playResponseData.audio_duration * 1000;
 
@@ -1563,7 +1563,7 @@ async function startStreaming(assistantReply) {
         clearTimeout(videoStartTimeout);
         isCurrentlyStreaming = false;
         smoothTransition(false, 250);
-      }, audioDuration + 100); // Added a small buffer
+      }, audioDuration + 00); // Added a small buffer
 
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
