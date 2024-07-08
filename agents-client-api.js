@@ -1549,7 +1549,7 @@ async function reinitializeConnection() {
     peerConnection = null;
 
     // Clear chat history and transcripts
-    transcript = '';
+    currentUtterance = '';
     chatHistory = [];
 
     const msgHistory = document.getElementById('msgHistory');
@@ -1573,6 +1573,7 @@ async function reinitializeConnection() {
     isInitializing = false;
   }
 }
+
 const connectButton = document.getElementById('connect-button');
 connectButton.onclick = initializeConnection;
 
