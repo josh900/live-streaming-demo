@@ -1408,7 +1408,7 @@ async function createStream() {
     body: JSON.stringify({
       source_url: avatars[currentAvatar].imageUrl,
       driver_url: "bank://lively/driver-06",
-      stream_warmup: false,
+      stream_warmup: true,
       output_resolution: 512,
       config: {
         stitch: true,
