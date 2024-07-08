@@ -1339,7 +1339,6 @@ async function initializeConnection() {
         config: {
           stitch: true,
           fluent: true,
-          pad_audio: 0,
           driver_expressions: {
             expressions: [
               {
@@ -1347,16 +1346,13 @@ async function initializeConnection() {
                 expression: "neutral",
                 intensity: 0
               }
-            ],
-            transition_frames: 0
+            ]
           },
-          align_driver: true,
           align_expand_factor: 0,
-          auto_match: true,
           motion_factor: 0,
           normalization_factor: 0,
-          sharpen: true,
-          result_format: "mp4"
+          session_timeout: 250,
+          output_resolution: 512
         }
       }),
     });
@@ -1470,9 +1466,8 @@ async function startStreaming(assistantReply) {
           ssml: false,
         },
         config: {
-          stitch: true,
           fluent: true,
-          pad_audio: 0,
+          pad_audio: 1.0,
           driver_expressions: {
             expressions: [
               {
@@ -1487,9 +1482,8 @@ async function startStreaming(assistantReply) {
           auto_match: true,
           motion_factor: 0.7,
           normalization_factor: 0,
-          sharpen: true,
           result_format: "mp4",
-
+          audio_optimization: 0
         },
         driver_url: "bank://lively/driver-06",
         session_id: sessionId,
@@ -1873,11 +1867,11 @@ async function sendChatToGroq() {
     msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
     msgHistory.scrollTop = msgHistory.scrollHeight;
   } finally {
-    await stopRecording();
-    const startButton = document.getElementById('start-button');
-    startButton.textContent = 'Speak';
-    isRecording = false;
-    autoSpeakInProgress = false;
+    // await stopRecording();
+    // const startButton = document.getElementById('start-button');
+    // startButton.textContent = 'Speak';
+    // isRecording = false;
+    // autoSpeakInProgress = false;
   }
 }
 
