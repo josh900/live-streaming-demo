@@ -1473,8 +1473,7 @@ async function warmUpStream() {
           provider: {
             type: 'microsoft',
             voice_id: avatars[currentAvatar].voiceId
-          },
-          ssml: true
+          }
         },
         config: {
           stitch: true,
