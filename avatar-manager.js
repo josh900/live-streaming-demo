@@ -87,7 +87,7 @@ async function generateSilentVideo(imageUrl, voiceId, name) {
             script: {
                 type: "text",
                 ssml: true,
-                input: "<break time=\"5000ms\"/>",
+                input: "<break time=\"5000ms\"/><break time=\"5000ms\"/>",
                 provider: {
                     type: "microsoft",
                     voice_id: voiceId
@@ -95,7 +95,7 @@ async function generateSilentVideo(imageUrl, voiceId, name) {
             },
             config: {
                 fluent: true,
-                pad_audio: 0,
+                pad_audio: 1.0,
                 driver_expressions: {
                     expressions: [
                         {
@@ -103,15 +103,14 @@ async function generateSilentVideo(imageUrl, voiceId, name) {
                             expression: "neutral",
                             intensity: 0
                         }
-                    ],
-                    transition_frames: 0
+                    ]
                 },
                 align_driver: true,
                 align_expand_factor: 0,
                 auto_match: true,
                 motion_factor: 0.7,
+                output_resolution: 512,
                 normalization_factor: 0,
-                sharpen: true,
                 stitch: true,
                 result_format: "mp4"
             }

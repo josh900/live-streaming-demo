@@ -1349,7 +1349,7 @@ async function initializeConnection() {
             ]
           },
           align_expand_factor: 0,
-          motion_factor: 0,
+          motion_factor: 0.7,
           normalization_factor: 0,
           session_timeout: 250,
           output_resolution: 512
