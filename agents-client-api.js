@@ -1422,7 +1422,7 @@ function startKeepAlive() {
     } catch (error) {
       logger.warn('Error sending keep-alive:', error);
     }
-  }, 120000);
+  }, 60000);
 }
 
 function stopKeepAlive() {
