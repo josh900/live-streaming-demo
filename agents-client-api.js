@@ -1571,10 +1571,11 @@ async function startStreaming(assistantReply) {
   }
 }
 
-function toggleSimpleMode() {
+export function toggleSimpleMode() {
   const content = document.getElementById('content');
   const videoWrapper = document.getElementById('video-wrapper');
   const simpleModeButton = document.getElementById('simple-mode-button');
+  const header = document.querySelector('.header');
 
   if (content.style.display !== 'none') {
       // Entering simple mode
@@ -1584,9 +1585,15 @@ function toggleSimpleMode() {
       videoWrapper.style.left = '50%';
       videoWrapper.style.transform = 'translate(-50%, -50%)';
       simpleModeButton.textContent = 'Exit Simple Mode';
+      header.style.position = 'fixed';
+      header.style.width = '100%';
+      header.style.zIndex = '1000';
       
       // Simulate clicking the speak button
-      document.getElementById('start-button').click();
+      const startButton = document.getElementById('start-button');
+      if (startButton) {
+          startButton.click();
+      }
   } else {
       // Exiting simple mode
       content.style.display = 'flex';
@@ -1595,14 +1602,18 @@ function toggleSimpleMode() {
       videoWrapper.style.left = 'auto';
       videoWrapper.style.transform = 'none';
       simpleModeButton.textContent = 'Simple Mode';
+      header.style.position = 'static';
+      header.style.width = 'auto';
       
       // Stop recording if it's in progress
       if (isRecording) {
-          document.getElementById('start-button').click();
+          const startButton = document.getElementById('start-button');
+          if (startButton) {
+              startButton.click();
+          }
       }
   }
 }
-
 
 function isValidUrl(string) {
   try {
@@ -2065,5 +2076,4 @@ export {
   updateContext,
   handleTextInput,
   toggleAutoSpeak,
-  toggleSimpleMode
 };

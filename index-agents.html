@@ -151,7 +151,8 @@
       // Make closeAvatarModal available globally
       window.closeAvatarModal = closeAvatarModal;
   </script>
-  <script>
+  <script type="module">
+    import { toggleSimpleMode } from './agents-client-api.js';
     document.getElementById('simple-mode-button').addEventListener('click', toggleSimpleMode);
 </script>
   </body>
