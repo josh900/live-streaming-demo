@@ -1501,7 +1501,7 @@ async function warmUpStream() {
     logger.debug('Warm-up response:', warmUpData);
 
     if (warmUpData.status === 'started') {
-      // Handle the warm-up video invisibly
+      // Handle the warm-up video invisibly and muted
       await handleInvisibleWarmUp(warmUpData.result_url);
       logger.info('Stream warmed up successfully');
     } else {
@@ -1513,6 +1513,26 @@ async function warmUpStream() {
   }
 }
 
+
+async function handleInvisibleWarmUp(videoUrl) {
+  return new Promise((resolve) => {
+    const tempVideo = document.createElement('video');
+    tempVideo.style.display = 'none';
+    tempVideo.src = videoUrl;
+    tempVideo.muted = true; // Ensure the video is muted
+    
+    tempVideo.onloadedmetadata = () => {
+      tempVideo.play().catch(e => logger.error('Error playing warm-up video:', e));
+    };
+
+    tempVideo.onended = () => {
+      tempVideo.remove();
+      resolve();
+    };
+
+    document.body.appendChild(tempVideo);
+  });
+}
 
 
 
@@ -1601,6 +1621,7 @@ async function startStreaming(assistantReply) {
       streamVideoElement.src = '';
       streamVideoElement.style.display = 'none';
       streamVideoElement.style.opacity = '0';
+      streamVideoElement.muted = false; // Ensure the video is not muted for normal playback
 
       let playbackStarted = false;
 
@@ -1665,7 +1686,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
 
 
 function isValidUrl(string) {
