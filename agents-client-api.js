@@ -47,6 +47,8 @@ let reconnectAttempts = 0;
 let isTransitioning = false;
 let lastVideoStatus = null;
 let isPreparing = false;
+let isCurrentlyStreaming = false;
+let currentStreamTimeout;
 
 
 
@@ -172,7 +174,7 @@ async function destroyConnection() {
 }
 
 
-function smoothTransition(toStreaming, duration = 2050) {
+function smoothTransition(toStreaming, duration = 250) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
 
@@ -183,6 +185,12 @@ function smoothTransition(toStreaming, duration = 2050) {
 
   if (isTransitioning) {
     logger.debug('Transition already in progress, skipping');
+    return;
+  }
+
+  // Don't transition if we're already in the desired state
+  if ((toStreaming && isCurrentlyStreaming) || (!toStreaming && !isCurrentlyStreaming)) {
+    logger.debug('Already in desired state, skipping transition');
     return;
   }
 
@@ -236,6 +244,7 @@ function smoothTransition(toStreaming, duration = 2050) {
       transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
       logger.debug('Smooth transition completed');
       isTransitioning = false;
+      isCurrentlyStreaming = toStreaming;
 
       // Ensure final state is set correctly
       if (toStreaming) {
@@ -1103,6 +1112,11 @@ async function startStreaming(assistantReply) {
       return;
     }
 
+    // Clear any existing timeout
+    if (currentStreamTimeout) {
+      clearTimeout(currentStreamTimeout);
+    }
+
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'POST',
       headers: {
@@ -1167,22 +1181,19 @@ async function startStreaming(assistantReply) {
         return;
       }
 
-      // Prepare for streaming
-      streamVideoElement.style.display = 'block';
-      streamVideoElement.style.opacity = '0';
-      idleVideoElement.style.opacity = '1';
-
-      // Start the transition after a short delay
-      setTimeout(() => {
+      // Only transition if we're not already streaming
+      if (!isCurrentlyStreaming) {
+        isCurrentlyStreaming = true;
         smoothTransition(true, 300);
-      }, 50);
+      }
 
       const audioDuration = playResponseData.audio_duration * 1000;
 
       // Set up a timeout to switch back to the idle video
-      setTimeout(() => {
+      currentStreamTimeout = setTimeout(() => {
+        isCurrentlyStreaming = false;
         smoothTransition(false, 300);
-      }, audioDuration - 100);
+      }, audioDuration + 200); // Added a small buffer to ensure audio is fully complete
 
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
