@@ -479,7 +479,6 @@ body {
   }
 
   #video-wrapper {
-    max-width: 300px; /* Adjust this value as needed */
     margin-bottom: 20px;
   }
 }
@@ -488,6 +487,5 @@ body {
 
 @media (max-width: 480px) {
   #video-wrapper {
-    max-width: 250px; /* Further reduce size for very small screens */
   }
 }
