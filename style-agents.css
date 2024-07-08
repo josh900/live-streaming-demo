@@ -490,6 +490,7 @@ body {
   aspect-ratio: 1 / 1;
   margin: 0 auto;
   overflow: hidden;
+  border-radius: 13%;
 }
 
 #video-wrapper::before {
@@ -510,8 +511,8 @@ body {
 
 #logo-wrapper {
   position: absolute;
-  left: 50px;
-  bottom: 50px;
+  left: 20px;
+  bottom: 20px;
   width: 50px;
   height: 50px;
   z-index: 10;
