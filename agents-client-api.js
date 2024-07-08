@@ -1151,7 +1151,7 @@ async function startStreaming(assistantReply) {
                 intensity: 0
               }
             ],
-            transition_frames: 500
+            transition_frames: 10
           },
           align_driver: true,
           align_expand_factor: 0,
