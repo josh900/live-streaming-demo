@@ -1184,7 +1184,7 @@ async function startStreaming(assistantReply) {
       // Only transition if we're not already streaming
       if (!isCurrentlyStreaming) {
         isCurrentlyStreaming = true;
-        smoothTransition(true, 300);
+        smoothTransition(true, 250);
       }
 
       const audioDuration = playResponseData.audio_duration * 1000;
@@ -1192,8 +1192,8 @@ async function startStreaming(assistantReply) {
       // Set up a timeout to switch back to the idle video
       currentStreamTimeout = setTimeout(() => {
         isCurrentlyStreaming = false;
-        smoothTransition(false, 300);
-      }, audioDuration + 200); // Added a small buffer to ensure audio is fully complete
+        smoothTransition(false, 250);
+      }, audioDuration + 0); // Added a small buffer to ensure audio is fully complete
 
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
