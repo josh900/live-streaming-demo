@@ -71,6 +71,7 @@ const maxDelaySec = 5;
 
 let context = `
 You are a helpful, harmless, and honest grocery store assistant. Please answer the users questions briefly, be concise.
+Be sure to always respond in Speech Synthesis Markup Language or SSML.
 `;
 
 function prepareForStreaming() {
@@ -367,7 +368,7 @@ function updateAssistantReply(text) {
 }
 
 async function initialize() {
-  setLogLevel('DEBUG');
+  setLogLevel('INFO');
 
   const { idle, stream } = getVideoElements();
   idleVideoElement = idle;
@@ -1136,7 +1137,7 @@ async function startStreaming(assistantReply) {
               rate: 'medium'
             }
           },
-          ssml: false,
+          ssml: true,
         },
         config: {
           stitch: true,
