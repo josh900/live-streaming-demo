@@ -1091,7 +1091,7 @@ function startKeepAlive() {
     } catch (error) {
       logger.warn('Error sending keep-alive:', error);
     }
-  }, 60000);
+  }, 120000);
 }
 
 function stopKeepAlive() {
