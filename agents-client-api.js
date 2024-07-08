@@ -1335,7 +1335,7 @@ async function initializeConnection() {
       body: JSON.stringify({
         source_url: avatars[currentAvatar].imageUrl,
         driver_url: "bank://lively/driver-06",
-        stream_warmup: "true",
+        stream_warmup: true,
         output_resolution: 512,
         config: {
           stitch: true,
@@ -1454,8 +1454,8 @@ async function startStreaming(assistantReply) {
         },
         config: {
           stitch: true,
-          fluent: "true",
-          pad_audio: "1.0",
+          fluent: true,
+          pad_audio: 1,
           normalization_factor: 0,
           result_format: "mp4",
           auto_match: true,
@@ -1468,7 +1468,7 @@ async function startStreaming(assistantReply) {
           }
         },
         session_id: sessionId,
-        audio_optimization: "0"
+        audio_optimization: 0
       }),
     });
 

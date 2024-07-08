@@ -94,9 +94,9 @@ async function generateSilentVideo(imageUrl, voiceId, name) {
                 }
             },
             config: {
-                fluent: "true",
+                fluent: true,
                 motion_factor: 0.7,
-                pad_audio: "1.0",
+                pad_audio: 1,
                 output_resolution: 512,
                 normalization_factor: 0,
                 stitch: true,
