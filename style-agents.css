@@ -509,10 +509,16 @@ body {
   object-fit: cover;
 }
 
+#stream-video-element {
+  width: 100.1%;
+  height: 100.1%;
+
+}
+
 #logo-wrapper {
   position: absolute;
-  left: 20px;
-  bottom: 20px;
+  left: 5.5%;
+  bottom: 5.5%;
   width: 50px;
   height: 50px;
   z-index: 10;
