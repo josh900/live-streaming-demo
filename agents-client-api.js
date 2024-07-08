@@ -1576,11 +1576,13 @@ export function toggleSimpleMode() {
   const videoWrapper = document.getElementById('video-wrapper');
   const simpleModeButton = document.getElementById('simple-mode-button');
   const header = document.querySelector('.header');
+  const autoSpeakToggle = document.getElementById('auto-speak-toggle');
+  const startButton = document.getElementById('start-button');
 
   if (content.style.display !== 'none') {
       // Entering simple mode
       content.style.display = 'none';
-      document.body.appendChild(videoWrapper); // Move video wrapper out of the hidden content
+      document.body.appendChild(videoWrapper);
       videoWrapper.style.position = 'fixed';
       videoWrapper.style.top = '50%';
       videoWrapper.style.left = '50%';
@@ -1591,16 +1593,20 @@ export function toggleSimpleMode() {
       header.style.width = '100%';
       header.style.zIndex = '1000';
       
-      // Simulate clicking the speak button
-      const startButton = document.getElementById('start-button');
-      if (startButton) {
+      // Turn on auto-speak if it's not already on
+      if (autoSpeakToggle.textContent.includes('Off')) {
+          autoSpeakToggle.click();
+      }
+      
+      // Start recording if it's not already recording
+      if (startButton.textContent === 'Speak') {
           startButton.click();
       }
   } else {
       // Exiting simple mode
       content.style.display = 'flex';
       const leftColumn = document.getElementById('left-column');
-      leftColumn.appendChild(videoWrapper); // Move video wrapper back to its original position
+      leftColumn.appendChild(videoWrapper);
       videoWrapper.style.position = 'relative';
       videoWrapper.style.top = 'auto';
       videoWrapper.style.left = 'auto';
@@ -1610,12 +1616,14 @@ export function toggleSimpleMode() {
       header.style.position = 'static';
       header.style.width = 'auto';
       
-      // Stop recording if it's in progress
-      if (isRecording) {
-          const startButton = document.getElementById('start-button');
-          if (startButton) {
-              startButton.click();
-          }
+      // Turn off auto-speak
+      if (autoSpeakToggle.textContent.includes('On')) {
+          autoSpeakToggle.click();
+      }
+      
+      // Stop recording
+      if (startButton.textContent === 'Stop') {
+          startButton.click();
       }
   }
 }
