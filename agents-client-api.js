@@ -49,6 +49,7 @@ let lastVideoStatus = null;
 let isPreparing = false;
 let isCurrentlyStreaming = false;
 let currentStreamTimeout;
+const MAX_RECONNECT_ATTEMPTS = 5;
 
 
 
@@ -739,7 +740,6 @@ async function initialize() {
   showLoadingSymbol();
   try {
     await initializeConnection();
-    startKeepAlive();
     hideLoadingSymbol();
   } catch (error) {
     logger.error('Error during initialization:', error);
@@ -1035,6 +1035,11 @@ function onIceConnectionStateChange() {
 }
 
 function scheduleReconnect() {
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    logger.error('Max reconnection attempts reached. Giving up.');
+    showErrorMessage('Failed to reconnect after multiple attempts. Please refresh the page.');
+    return;
+  }
   clearTimeout(reconnectTimeout);
   const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
   logger.debug(`Scheduling reconnection attempt in ${delay}ms`);
@@ -1297,7 +1302,6 @@ function closePC(pc = peerConnection) {
   pc.removeEventListener('track', onTrack, true);
   clearInterval(statsIntervalId);
   const labels = getStatusLabels();
-  stopKeepAlive();
   if (labels.iceGathering) labels.iceGathering.innerText = '';
   if (labels.signaling) labels.signaling.innerText = '';
   if (labels.ice) labels.ice.innerText = '';
@@ -1328,7 +1332,7 @@ async function fetchWithRetries(url, options, retries = 0) {
   }
 }
 
-async function initializeConnection() {
+javascriptCopyasync function initializeConnection() {
   if (isInitializing) {
     logger.warn('Connection initialization already in progress. Skipping initialize.');
     return;
@@ -1340,7 +1344,6 @@ async function initializeConnection() {
   try {
     stopAllStreams();
     closePC();
-
 
     if (!currentAvatar || !avatars[currentAvatar]) {
       throw new Error('No avatar selected or avatar not found');
@@ -1387,7 +1390,6 @@ async function initializeConnection() {
     sessionId = newSessionId;
     logger.info('Stream created:', { streamId, sessionId });
 
-
     try {
       sessionClientAnswer = await createPeerConnection(offer, iceServers);
     } catch (e) {
@@ -1416,41 +1418,12 @@ async function initializeConnection() {
     }
 
     logger.info('Connection initialized successfully');
-    startKeepAlive();
     reconnectAttempts = 0; // Reset reconnect attempts on successful initialization
   } catch (error) {
     logger.error('Failed to initialize connection:', error);
     throw error;
   } finally {
     isInitializing = false;
-  }
-}
-
-function startKeepAlive() {
-  if (keepAliveInterval) {
-    clearInterval(keepAliveInterval);
-  }
-  keepAliveInterval = setInterval(async () => {
-    try {
-      await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/keepalive`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${DID_API.key}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ session_id: sessionId }),
-      });
-      logger.debug('Keep-alive sent successfully');
-    } catch (error) {
-      logger.warn('Error sending keep-alive:', error);
-    }
-  }, 60000);
-}
-
-function stopKeepAlive() {
-  if (keepAliveInterval) {
-    clearInterval(keepAliveInterval);
-    keepAliveInterval = null;
   }
 }
 
@@ -1581,7 +1554,7 @@ async function startStreaming(assistantReply) {
           logger.warn('Video took too long to start, forcing playback');
           startPlaybackAndTransition();
         }
-      }, 1000); // Adjust this timeout as needed
+      }, 5000); // Adjust this timeout as needed
 
       const audioDuration = playResponseData.audio_duration * 1000;
 
@@ -1590,7 +1563,7 @@ async function startStreaming(assistantReply) {
         clearTimeout(videoStartTimeout);
         isCurrentlyStreaming = false;
         smoothTransition(false, 250);
-      }, audioDuration + 500); // Added a small buffer
+      }, audioDuration + 100); // Added a small buffer
 
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
