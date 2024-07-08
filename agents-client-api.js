@@ -70,6 +70,7 @@ const maxDelaySec = 5;
 
 let context = `
 You are a helpful, harmless, and honest grocery store assistant. Please answer the users questions briefly, be concise.
+Be sure to always respond in Speech Synthesis Markup Language or SSML.
 `;
 
 function prepareForStreaming() {
@@ -1132,10 +1133,11 @@ async function startStreaming(assistantReply) {
             type: 'microsoft',
             voice_id: avatars[currentAvatar].voiceId,
             voice_config: {
-              rate: 'medium'
+              rate: 'medium',
+              pitch: '1'
             }
           },
-          ssml: false,
+          ssml: true,
         },
         config: {
           stitch: true,
@@ -1149,7 +1151,7 @@ async function startStreaming(assistantReply) {
                 intensity: 0
               }
             ],
-            transition_frames: 0
+            transition_frames: 500
           },
           align_driver: true,
           align_expand_factor: 0,
@@ -1157,7 +1159,10 @@ async function startStreaming(assistantReply) {
           motion_factor: 0.7,
           normalization_factor: 0,
           sharpen: true,
-          result_format: "mp4"
+          result_format: "mp4",
+          fluent_silence: true,
+          stream_audio: true
+
         },
         driver_url: "bank://lively/driver-06",
         session_id: sessionId,
