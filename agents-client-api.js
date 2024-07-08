@@ -1191,12 +1191,15 @@ async function startStreaming(assistantReply) {
       // Function to start playback and transition
       const startPlayback = () => {
         streamVideoElement.style.display = 'block';
-        streamVideoElement.play().then(() => {
-          if (!isCurrentlyStreaming) {
-            isCurrentlyStreaming = true;
-            smoothTransition(true, 300);
-          }
-        }).catch(e => logger.error('Error playing stream video:', e));
+        // Introduce a small delay before playing the video
+        setTimeout(() => {
+          streamVideoElement.play().then(() => {
+            if (!isCurrentlyStreaming) {
+              isCurrentlyStreaming = true;
+              smoothTransition(true, 250);
+            }
+          }).catch(e => logger.error('Error playing stream video:', e));
+        }, 100); // 100ms delay, adjust as needed
       };
 
       // Set up event listeners for the stream video
@@ -1214,8 +1217,8 @@ async function startStreaming(assistantReply) {
       // Set up a timeout to switch back to the idle video
       currentStreamTimeout = setTimeout(() => {
         isCurrentlyStreaming = false;
-        smoothTransition(false, 300);
-      }, audioDuration + 200); // Reduced buffer time slightly
+        smoothTransition(false, 250);
+      }, audioDuration + 250); // Increased buffer time slightly
 
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
