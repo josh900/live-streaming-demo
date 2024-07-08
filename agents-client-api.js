@@ -1371,8 +1371,7 @@ async function initializeConnection() {
                 expression: "neutral",
                 intensity: 1
               }
-            ],
-            "transition_frames": 0
+            ]
           }
         }
       }),
@@ -1499,7 +1498,7 @@ async function startStreaming(assistantReply) {
           normalization_factor: 0.1,
           align_driver: true,
           align_expand_factor: 0.3,
-          motion_factor: 1,
+          motion_factor: 0.7,
           result_format: "mp4",
           auto_match: true,
           driver_expressions: {
@@ -1513,7 +1512,7 @@ async function startStreaming(assistantReply) {
           }
         },
         session_id: sessionId,
-        audio_optimization: 10
+        audio_optimization: 0
       }),
     });
 
