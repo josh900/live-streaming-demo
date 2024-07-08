@@ -404,33 +404,27 @@ Keep responses natural and focused solely on answering the customer's question.
 Don't be too formal. For example, instead of saying "Hello! How can I assist you today?", say something like "Hey! how's it going. What can I help you with?"
 `;
 
-function prepareForStreaming() {
-  if (isPreparing) {
-    logger.debug('Already preparing for streaming, skipping');
-    return;
+async function prepareForStreaming() {
+  if (!streamId || !sessionId) {
+    throw new Error('Stream ID or Session ID is missing. Cannot prepare for streaming.');
   }
 
-  isPreparing = true;
-  logger.debug('Preparing for streaming');
-
-  const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
+  const idleVideoElement = document.getElementById('idle-video-element');
 
-  if (!idleVideoElement || !streamVideoElement) {
-    logger.error('Video elements not found');
-    isPreparing = false;
-    return;
+  if (!streamVideoElement || !idleVideoElement) {
+    throw new Error('Video elements not found');
   }
 
-  // Ensure the stream video is hidden
-  streamVideoElement.style.opacity = '0';
-  idleVideoElement.style.opacity = '1';
-
-  // Instead of creating a placeholder, we'll just hide the stream video
+  // Reset video elements
   streamVideoElement.srcObject = null;
+  streamVideoElement.src = '';
   streamVideoElement.style.display = 'none';
 
-  isPreparing = false;
+  idleVideoElement.style.display = 'block';
+  idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e));
+
+  logger.debug('Prepared for streaming');
 }
 
 
@@ -1419,7 +1413,6 @@ async function initializeConnection() {
     }
 
     logger.info('Connection initialized successfully');
-    reconnectAttempts = 0; // Reset reconnect attempts on successful initialization
   } catch (error) {
     logger.error('Failed to initialize connection:', error);
     throw error;
@@ -1927,11 +1920,12 @@ async function reinitializeConnection() {
   logger.debug('Reinitializing connection...');
 
   try {
+    // Stop all existing streams and close peer connection
     stopAllStreams();
     closePC();
 
     // Clear any existing timers
-    clearInterval(transcriptionTimer);
+    clearInterval(statsIntervalId);
     clearTimeout(inactivityTimeout);
     clearInterval(keepAliveInterval);
 
@@ -1946,13 +1940,22 @@ async function reinitializeConnection() {
     // Reinitialize the connection
     await initializeConnection();
 
+    // Verify that streamId and sessionId are set
+    if (!streamId || !sessionId) {
+      throw new Error('Stream ID or Session ID is missing after initialization');
+    }
+
     // If recording was in progress, restart it
     if (isRecording) {
       await stopRecording();
       await startRecording();
     }
 
+    // Prepare for streaming
+    await prepareForStreaming();
+
     logger.info('Connection reinitialized successfully');
+    logger.debug(`New Stream ID: ${streamId}, New Session ID: ${sessionId}`);
   } catch (error) {
     logger.error('Error during reinitialization:', error);
     throw error;
