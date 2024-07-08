@@ -71,7 +71,6 @@ const maxDelaySec = 5;
 
 let context = `
 You are a helpful, harmless, and honest grocery store assistant. Please answer the users questions briefly, be concise.
-Be sure to always respond in Speech Synthesis Markup Language or SSML.
 `;
 
 function prepareForStreaming() {
@@ -431,18 +430,6 @@ async function loadAvatars() {
     logger.error('Error loading avatars:', error);
     showErrorMessage('Failed to load avatars. Please try again.');
   }
-}
-
-function escapeSSML(ssml) {
-  return ssml
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&apos;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/&#x2F;/g, '/')
-    .replace(/&#x60;/g, '`')
-    .replace(/&#x3D;/g, '=');
 }
 
 function populateAvatarSelect() {
@@ -1116,8 +1103,7 @@ function stopKeepAlive() {
 
 async function startStreaming(assistantReply) {
   try {
-    const escapedReply = escapeSSML(assistantReply);
-    logger.debug('Starting streaming with reply:', escapedReply);
+    logger.debug('Starting streaming with reply:', assistantReply);
     if (!streamId || !sessionId) {
       logger.error('Stream ID or Session ID is missing. Cannot start streaming.');
       return;
@@ -1142,7 +1128,7 @@ async function startStreaming(assistantReply) {
       body: JSON.stringify({
         script: {
           type: 'text',
-          input: escapedReply,
+          input: assistantReply,
           provider: {
             type: 'microsoft',
             voice_id: avatars[currentAvatar].voiceId,
@@ -1151,7 +1137,7 @@ async function startStreaming(assistantReply) {
               pitch: '1'
             }
           },
-          ssml: true,
+          ssml: false,
         },
         config: {
           stitch: true,
