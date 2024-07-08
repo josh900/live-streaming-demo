@@ -1339,7 +1339,21 @@ async function initializeConnection() {
         output_resolution: 512,
         config: {
           stitch: true,
-          motion_factor: 0.7
+          fluent: true,
+          auto_match: true,
+          normalization_factor: 0.1,
+          align_driver: true,
+          align_expand_factor: 0.3,
+          driver_expressions: {
+            expressions: [
+              {
+                start_frame: 0,
+                expression: "neutral",
+                intensity: 1
+              }
+            ],
+            "transition_frames": 0
+          }
         }
       }),
     });
@@ -1455,8 +1469,11 @@ async function startStreaming(assistantReply) {
         config: {
           stitch: true,
           fluent: true,
-          pad_audio: 1,
-          normalization_factor: 0,
+          pad_audio: 0,
+          normalization_factor: 0.1,
+          align_driver: true,
+          align_expand_factor: 0.3,
+          motion_factor: 1,
           result_format: "mp4",
           auto_match: true,
           driver_expressions: {
@@ -1464,13 +1481,13 @@ async function startStreaming(assistantReply) {
               {
                 start_frame: 0,
                 expression: "neutral",
-                intensity: 0
+                intensity: 1
               }
             ]
           }
         },
         session_id: sessionId,
-        audio_optimization: 0
+        audio_optimization: 10
       }),
     });
 
