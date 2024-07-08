@@ -1181,19 +1181,37 @@ async function startStreaming(assistantReply) {
         return;
       }
 
-      // Only transition if we're not already streaming
-      if (!isCurrentlyStreaming) {
-        isCurrentlyStreaming = true;
-        smoothTransition(true, 250);
-      }
+      // Prepare the stream video element
+      streamVideoElement.srcObject = null;
+      streamVideoElement.src = '';
+      streamVideoElement.style.display = 'block';
+      streamVideoElement.style.opacity = '0';
 
+      // Function to start playback and transition
+      const startPlayback = () => {
+        if (!isCurrentlyStreaming) {
+          isCurrentlyStreaming = true;
+          smoothTransition(true, 300);
+        }
+      };
+
+      // Set up event listeners for the stream video
+      streamVideoElement.oncanplay = startPlayback;
+      streamVideoElement.onerror = (e) => {
+        logger.error('Error loading stream video:', e);
+        isCurrentlyStreaming = false;
+      };
+
+      // Start loading the video
+      streamVideoElement.src = playResponseData.result_url;
+      
       const audioDuration = playResponseData.audio_duration * 1000;
 
       // Set up a timeout to switch back to the idle video
       currentStreamTimeout = setTimeout(() => {
         isCurrentlyStreaming = false;
-        smoothTransition(false, 250);
-      }, audioDuration + 0); // Added a small buffer to ensure audio is fully complete
+        smoothTransition(false, 300);
+      }, audioDuration + 250); // Added a larger buffer to ensure audio is fully complete
 
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
