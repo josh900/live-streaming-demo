@@ -50,6 +50,7 @@ let isPreparing = false;
 let isCurrentlyStreaming = false;
 let currentStreamTimeout;
 const MAX_RECONNECT_ATTEMPTS = 5;
+let streamSet = false;
 
 
 
@@ -1105,9 +1106,10 @@ function onVideoStatusChange(videoIsPlaying, stream) {
     return;
   }
 
-  if (status === 'streaming') {
+  if (status === 'streaming' && !streamSet) {
     setStreamVideoElement(stream);
-    smoothTransition(true);
+    streamSet = true;
+    playStreamVideo();
   } else {
     smoothTransition(false);
   }
@@ -1129,7 +1131,6 @@ function setStreamVideoElement(stream) {
     logger.error('Stream video element not found');
     return;
   }
-
   logger.debug('Setting stream video element');
   if (stream instanceof MediaStream) {
     streamVideoElement.srcObject = stream;
@@ -1138,23 +1139,18 @@ function setStreamVideoElement(stream) {
     return;
   }
   streamVideoElement.style.opacity = '0';
-
-  streamVideoElement.onloadedmetadata = () => {
-    logger.debug('Stream video metadata loaded');
-    streamVideoElement.play().then(() => {
-      logger.debug('Stream video playback started');
-    }).catch(e => logger.error('Error playing stream video:', e));
-  };
-
-  streamVideoElement.oncanplay = () => {
-    logger.debug('Stream video can play');
-  };
-
-  streamVideoElement.onerror = (e) => {
-    logger.error('Error with stream video:', e);
-  };
 }
 
+function playStreamVideo() {
+  const streamVideoElement = document.getElementById('stream-video-element');
+  if (!streamVideoElement) {
+    logger.error('Stream video element not found');
+    return;
+  }
+  streamVideoElement.play().then(() => {
+    logger.debug('Stream video playback started');
+  }).catch(e => logger.error('Error playing stream video:', e));
+}
 
 function downloadStreamVideo(stream) {
   logger.debug('Starting video download in debug mode');
@@ -1239,10 +1235,11 @@ function onTrack(event) {
 
   if (event.streams && event.streams.length > 0) {
     const stream = event.streams[0];
-    if (stream.getVideoTracks().length > 0) {
+    if (stream.getVideoTracks().length > 0 && !streamSet) {
       logger.debug('Setting stream video element with track:', event.track.id);
       setStreamVideoElement(stream);
-    } else {
+      streamSet = true;
+    } else if (stream.getVideoTracks().length === 0) {
       logger.warn('Stream does not contain any video tracks');
     }
   } else {
@@ -1381,7 +1378,7 @@ async function initializeConnection() {
     });
 
     const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
-    
+
     if (!newStreamId || !newSessionId) {
       throw new Error('Failed to get valid stream ID or session ID from API');
     }
