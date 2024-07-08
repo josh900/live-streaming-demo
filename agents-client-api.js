@@ -1326,7 +1326,7 @@ async function startRecording() {
       language: "en-US",
       smart_format: true,
       interim_results: true,
-      utterance_end_ms: 1000,
+      utterance_end_ms: 750,
       punctuate: true,
       endpointing: 300,
       vad_events: true,
@@ -1587,7 +1587,7 @@ async function reinitializeConnection() {
 
     // Clear chat history and transcripts
     currentUtterance = '';
-    chatHistory = [];
+    // chatHistory = [];
 
     const msgHistory = document.getElementById('msgHistory');
     msgHistory.innerHTML = '';
