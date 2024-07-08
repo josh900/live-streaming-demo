@@ -42,15 +42,15 @@ let transitionAnimationFrame;
 let isDebugMode = false;
 let autoSpeakInProgress = false;
 let reconnectTimeout;
-const MAX_RECONNECT_DELAY = 30000; // Maximum delay between reconnection attempts (30 seconds)
-let reconnectAttempts = 10;
 let isTransitioning = false;
 let lastVideoStatus = null;
 let isPreparing = false;
 let isCurrentlyStreaming = false;
 let currentStreamTimeout;
+let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
-
+const INITIAL_RECONNECT_DELAY = 1000;
+const MAX_RECONNECT_DELAY = 30000;
 
 
 
@@ -1036,14 +1036,14 @@ function onIceConnectionStateChange() {
 
 function scheduleReconnect() {
   if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-    logger.error('Max reconnection attempts reached. Giving up.');
+    logger.error('Max reconnection attempts reached. Please refresh the page.');
     showErrorMessage('Failed to reconnect after multiple attempts. Please refresh the page.');
     return;
   }
-  clearTimeout(reconnectTimeout);
-  const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
+
+  const delay = Math.min(INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
   logger.debug(`Scheduling reconnection attempt in ${delay}ms`);
-  reconnectTimeout = setTimeout(attemptReconnect, delay);
+  setTimeout(attemptReconnect, delay);
   reconnectAttempts++;
 }
 
@@ -1052,6 +1052,7 @@ async function attemptReconnect() {
   try {
     await reinitializeConnection();
     logger.info('Reconnection successful');
+    reconnectAttempts = 0;
   } catch (error) {
     logger.error('Reconnection attempt failed:', error);
     scheduleReconnect();
@@ -1073,10 +1074,10 @@ function onConnectionStateChange() {
     scheduleReconnect();
   } else if (peerConnection.connectionState === 'connected') {
     logger.info('Peer connection established successfully');
-    clearTimeout(reconnectTimeout);
     reconnectAttempts = 0;
   }
 }
+
 
 function onSignalingStateChange() {
   const { signaling: signalingStatusLabel } = getStatusLabels();
@@ -1554,7 +1555,7 @@ async function startStreaming(assistantReply) {
           logger.warn('Video took too long to start, forcing playback');
           startPlaybackAndTransition();
         }
-      }, 10); // Adjust this timeout as needed
+      }, 1000); // Adjust this timeout as needed
 
       const audioDuration = playResponseData.audio_duration * 1000;
 
@@ -1939,12 +1940,8 @@ async function reinitializeConnection() {
     sessionId = null;
     peerConnection = null;
 
-    // Clear chat history and transcripts
+    // Clear current utterance, but keep chat history
     currentUtterance = '';
-    // chatHistory = [];
-
-    const msgHistory = document.getElementById('msgHistory');
-    msgHistory.innerHTML = '';
 
     // Reinitialize the connection
     await initializeConnection();
@@ -1958,12 +1955,13 @@ async function reinitializeConnection() {
     logger.info('Connection reinitialized successfully');
   } catch (error) {
     logger.error('Error during reinitialization:', error);
-    showErrorMessage('Failed to reinitialize connection. Please try again.');
     throw error;
   } finally {
     isInitializing = false;
   }
 }
+
+
 
 const connectButton = document.getElementById('connect-button');
 connectButton.onclick = initializeConnection;
