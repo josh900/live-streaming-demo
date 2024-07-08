@@ -52,6 +52,7 @@ let currentStreamTimeout;
 
 
 
+
 export function setLogLevel(level) {
   logger.setLogLevel(level);
   isDebugMode = level === 'DEBUG';
@@ -1184,15 +1185,18 @@ async function startStreaming(assistantReply) {
       // Prepare the stream video element
       streamVideoElement.srcObject = null;
       streamVideoElement.src = '';
-      streamVideoElement.style.display = 'block';
+      streamVideoElement.style.display = 'none';
       streamVideoElement.style.opacity = '0';
 
       // Function to start playback and transition
       const startPlayback = () => {
-        if (!isCurrentlyStreaming) {
-          isCurrentlyStreaming = true;
-          smoothTransition(true, 300);
-        }
+        streamVideoElement.style.display = 'block';
+        streamVideoElement.play().then(() => {
+          if (!isCurrentlyStreaming) {
+            isCurrentlyStreaming = true;
+            smoothTransition(true, 300);
+          }
+        }).catch(e => logger.error('Error playing stream video:', e));
       };
 
       // Set up event listeners for the stream video
@@ -1211,7 +1215,7 @@ async function startStreaming(assistantReply) {
       currentStreamTimeout = setTimeout(() => {
         isCurrentlyStreaming = false;
         smoothTransition(false, 300);
-      }, audioDuration + 250); // Added a larger buffer to ensure audio is fully complete
+      }, audioDuration + 200); // Reduced buffer time slightly
 
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
