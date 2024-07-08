@@ -820,17 +820,6 @@ function scheduleReconnect() {
   reconnectAttempts++;
 }
 
-async function attemptReconnect() {
-  logger.info('Attempting to reconnect...');
-  try {
-    await reinitializeConnection();
-    logger.info('Reconnection successful');
-    reconnectAttempts = 0;
-  } catch (error) {
-    logger.error('Reconnection attempt failed:', error);
-    scheduleReconnect();
-  }
-}
 
 async function loadAvatars() {
   try {
