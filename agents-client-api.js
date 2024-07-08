@@ -1554,7 +1554,7 @@ async function startStreaming(assistantReply) {
           logger.warn('Video took too long to start, forcing playback');
           startPlaybackAndTransition();
         }
-      }, 500); // Adjust this timeout as needed
+      }, 10); // Adjust this timeout as needed
 
       const audioDuration = playResponseData.audio_duration * 1000;
 
