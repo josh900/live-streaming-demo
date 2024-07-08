@@ -433,6 +433,17 @@ async function loadAvatars() {
   }
 }
 
+function escapeSSML(ssml) {
+  return ssml
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/'/g, '&apos;')
+    .replace(/"/g, '&quot;')
+    .replace(/\n/g, ' ')  // Replace newlines with spaces
+    .replace(/\s+/g, ' '); // Collapse multiple spaces into one
+}
+
 function populateAvatarSelect() {
   const avatarSelect = document.getElementById('avatar-select');
   avatarSelect.innerHTML = '';
@@ -1104,7 +1115,8 @@ function stopKeepAlive() {
 
 async function startStreaming(assistantReply) {
   try {
-    logger.debug('Starting streaming with reply:', assistantReply);
+    const escapedReply = escapeSSML(assistantReply);
+    logger.debug('Starting streaming with reply:', escapedReply);
     if (!streamId || !sessionId) {
       logger.error('Stream ID or Session ID is missing. Cannot start streaming.');
       return;
@@ -1129,7 +1141,7 @@ async function startStreaming(assistantReply) {
       body: JSON.stringify({
         script: {
           type: 'text',
-          input: assistantReply,
+          input: escapedReply,
           provider: {
             type: 'microsoft',
             voice_id: avatars[currentAvatar].voiceId,
