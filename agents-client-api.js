@@ -1369,92 +1369,141 @@ async function initializeConnection() {
   logger.info('Initializing connection...');
 
   try {
+    // Clean up existing connections
     stopAllStreams();
     closePC();
 
-
+    // Check for valid avatar
     if (!currentAvatar || !avatars[currentAvatar]) {
       throw new Error('No avatar selected or avatar not found');
     }
 
-    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        source_url: avatars[currentAvatar].imageUrl,
-        driver_url: "bank://lively/driver-06",
-        stream_warmup: true,
-        output_resolution: 512,
-        config: {
-          stitch: true,
-          fluent: true,
-          auto_match: true,
-          normalization_factor: 0.1,
-          align_driver: true,
-          align_expand_factor: 0.3,
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: "neutral",
-                intensity: 1
-              }
-            ],
-            "transition_frames": 0
-          }
-        }
-      }),
-    });
-
-    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+    // Create stream
+    const streamData = await createStream();
     
-    if (!newStreamId || !newSessionId) {
-      throw new Error('Failed to get valid stream ID or session ID from API');
-    }
+    // Set up WebRTC connection
+    await setupWebRTCConnection(streamData);
 
-    streamId = newStreamId;
-    sessionId = newSessionId;
-    logger.info('Stream created:', { streamId, sessionId });
-
-
-    try {
-      sessionClientAnswer = await createPeerConnection(offer, iceServers);
-    } catch (e) {
-      logger.error('Error during streaming setup:', e);
-      stopAllStreams();
-      closePC();
-      throw e;
-    }
-
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        answer: sessionClientAnswer,
-        session_id: sessionId,
-      }),
-    });
-
-    if (!sdpResponse.ok) {
-      throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
-    }
+    // Set up SDP
+    await setupSDP();
 
     logger.info('Connection initialized successfully');
     startKeepAlive();
-    reconnectAttempts = 0; // Reset reconnect attempts on successful initialization
+    reconnectAttempts = 0;
   } catch (error) {
     logger.error('Failed to initialize connection:', error);
     throw error;
   } finally {
     isInitializing = false;
+  }
+}
+
+async function createStream() {
+  const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      source_url: avatars[currentAvatar].imageUrl,
+      driver_url: "bank://lively/driver-06",
+      stream_warmup: true,
+      output_resolution: 512,
+      config: {
+        stitch: true,
+        fluent: true,
+        auto_match: true,
+        normalization_factor: 0.1,
+        align_driver: true,
+        align_expand_factor: 0.3,
+        driver_expressions: {
+          expressions: [
+            {
+              start_frame: 0,
+              expression: "neutral",
+              intensity: 1
+            }
+          ],
+          "transition_frames": 0
+        }
+      }
+    }),
+  });
+
+  const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+
+  if (!newStreamId || !newSessionId) {
+    throw new Error('Failed to get valid stream ID or session ID from API');
+  }
+
+  streamId = newStreamId;
+  sessionId = newSessionId;
+  logger.info('Stream created:', { streamId, sessionId });
+
+  return { offer, iceServers };
+}
+
+async function setupWebRTCConnection({ offer, iceServers }) {
+  try {
+    sessionClientAnswer = await createPeerConnection(offer, iceServers);
+  } catch (error) {
+    logger.error('Error during WebRTC setup:', error);
+    stopAllStreams();
+    closePC();
+    throw error;
+  }
+
+  // Wait for a second to ensure the connection is stable
+  await new Promise(resolve => setTimeout(resolve, 1000));
+}
+
+async function setupSDP() {
+  const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      answer: sessionClientAnswer,
+      session_id: sessionId,
+    }),
+  });
+
+  if (!sdpResponse.ok) {
+    throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
+  }
+}
+
+async function sendKeepAlive() {
+  if (!streamId || !sessionId) {
+    logger.warn('Stream ID or Session ID is missing. Cannot send keep-alive.');
+    return;
+  }
+
+  try {
+    const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/keepalive`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Keep-alive request failed with status ${response.status}`);
+    }
+
+    logger.debug('Keep-alive sent successfully');
+  } catch (error) {
+    logger.warn('Error sending keep-alive:', error);
+    // If the keep-alive fails, we might want to trigger a reconnection
+    if (error.message.includes('404') || error.message.includes('invalid session')) {
+      logger.warn('Invalid session detected. Attempting to reinitialize connection.');
+      await reinitializeConnection();
+    }
   }
 }
 
@@ -1468,8 +1517,9 @@ function startKeepAlive() {
     } else {
       logger.debug('Skipping keep-alive, connection not ready');
     }
-  }, KEEP_ALIVE_INTERVAL);
+  }, KEEP_ALIVE_INTERVAL); // Send keep-alive every x seconds
 }
+
 
 function stopKeepAlive() {
   if (keepAliveInterval) {
