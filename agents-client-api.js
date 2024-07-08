@@ -1336,7 +1336,6 @@ async function initializeConnection() {
         source_url: avatars[currentAvatar].imageUrl,
         driver_url: "bank://lively/driver-06",
         stream_warmup: true,
-        session_timeout: 250,
         output_resolution: 512,
         config: {
           stitch: true,
