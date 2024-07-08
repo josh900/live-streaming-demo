@@ -49,7 +49,7 @@ let lastVideoStatus = null;
 let isPreparing = false;
 let isCurrentlyStreaming = false;
 let currentStreamTimeout;
-const KEEP_ALIVE_INTERVAL = 30000; // 30 seconds
+
 
 
 
