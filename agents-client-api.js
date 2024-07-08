@@ -366,7 +366,7 @@ function updateAssistantReply(text) {
 }
 
 async function initialize() {
-  setLogLevel('INFO');
+  setLogLevel('DEBUG');
 
   const { idle, stream } = getVideoElements();
   idleVideoElement = idle;
