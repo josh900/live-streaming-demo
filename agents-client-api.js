@@ -735,10 +735,100 @@ async function initialize() {
   try {
     await initializeConnection();
     hideLoadingSymbol();
+
+    // Warm up the stream
+    logger.info('Connection established. Starting warm-up process...');
+    await warmUpStream();
+    logger.info('Warm-up process completed');
+
+    // Prepare for streaming after warm-up
+    await prepareForStreaming();
+
+    // Set up reconnection logic
+    peerConnection.addEventListener('iceconnectionstatechange', () => {
+      if (peerConnection.iceConnectionState === 'disconnected' || 
+          peerConnection.iceConnectionState === 'failed') {
+        logger.warn('ICE connection lost. Attempting to reconnect...');
+        scheduleReconnect();
+      }
+    });
+
+    // Set up inactivity timeout
+    resetInactivityTimeout();
+
+    // Start keep-alive interval
+    startKeepAliveInterval();
+
+    logger.info('Initialization completed successfully');
   } catch (error) {
     logger.error('Error during initialization:', error);
     hideLoadingSymbol();
     showErrorMessage('Failed to connect. Please try again.');
+  }
+}
+
+function resetInactivityTimeout() {
+  if (inactivityTimeout) {
+    clearTimeout(inactivityTimeout);
+  }
+  inactivityTimeout = setTimeout(() => {
+    logger.warn('Inactivity timeout reached. Reconnecting...');
+    reinitializeConnection();
+  }, 300000); // 5 minutes
+}
+
+function startKeepAliveInterval() {
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval);
+  }
+  keepAliveInterval = setInterval(() => {
+    if (peerConnection && peerConnection.connectionState === 'connected') {
+      sendKeepAlive();
+    }
+  }, 60000); // Every 1 minute
+}
+
+async function sendKeepAlive() {
+  try {
+    const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/keepalive`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+    if (!response.ok) {
+      throw new Error(`Keep-alive request failed with status ${response.status}`);
+    }
+    logger.debug('Keep-alive sent successfully');
+  } catch (error) {
+    logger.error('Error sending keep-alive:', error);
+  }
+}
+
+function scheduleReconnect() {
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    logger.error('Max reconnection attempts reached. Please refresh the page.');
+    showErrorMessage('Connection lost. Please refresh the page and try again.');
+    return;
+  }
+
+  const delay = Math.min(INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
+  logger.debug(`Scheduling reconnection attempt in ${delay}ms`);
+  reconnectTimeout = setTimeout(attemptReconnect, delay);
+  reconnectAttempts++;
+}
+
+async function attemptReconnect() {
+  logger.info('Attempting to reconnect...');
+  try {
+    await reinitializeConnection();
+    logger.info('Reconnection successful');
+    reconnectAttempts = 0;
+  } catch (error) {
+    logger.error('Reconnection attempt failed:', error);
+    scheduleReconnect();
   }
 }
 
@@ -1327,6 +1417,58 @@ async function fetchWithRetries(url, options, retries = 0) {
   }
 }
 
+async function warmUpStream() {
+  if (!streamId || !sessionId) {
+    logger.warn('Cannot warm up stream: streamId or sessionId is missing');
+    return;
+  }
+
+  logger.debug('Warming up stream...');
+
+  try {
+    const warmUpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: '<break time="1000ms"/>',
+          ssml: true,
+        },
+        config: {
+          stitch: true,
+          fluent: true,
+        },
+        session_id: sessionId,
+      }),
+    });
+
+    if (!warmUpResponse.ok) {
+      throw new Error(`HTTP error! status: ${warmUpResponse.status}`);
+    }
+
+    const warmUpData = await warmUpResponse.json();
+    logger.debug('Warm-up response:', warmUpData);
+
+    if (warmUpData.status === 'started') {
+      logger.debug('Warm-up stream started successfully');
+      
+      const streamVideoElement = document.getElementById('stream-video-element');
+      if (streamVideoElement) {
+        streamVideoElement.muted = true;
+        streamVideoElement.src = warmUpData.result_url;
+        await streamVideoElement.play();
+        logger.debug('Warm-up video played');
+      }
+    }
+  } catch (error) {
+    logger.error('Error during stream warm-up:', error);
+  }
+}
+
 async function initializeConnection() {
   if (isInitializing) {
     logger.warn('Connection initialization already in progress. Skipping initialize.');
@@ -1413,6 +1555,12 @@ async function initializeConnection() {
     }
 
     logger.info('Connection initialized successfully');
+
+    // Warm up the stream
+    logger.info('Starting warm-up process...');
+    await warmUpStream();
+    logger.info('Warm-up process completed');
+
   } catch (error) {
     logger.error('Failed to initialize connection:', error);
     throw error;
@@ -1420,6 +1568,7 @@ async function initializeConnection() {
     isInitializing = false;
   }
 }
+
 
 async function startStreaming(assistantReply) {
   try {
@@ -1916,7 +2065,6 @@ async function reinitializeConnection() {
     return;
   }
 
-  // isInitializing = true;
   isReconnecting = true;
   logger.debug('Reinitializing connection...');
 
