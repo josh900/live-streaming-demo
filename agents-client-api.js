@@ -435,13 +435,14 @@ async function loadAvatars() {
 
 function escapeSSML(ssml) {
   return ssml
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/'/g, '&apos;')
-    .replace(/"/g, '&quot;')
-    .replace(/\n/g, ' ')  // Replace newlines with spaces
-    .replace(/\s+/g, ' '); // Collapse multiple spaces into one
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&#x2F;/g, '/')
+    .replace(/&#x60;/g, '`')
+    .replace(/&#x3D;/g, '=');
 }
 
 function populateAvatarSelect() {
