@@ -59,6 +59,7 @@ export function setLogLevel(level) {
   logger.debug(`Log level set to ${level}. Debug mode is ${isDebugMode ? 'enabled' : 'disabled'}.`);
 }
 
+
 let avatars = {};
 let currentAvatar = '';
 
