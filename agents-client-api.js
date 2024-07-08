@@ -958,7 +958,7 @@ function closePC(pc = peerConnection) {
   }
 }
 
-async function fetchWithRetries(url, options, retries = 10) {
+async function fetchWithRetries(url, options, retries = 0) {
   try {
     const response = await fetch(url, options);
     if (!response.ok) {
@@ -1133,8 +1133,7 @@ async function startStreaming(assistantReply) {
             type: 'microsoft',
             voice_id: avatars[currentAvatar].voiceId,
             voice_config: {
-              rate: 'medium',
-              pitch: '1'
+              rate: 'medium'
             }
           },
           ssml: false,
