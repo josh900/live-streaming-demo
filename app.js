@@ -1,3 +1,5 @@
+// app.js
+
 import express from 'express';
 import http from 'http';
 import { WebSocketServer } from 'ws';
@@ -7,8 +9,46 @@ import multer from 'multer';
 import { createOrUpdateAvatar, getAvatars } from './avatar-manager.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+
 import Groq from 'groq-sdk';
 import DID_API from './api.js';
+import './groqServer.js';
+
+
+const groq = new Groq({ apiKey: DID_API.groqKey });
+
+app.post('/chat', async (req, res) => {
+  const { messages, model } = req.body;
+
+  try {
+    const completion = await groq.chat.completions.create({
+      messages,
+      model,
+      stream: true,
+    });
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    });
+
+    for await (const chunk of completion) {
+      res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+    }
+
+    res.write(`data: [DONE]\n\n`);
+    res.end();
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+});
+app.use('/chat', createProxyMiddleware({ 
+  target: 'http://localhost:3001', 
+  changeOrigin: true 
+}));
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -17,7 +57,6 @@ const port = 3000;
 const upload = multer({ storage: multer.memoryStorage() });
 
 const app = express();
-const groq = new Groq({ apiKey: DID_API.groqKey });
 
 app.use(compression());
 app.use(cors());
@@ -67,34 +106,6 @@ app.get('/avatars', async (req, res) => {
   } catch (error) {
     console.error('Error getting avatars:', error);
     res.status(500).json({ error: 'Failed to get avatars' });
-  }
-});
-
-app.post('/chat', async (req, res) => {
-  const { messages, model } = req.body;
-
-  try {
-    const completion = await groq.chat.completions.create({
-      messages,
-      model,
-      stream: true,
-    });
-
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-    });
-
-    for await (const chunk of completion) {
-      res.write(`data: ${JSON.stringify(chunk)}\n\n`);
-    }
-
-    res.write(`data: [DONE]\n\n`);
-    res.end();
-  } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ error: 'An error occurred' });
   }
 });
 
