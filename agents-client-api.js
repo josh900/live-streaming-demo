@@ -1,59 +1,6 @@
-'use strict';
 
-import DID_API from './api.js';
-import logger from './logger.js';
-const { createClient, LiveTranscriptionEvents } = deepgram;
 
-if (DID_API.key == '🤫') alert('Please put your api key inside ./api.js and restart..');
 
-const deepgramClient = createClient(DID_API.deepgramKey);
-
-const RTCPeerConnection = (
-  window.RTCPeerConnection ||
-  window.webkitRTCPeerConnection ||
-  window.mozRTCPeerConnection
-).bind(window);
-
-let peerConnection;
-let streamId;
-let sessionId;
-let sessionClientAnswer;
-let statsIntervalId;
-let videoIsPlaying;
-let lastBytesReceived;
-let chatHistory = [];
-let inactivityTimeout;
-let transcriptionTimer;
-let keepAliveInterval;
-let socket;
-let isInitializing = false;
-let audioContext;
-let streamVideoElement;
-let idleVideoElement;
-let deepgramConnection;
-let isRecording = false;
-let audioWorkletNode;
-let currentUtterance = '';
-let interimMessageAdded = false;
-let autoSpeakMode = true;
-let speakTimeout;
-let transitionCanvas;
-let transitionCtx;
-let transitionAnimationFrame;
-let isDebugMode = false;
-let autoSpeakInProgress = false;
-let reconnectTimeout;
-let isTransitioning = false;
-let lastVideoStatus = null;
-let isPreparing = false;
-let isCurrentlyStreaming = false;
-let currentStreamTimeout;
-let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 5;
-const INITIAL_RECONNECT_DELAY = 1000;
-const MAX_RECONNECT_DELAY = 30000;
-let isReconnecting = false;
-let persistentStream = null;
 export function setLogLevel(level) {
   logger.setLogLevel(level);
   isDebugMode = level === 'DEBUG';
