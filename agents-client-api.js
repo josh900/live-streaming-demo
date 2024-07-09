@@ -1530,6 +1530,11 @@ async function startStreaming(assistantReply) {
 
     const { streamId, sessionId } = persistentStream;
 
+    // Clear any existing timeout
+    if (currentStreamTimeout) {
+      clearTimeout(currentStreamTimeout);
+    }
+
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'POST',
       headers: {
@@ -1583,14 +1588,84 @@ async function startStreaming(assistantReply) {
 
     if (playResponseData.status === 'started') {
       logger.debug('Stream started successfully');
-      // ... (rest of the existing function)
+
+      const streamVideoElement = document.getElementById('stream-video-element');
+      const idleVideoElement = document.getElementById('idle-video-element');
+
+      if (!streamVideoElement || !idleVideoElement) {
+        logger.error('Video elements not found');
+        return;
+      }
+
+      // Prepare the stream video element
+      streamVideoElement.srcObject = null;
+      streamVideoElement.src = '';
+      streamVideoElement.style.display = 'none';
+      streamVideoElement.style.opacity = '0';
+
+      let playbackStarted = false;
+
+      const startPlaybackAndTransition = () => {
+        if (!playbackStarted) {
+          playbackStarted = true;
+          streamVideoElement.style.display = 'block';
+          streamVideoElement.play().then(() => {
+            if (!isCurrentlyStreaming) {
+              isCurrentlyStreaming = true;
+              smoothTransition(true, 250);
+            }
+          }).catch(e => logger.error('Error playing stream video:', e));
+        }
+      };
+
+      // Preload the video
+      streamVideoElement.preload = 'auto';
+
+      // Set up event listeners for the stream video
+      streamVideoElement.oncanplay = startPlaybackAndTransition;
+      streamVideoElement.onplay = () => logger.debug('Video playback started');
+
+      streamVideoElement.onerror = (e) => {
+        logger.error('Error loading stream video:', e);
+        isCurrentlyStreaming = false;
+      };
+
+      // Start loading the video
+      if (playResponseData.result_url) {
+        streamVideoElement.src = playResponseData.result_url;
+      } else {
+        logger.error('No result_url in playResponseData');
+        return;
+      }
+
+      // Set a timeout in case the video takes too long to start
+      const videoStartTimeout = setTimeout(() => {
+        if (!playbackStarted) {
+          logger.warn('Video took too long to start, forcing playback');
+          startPlaybackAndTransition();
+        }
+      }, 1500); // Adjust this timeout as needed
+
+      const audioDuration = playResponseData.audio_duration * 1000;
+
+      // Set up a timeout to switch back to the idle video
+      currentStreamTimeout = setTimeout(() => {
+        clearTimeout(videoStartTimeout);
+        isCurrentlyStreaming = false;
+        smoothTransition(false, 250);
+      }, audioDuration + 400); // Added a small buffer
+
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
     }
   } catch (error) {
     logger.error('Error during streaming:', error);
-    persistentStream = null;
-    await startStreaming(assistantReply);
+    if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
+      logger.warn('Stream not found or invalid session. Attempting to reinitialize connection.');
+      persistentStream = null;
+      await initializePersistentStream();
+    }
+    throw error; // Rethrow the error to be handled by the caller
   }
 }
 
