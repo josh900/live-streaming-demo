@@ -52,6 +52,7 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 const INITIAL_RECONNECT_DELAY = 1000;
 const MAX_RECONNECT_DELAY = 30000;
 let isReconnecting = false;
+let persistentStream = null;
 
 
 export function setLogLevel(level) {
@@ -473,7 +474,8 @@ async function handleAvatarChange() {
   chatHistory = [];
 
   await destroyConnection();
-  await initializeConnection();
+  persistentStream = null;
+  await initializePersistentStream();
 }
 
 async function destroyConnection() {
@@ -733,7 +735,8 @@ async function initialize() {
 
   showLoadingSymbol();
   try {
-    await initializeConnection();
+    await initializePersistentStream();
+    startKeepAlive();
     hideLoadingSymbol();
   } catch (error) {
     logger.error('Error during initialization:', error);
@@ -741,6 +744,105 @@ async function initialize() {
     showErrorMessage('Failed to connect. Please try again.');
   }
 }
+
+
+async function initializePersistentStream() {
+  logger.info('Initializing persistent stream...');
+  const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      source_url: avatars[currentAvatar].imageUrl,
+      driver_url: "bank://lively/driver-06",
+      stream_warmup: true,
+      output_resolution: 512,
+      config: {
+        stitch: true,
+        fluent: true,
+        auto_match: true,
+        normalization_factor: 0.1,
+        align_driver: true,
+        align_expand_factor: 0.3,
+        driver_expressions: {
+          expressions: [
+            {
+              start_frame: 0,
+              expression: "neutral",
+              intensity: 1
+            }
+          ]
+        }
+      }
+    }),
+  });
+
+  const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+  
+  streamId = newStreamId;
+  sessionId = newSessionId;
+  logger.info('Persistent stream created:', { streamId, sessionId });
+
+  try {
+    sessionClientAnswer = await createPeerConnection(offer, iceServers);
+  } catch (e) {
+    logger.error('Error during streaming setup:', e);
+    stopAllStreams();
+    closePC();
+    throw e;
+  }
+
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
+  const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      answer: sessionClientAnswer,
+      session_id: sessionId,
+    }),
+  });
+
+  if (!sdpResponse.ok) {
+    throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
+  }
+
+  persistentStream = { streamId, sessionId };
+  logger.info('Persistent stream initialized successfully');
+}
+
+function startKeepAlive() {
+  keepAliveInterval = setInterval(async () => {
+    if (persistentStream) {
+      try {
+        await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStream.streamId}/keepalive`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Basic ${DID_API.key}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ session_id: persistentStream.sessionId }),
+        });
+        logger.debug('Keepalive sent successfully');
+      } catch (error) {
+        logger.error('Keepalive failed:', error);
+        persistentStream = null;
+      }
+    }
+  }, 30000);
+}
+
+async function ensurePersistentStream() {
+  if (!persistentStream) {
+    await initializePersistentStream();
+  }
+}
+
 
 async function loadAvatars() {
   try {
@@ -1423,21 +1525,10 @@ async function initializeConnection() {
 
 async function startStreaming(assistantReply) {
   try {
+    await ensurePersistentStream();
     logger.debug('Starting streaming with reply:', assistantReply);
-    if (!streamId || !sessionId) {
-      logger.error('Stream ID or Session ID is missing. Cannot start streaming.');
-      return;
-    }
 
-    if (!currentAvatar || !avatars[currentAvatar]) {
-      logger.error('No avatar selected or avatar not found. Cannot start streaming.');
-      return;
-    }
-
-    // Clear any existing timeout
-    if (currentStreamTimeout) {
-      clearTimeout(currentStreamTimeout);
-    }
+    const { streamId, sessionId } = persistentStream;
 
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'POST',
@@ -1492,84 +1583,17 @@ async function startStreaming(assistantReply) {
 
     if (playResponseData.status === 'started') {
       logger.debug('Stream started successfully');
-
-      const streamVideoElement = document.getElementById('stream-video-element');
-      const idleVideoElement = document.getElementById('idle-video-element');
-
-      if (!streamVideoElement || !idleVideoElement) {
-        logger.error('Video elements not found');
-        return;
-      }
-
-      // Prepare the stream video element
-      streamVideoElement.srcObject = null;
-      streamVideoElement.src = '';
-      streamVideoElement.style.display = 'none';
-      streamVideoElement.style.opacity = '0';
-
-      let playbackStarted = false;
-
-      const startPlaybackAndTransition = () => {
-        if (!playbackStarted) {
-          playbackStarted = true;
-          streamVideoElement.style.display = 'block';
-          streamVideoElement.play().then(() => {
-            if (!isCurrentlyStreaming) {
-              isCurrentlyStreaming = true;
-              smoothTransition(true, 250);
-            }
-          }).catch(e => logger.error('Error playing stream video:', e));
-        }
-      };
-
-      // Preload the video
-      streamVideoElement.preload = 'auto';
-
-      // Set up event listeners for the stream video
-      streamVideoElement.oncanplay = startPlaybackAndTransition;
-      streamVideoElement.onplay = () => logger.debug('Video playback started');
-
-      streamVideoElement.onerror = (e) => {
-        logger.error('Error loading stream video:', e);
-        isCurrentlyStreaming = false;
-      };
-
-      // Start loading the video
-      if (playResponseData.result_url) {
-        streamVideoElement.src = playResponseData.result_url;
-      } else {
-        logger.error('No result_url in playResponseData');
-        return;
-      }
-
-      // Set a timeout in case the video takes too long to start
-      const videoStartTimeout = setTimeout(() => {
-        if (!playbackStarted) {
-          logger.warn('Video took too long to start, forcing playback');
-          startPlaybackAndTransition();
-        }
-      }, 1500); // Adjust this timeout as needed
-
-      const audioDuration = playResponseData.audio_duration * 1000;
-
-      // Set up a timeout to switch back to the idle video
-      currentStreamTimeout = setTimeout(() => {
-        clearTimeout(videoStartTimeout);
-        isCurrentlyStreaming = false;
-        smoothTransition(false, 250);
-      }, audioDuration + 400); // Added a small buffer
-
+      // ... (rest of the existing function)
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
     }
   } catch (error) {
     logger.error('Error during streaming:', error);
-    if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
-      logger.warn('Stream not found or invalid session. Attempting to reinitialize connection.');
-      await reinitializeConnection();
-    }
+    persistentStream = null;
+    await startStreaming(assistantReply);
   }
 }
+
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
@@ -1732,7 +1756,7 @@ async function startRecording() {
       interim_results: true,
       utterance_end_ms: 1000,
       punctuate: true,
-      // endpointing: 300,
+      endpointing: 300,
       vad_events: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate
@@ -1895,6 +1919,10 @@ async function sendChatToGroq() {
     msgHistory.appendChild(assistantSpan);
     msgHistory.appendChild(document.createElement('br'));
 
+    // Initialize the streaming response
+    await ensurePersistentStream();
+    let isFirstChunk = true;
+
     while (!done) {
       const { value, done: readerDone } = await reader.read();
       done = readerDone;
@@ -1918,6 +1946,15 @@ async function sendChatToGroq() {
               assistantReply += content;
               assistantSpan.innerHTML += content;
               logger.debug('Parsed content:', content);
+
+              // Send this chunk to D-ID for streaming
+              if (isFirstChunk) {
+                await startStreaming(content);
+                isFirstChunk = false;
+              } else {
+                await sendStreamingChunk(persistentStream.streamId, persistentStream.sessionId, content);
+              }
+
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
@@ -1938,21 +1975,54 @@ async function sendChatToGroq() {
     });
 
     logger.debug('Assistant reply:', assistantReply);
-
-    await startStreaming(assistantReply);
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
     const msgHistory = document.getElementById('msgHistory');
     msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
     msgHistory.scrollTop = msgHistory.scrollHeight;
-  } finally {
-    // await stopRecording();
-    // const startButton = document.getElementById('start-button');
-    // startButton.textContent = 'Speak';
-    // isRecording = false;
-    // autoSpeakInProgress = false;
   }
 }
+
+
+async function sendStreamingChunk(streamId, sessionId, textChunk) {
+  const chunkResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      script: {
+        type: 'text',
+        input: textChunk,
+        provider: {
+          type: 'microsoft',
+          voice_id: avatars[currentAvatar].voiceId,
+        },
+      },
+      config: {
+        stitch: true,
+        fluent: true,
+        pad_audio: 0,
+        normalization_factor: 0.1,
+        align_driver: true,
+        align_expand_factor: 0.3,
+        motion_factor: 0.7,
+        result_format: "mp4",
+        auto_match: true,
+      },
+      session_id: sessionId,
+    }),
+  });
+
+  if (!chunkResponse.ok) {
+    throw new Error(`Failed to send streaming chunk: ${chunkResponse.status} ${chunkResponse.statusText}`);
+  }
+
+  logger.debug('Streaming chunk sent successfully');
+}
+
+
 
 function toggleAutoSpeak() {
   autoSpeakMode = !autoSpeakMode;
