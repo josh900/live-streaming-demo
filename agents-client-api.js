@@ -1,57 +1,4 @@
-'use strict';
-import DID_API from './api.js';
-import logger from './logger.js';
-const { createClient, LiveTranscriptionEvents } = deepgram;
 
-if (DID_API.key == '🤫') alert('Please put your api key inside ./api.js and restart..');
-
-const deepgramClient = createClient(DID_API.deepgramKey);
-
-const RTCPeerConnection = (
-  window.RTCPeerConnection ||
-  window.webkitRTCPeerConnection ||
-  window.mozRTCPeerConnection
-).bind(window);
-
-let peerConnection;
-let streamId;
-let sessionId;
-let sessionClientAnswer;
-let statsIntervalId;
-let videoIsPlaying;
-let lastBytesReceived;
-let chatHistory = [];
-let inactivityTimeout;
-let transcriptionTimer;
-let keepAliveInterval;
-let socket;
-let isInitializing = false;
-let audioContext;
-let streamVideoElement;
-let idleVideoElement;
-let deepgramConnection;
-let isRecording = false;
-let audioWorkletNode;
-let currentUtterance = '';
-let interimMessageAdded = false;
-let autoSpeakMode = true;
-let speakTimeout;
-let transitionCanvas;
-let transitionCtx;
-let transitionAnimationFrame;
-let isDebugMode = false;
-let autoSpeakInProgress = false;
-let reconnectTimeout;
-let isTransitioning = false;
-let lastVideoStatus = null;
-let isPreparing = false;
-let isCurrentlyStreaming = false;
-let currentStreamTimeout;
-let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 5;
-const INITIAL_RECONNECT_DELAY = 1000;
-const MAX_RECONNECT_DELAY = 30000;
-let isReconnecting = false;
 
 
 export function setLogLevel(level) {
@@ -691,6 +638,155 @@ function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
 }
 
+
+
+
+async function initializePersistentStream() {
+  if (persistentStream) {
+    await destroyPersistentStream();
+  }
+
+  try {
+    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        source_url: avatars[currentAvatar].imageUrl,
+        driver_url: "bank://lively/driver-06",
+        config: {
+          stitch: true,
+          fluent: true,
+          auto_match: true,
+          normalization_factor: 0.1,
+          align_driver: true,
+          align_expand_factor: 0.3,
+        }
+      }),
+    });
+
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+    
+    if (!newStreamId || !newSessionId) {
+      throw new Error('Failed to get valid stream ID or session ID from API');
+    }
+
+    streamId = newStreamId;
+    sessionId = newSessionId;
+    logger.info('Persistent stream created:', { streamId, sessionId });
+
+    persistentStream = {
+      streamId,
+      sessionId,
+      peerConnection: await createPeerConnection(offer, iceServers)
+    };
+
+    // Set up keep-alive mechanism
+    keepAliveInterval = setInterval(async () => {
+      try {
+        await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/keepalive`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Basic ${DID_API.key}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ session_id: sessionId }),
+        });
+      } catch (error) {
+        logger.error('Error in keep-alive:', error);
+      }
+    }, 30000); // Send keep-alive every 30 seconds
+
+  } catch (error) {
+    logger.error('Failed to initialize persistent stream:', error);
+    throw error;
+  }
+}
+
+async function destroyPersistentStream() {
+  if (persistentStream) {
+    try {
+      await fetch(`${DID_API.url}/${DID_API.service}/streams/${persistentStream.streamId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ session_id: persistentStream.sessionId }),
+      });
+
+      logger.debug('Persistent stream destroyed successfully');
+    } catch (error) {
+      logger.error('Error destroying persistent stream:', error);
+    } finally {
+      clearInterval(keepAliveInterval);
+      persistentStream.peerConnection.close();
+      persistentStream = null;
+    }
+  }
+}
+
+async function startStreamingResponse(assistantReply) {
+  if (!persistentStream) {
+    logger.error('No persistent stream available. Cannot start streaming.');
+    return;
+  }
+
+  try {
+    const talkResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStream.streamId}/talk`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: assistantReply,
+          provider: {
+            type: 'microsoft',
+            voice_id: avatars[currentAvatar].voiceId,
+          },
+        },
+        config: {
+          fluent: true,
+          pad_audio: 0,
+          driver_expressions: {
+            expressions: [
+              {
+                start_frame: 0,
+                expression: "neutral",
+                intensity: 1
+              }
+            ]
+          }
+        },
+        session_id: persistentStream.sessionId,
+      }),
+    });
+
+    const talkResponseData = await talkResponse.json();
+    logger.debug('Streaming response:', talkResponseData);
+
+    if (talkResponseData.status === 'started') {
+      logger.debug('Stream started successfully');
+      smoothTransition(true);
+    } else {
+      logger.warn('Unexpected response status:', talkResponseData.status);
+    }
+  } catch (error) {
+    logger.error('Error during streaming:', error);
+    if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
+      logger.warn('Stream not found or invalid session. Attempting to reinitialize connection.');
+      await reinitializeConnection();
+    }
+  }
+}
+
+
+
 async function initialize() {
   setLogLevel('INFO');
 
@@ -733,7 +829,7 @@ async function initialize() {
 
   showLoadingSymbol();
   try {
-    await initializeConnection();
+    await initializePersistentStream();
     hideLoadingSymbol();
   } catch (error) {
     logger.error('Error during initialization:', error);
@@ -1857,7 +1953,6 @@ async function sendChatToGroq() {
 
   logger.debug('Sending chat to Groq...');
   try {
-    const startTime = Date.now();
     const currentContext = document.getElementById('context-input').value.trim();
     const requestBody = {
       messages: [
@@ -1871,7 +1966,7 @@ async function sendChatToGroq() {
     };
     logger.debug('Request body:', JSON.stringify(requestBody));
 
-    const response = await fetch('/chat', {
+    const response = await fetch('http://localhost:3001/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1888,6 +1983,7 @@ async function sendChatToGroq() {
     const reader = response.body.getReader();
     let assistantReply = '';
     let done = false;
+    let streamStarted = false;
 
     const msgHistory = document.getElementById('msgHistory');
     const assistantSpan = document.createElement('span');
@@ -1918,6 +2014,14 @@ async function sendChatToGroq() {
               assistantReply += content;
               assistantSpan.innerHTML += content;
               logger.debug('Parsed content:', content);
+
+              // Start streaming as soon as we receive the first chunk of content
+              if (!streamStarted && content.trim().length > 0) {
+                streamStarted = true;
+                startStreamingResponse(assistantReply).catch(error => {
+                  logger.error('Error starting stream:', error);
+                });
+              }
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
@@ -1928,29 +2032,23 @@ async function sendChatToGroq() {
       }
     }
 
-    const endTime = Date.now();
-    const processingTime = endTime - startTime;
-    logger.debug(`Groq processing completed in ${processingTime}ms`);
-
     chatHistory.push({
       role: 'assistant',
       content: assistantReply,
     });
 
-    logger.debug('Assistant reply:', assistantReply);
+    logger.debug('Full assistant reply:', assistantReply);
 
-    await startStreaming(assistantReply);
+    // If streaming hasn't started yet (in case of very short responses), start it now
+    if (!streamStarted) {
+      await startStreamingResponse(assistantReply);
+    }
+
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
     const msgHistory = document.getElementById('msgHistory');
     msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
     msgHistory.scrollTop = msgHistory.scrollHeight;
-  } finally {
-    // await stopRecording();
-    // const startButton = document.getElementById('start-button');
-    // startButton.textContent = 'Speak';
-    // isRecording = false;
-    // autoSpeakInProgress = false;
   }
 }
 
