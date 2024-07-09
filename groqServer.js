@@ -1,4 +1,3 @@
-groqServer.js
 
 import express from 'express';
 import cors from 'cors';
@@ -44,3 +43,5 @@ app.post('/chat', async (req, res) => {
 app.listen(port, () => {
   console.log(`Groq server is running on port ${port}`);
 });
+
+export default app;

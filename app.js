@@ -10,7 +10,7 @@ import multer from 'multer';
 import { createOrUpdateAvatar, getAvatars } from './avatar-manager.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import './groqServer.js';
+import groqServer from './groqServer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -97,3 +97,4 @@ server.listen(port, () => {
   console.log(`http://localhost:${port}`);
   console.log(`http://localhost:${port}/agents`);
 });
+
