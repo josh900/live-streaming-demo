@@ -50,7 +50,7 @@ let isCurrentlyStreaming = false;
 let currentStreamTimeout;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
-const INITIAL_RECONNECT_DELAY = 5000;
+const INITIAL_RECONNECT_DELAY = 1000;
 const MAX_RECONNECT_DELAY = 30000;
 let isReconnecting = false;
 let persistentStream = null;
@@ -68,7 +68,7 @@ const avatarSelect = document.getElementById('avatar-select');
 avatarSelect.addEventListener('change', handleAvatarChange);
 
 const maxRetryCount = 20;
-const maxDelaySec = 15;
+const maxDelaySec = 10;
 
 let context = `
 
