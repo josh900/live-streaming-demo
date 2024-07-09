@@ -52,6 +52,10 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 const INITIAL_RECONNECT_DELAY = 1000;
 const MAX_RECONNECT_DELAY = 30000;
 let isReconnecting = false;
+let persistentStreamId = null;
+let persistentSessionId = null;
+let isPersistentStreamActive = false;
+
 
 
 export function setLogLevel(level) {
@@ -472,8 +476,8 @@ async function handleAvatarChange() {
   msgHistory.innerHTML = '';
   chatHistory = [];
 
-  await destroyConnection();
-  await initializeConnection();
+  await destroyPersistentStream();
+  await initializePersistentStream();
 }
 
 async function destroyConnection() {
@@ -691,6 +695,149 @@ function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
 }
 
+async function initializePersistentStream() {
+  if (persistentStreamId) {
+    logger.warn('Persistent stream already exists. Destroying existing stream before creating a new one.');
+    await destroyPersistentStream();
+  }
+
+  logger.info('Initializing persistent stream...');
+
+  try {
+    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        source_url: avatars[currentAvatar].imageUrl,
+        driver_url: "bank://lively/driver-06",
+        config: {
+          stitch: true,
+          fluent: true,
+          auto_match: true,
+          normalization_factor: 0.1,
+          align_driver: true,
+          align_expand_factor: 0.3,
+          driver_expressions: {
+            expressions: [
+              {
+                start_frame: 0,
+                expression: "neutral",
+                intensity: 1
+              }
+            ]
+          }
+        }
+      }),
+    });
+
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+    
+    persistentStreamId = newStreamId;
+    persistentSessionId = newSessionId;
+    
+    logger.info('Persistent stream created:', { persistentStreamId, persistentSessionId });
+
+    try {
+      sessionClientAnswer = await createPeerConnection(offer, iceServers);
+    } catch (e) {
+      logger.error('Error during streaming setup:', e);
+      stopAllStreams();
+      closePC();
+      throw e;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/sdp`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        answer: sessionClientAnswer,
+        session_id: persistentSessionId,
+      }),
+    });
+
+    if (!sdpResponse.ok) {
+      throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
+    }
+
+    isPersistentStreamActive = true;
+    startKeepAlive();
+    logger.info('Persistent stream initialized successfully');
+  } catch (error) {
+    logger.error('Failed to initialize persistent stream:', error);
+    throw error;
+  }
+}
+
+function startKeepAlive() {
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval);
+  }
+  keepAliveInterval = setInterval(async () => {
+    if (isPersistentStreamActive) {
+      try {
+        const response = await fetch(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/keepalive`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Basic ${DID_API.key}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ session_id: persistentSessionId }),
+        });
+        if (!response.ok) {
+          throw new Error(`Keepalive failed: ${response.status} ${response.statusText}`);
+        }
+        logger.debug('Keepalive sent successfully');
+      } catch (error) {
+        logger.error('Error sending keepalive:', error);
+        await reinitializePersistentStream();
+      }
+    }
+  }, 30000); // Send keepalive every 30 seconds
+}
+
+async function destroyPersistentStream() {
+  if (persistentStreamId) {
+    try {
+      await fetch(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ session_id: persistentSessionId }),
+      });
+
+      logger.debug('Persistent stream destroyed successfully');
+    } catch (error) {
+      logger.error('Error destroying persistent stream:', error);
+    } finally {
+      stopAllStreams();
+      closePC();
+      persistentStreamId = null;
+      persistentSessionId = null;
+      isPersistentStreamActive = false;
+      if (keepAliveInterval) {
+        clearInterval(keepAliveInterval);
+      }
+    }
+  }
+}
+
+async function reinitializePersistentStream() {
+  logger.info('Reinitializing persistent stream...');
+  await destroyPersistentStream();
+  await initializePersistentStream();
+}
+
+
 async function initialize() {
   setLogLevel('INFO');
 
@@ -733,7 +880,7 @@ async function initialize() {
 
   showLoadingSymbol();
   try {
-    await initializeConnection();
+    await initializePersistentStream();
     hideLoadingSymbol();
   } catch (error) {
     logger.error('Error during initialization:', error);
@@ -741,6 +888,43 @@ async function initialize() {
     showErrorMessage('Failed to connect. Please try again.');
   }
 }
+
+async function handleAvatarChange() {
+  currentAvatar = avatarSelect.value;
+  if (currentAvatar === 'create-new') {
+    openAvatarModal();
+    return;
+  }
+
+  const idleVideoElement = document.getElementById('idle-video-element');
+  if (idleVideoElement) {
+    idleVideoElement.src = avatars[currentAvatar].silentVideoUrl;
+    try {
+      await idleVideoElement.load();
+      logger.debug(`Idle video loaded for ${currentAvatar}`);
+    } catch (error) {
+      logger.error(`Error loading idle video for ${currentAvatar}:`, error);
+    }
+  }
+
+  const streamVideoElement = document.getElementById('stream-video-element');
+  if (streamVideoElement) {
+    streamVideoElement.srcObject = null;
+  }
+
+  await stopRecording();
+  currentUtterance = '';
+  interimMessageAdded = false;
+  const msgHistory = document.getElementById('msgHistory');
+  msgHistory.innerHTML = '';
+  chatHistory = [];
+
+  await destroyPersistentStream();
+  await initializePersistentStream();
+}
+
+
+
 
 async function loadAvatars() {
   try {
@@ -954,7 +1138,11 @@ function showErrorMessage(message) {
 
   const destroyButton = document.getElementById('destroy-button');
   const connectButton = document.getElementById('connect-button');
+  connectButton.onclick = initializePersistentStream;
+
   if (destroyButton) destroyButton.style.display = 'inline-block';
+  destroyButton.onclick = destroyPersistentStream;
+
   if (connectButton) connectButton.style.display = 'inline-block';
 }
 
@@ -1424,9 +1612,9 @@ async function initializeConnection() {
 async function startStreaming(assistantReply) {
   try {
     logger.debug('Starting streaming with reply:', assistantReply);
-    if (!streamId || !sessionId) {
-      logger.error('Stream ID or Session ID is missing. Cannot start streaming.');
-      return;
+    if (!persistentStreamId || !persistentSessionId) {
+      logger.error('Persistent stream not initialized. Cannot start streaming.');
+      await initializePersistentStream();
     }
 
     if (!currentAvatar || !avatars[currentAvatar]) {
@@ -1439,7 +1627,7 @@ async function startStreaming(assistantReply) {
       clearTimeout(currentStreamTimeout);
     }
 
-    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -1452,34 +1640,18 @@ async function startStreaming(assistantReply) {
           provider: {
             type: 'microsoft',
             voice_id: avatars[currentAvatar].voiceId,
-            voice_config: {
-              rate: 'medium'
-            }
           },
-          ssml: "false",
         },
         config: {
-          stitch: true,
           fluent: true,
           pad_audio: 0,
-          normalization_factor: 0.1,
           align_driver: true,
           align_expand_factor: 0.3,
           motion_factor: 0.7,
           result_format: "mp4",
-          auto_match: true,
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: "neutral",
-                intensity: 1
-              }
-            ]
-          }
         },
-        session_id: sessionId,
-        audio_optimization: 0
+        session_id: persistentSessionId,
+        driver_url: "bank://lively/driver-06",
       }),
     });
 
@@ -1548,7 +1720,7 @@ async function startStreaming(assistantReply) {
           logger.warn('Video took too long to start, forcing playback');
           startPlaybackAndTransition();
         }
-      }, 1500); // Adjust this timeout as needed
+      }, 1500);
 
       const audioDuration = playResponseData.audio_duration * 1000;
 
@@ -1557,7 +1729,7 @@ async function startStreaming(assistantReply) {
         clearTimeout(videoStartTimeout);
         isCurrentlyStreaming = false;
         smoothTransition(false, 250);
-      }, audioDuration + 400); // Added a small buffer
+      }, audioDuration + 400);
 
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
@@ -1565,8 +1737,8 @@ async function startStreaming(assistantReply) {
   } catch (error) {
     logger.error('Error during streaming:', error);
     if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
-      logger.warn('Stream not found or invalid session. Attempting to reinitialize connection.');
-      await reinitializeConnection();
+      logger.warn('Stream not found or invalid session. Attempting to reinitialize persistent stream.');
+      await reinitializePersistentStream();
     }
   }
 }
@@ -1895,6 +2067,8 @@ async function sendChatToGroq() {
     msgHistory.appendChild(assistantSpan);
     msgHistory.appendChild(document.createElement('br'));
 
+    let isFirstChunk = true;
+
     while (!done) {
       const { value, done: readerDone } = await reader.read();
       done = readerDone;
@@ -1918,6 +2092,12 @@ async function sendChatToGroq() {
               assistantReply += content;
               assistantSpan.innerHTML += content;
               logger.debug('Parsed content:', content);
+
+              if (isFirstChunk && content.trim() !== '') {
+                isFirstChunk = false;
+                // Start streaming with the first non-empty chunk
+                startStreaming(content);
+              }
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
@@ -1939,20 +2119,18 @@ async function sendChatToGroq() {
 
     logger.debug('Assistant reply:', assistantReply);
 
-    await startStreaming(assistantReply);
+    // If streaming hasn't started yet (e.g., all chunks were empty), start it now
+    if (isFirstChunk) {
+      startStreaming(assistantReply);
+    }
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
     const msgHistory = document.getElementById('msgHistory');
     msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
     msgHistory.scrollTop = msgHistory.scrollHeight;
-  } finally {
-    // await stopRecording();
-    // const startButton = document.getElementById('start-button');
-    // startButton.textContent = 'Speak';
-    // isRecording = false;
-    // autoSpeakInProgress = false;
   }
 }
+
 
 function toggleAutoSpeak() {
   autoSpeakMode = !autoSpeakMode;
@@ -2089,4 +2267,6 @@ export {
   updateContext,
   handleTextInput,
   toggleAutoSpeak,
+  initializePersistentStream,
+  destroyPersistentStream,
 };
