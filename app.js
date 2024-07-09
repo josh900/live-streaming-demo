@@ -1,14 +1,14 @@
-// app.js
-
 import express from 'express';
 import http from 'http';
 import { WebSocketServer } from 'ws';
 import cors from 'cors';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 import compression from 'compression';
 import multer from 'multer';
 import { createOrUpdateAvatar, getAvatars } from './avatar-manager.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import './groqServer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -37,6 +37,11 @@ app.get('/', function(req, res) {
 app.get('/agents', function(req, res) {
   res.sendFile(join(__dirname, 'index-agents.html'));
 });
+
+app.use('/chat', createProxyMiddleware({ 
+  target: 'http://localhost:3001', 
+  changeOrigin: true 
+}));
 
 app.post('/avatar', upload.single('image'), async (req, res) => {
   try {
@@ -78,7 +83,6 @@ wss.on('connection', (ws) => {
 
   ws.on('message', (message) => {
     console.log('Received message:', message);
-    // Handle incoming WebSocket messages here
   });
 
   ws.on('close', () => {

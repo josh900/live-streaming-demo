@@ -1,5 +1,3 @@
-// groqServer.js
-
 import express from 'express';
 import cors from 'cors';
 import Groq from 'groq-sdk';
@@ -16,14 +14,6 @@ app.use(express.json());
 app.post('/chat', async (req, res) => {
   const { messages, model } = req.body;
 
-  if (!messages || !Array.isArray(messages) || messages.length === 0) {
-    return res.status(400).json({ error: 'Invalid or missing messages array' });
-  }
-
-  if (!model) {
-    return res.status(400).json({ error: 'Model not specified' });
-  }
-
   try {
     const completion = await groq.chat.completions.create({
       messages,
@@ -34,7 +24,7 @@ app.post('/chat', async (req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
+      Connection: 'keep-alive',
     });
 
     for await (const chunk of completion) {
@@ -44,19 +34,9 @@ app.post('/chat', async (req, res) => {
     res.write(`data: [DONE]\n\n`);
     res.end();
   } catch (error) {
-    console.error('Error in Groq API call:', error);
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'An error occurred while processing your request' });
-    } else {
-      res.write(`data: ${JSON.stringify({ error: 'An error occurred during streaming' })}\n\n`);
-      res.end();
-    }
+    console.error('Error:', error);
+    res.status(500).json({ error: 'An error occurred' });
   }
-});
-
-app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err);
-  res.status(500).json({ error: 'An unexpected error occurred' });
 });
 
 app.listen(port, () => {
