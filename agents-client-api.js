@@ -55,6 +55,7 @@ let isReconnecting = false;
 let persistentStreamId = null;
 let persistentSessionId = null;
 let isPersistentStreamActive = false;
+let keepAliveFailureCount = 0;
 
 
 
@@ -700,10 +701,10 @@ async function initializePersistentStream() {
     });
 
     const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
-    
+
     persistentStreamId = newStreamId;
     persistentSessionId = newSessionId;
-    
+
     logger.info('Persistent stream created:', { persistentStreamId, persistentSessionId });
 
     try {
@@ -764,11 +765,16 @@ function startKeepAlive() {
         logger.debug('Keepalive sent successfully');
       } catch (error) {
         logger.error('Error sending keepalive:', error);
-        await reinitializePersistentStream();
+        // Only reinitialize if we've failed multiple times
+        if (++keepAliveFailureCount >= 3) {
+          await reinitializePersistentStream();
+          keepAliveFailureCount = 0;
+        }
       }
     }
-  }, 30000); // Send keepalive every 30 seconds
+  }, 60000); // Send keepalive every 60 seconds instead of 30
 }
+
 
 async function destroyPersistentStream() {
   if (persistentStreamId) {
@@ -1531,7 +1537,7 @@ async function initializeConnection() {
     });
 
     const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
-    
+
     if (!newStreamId || !newSessionId) {
       throw new Error('Failed to get valid stream ID or session ID from API');
     }
@@ -1594,8 +1600,8 @@ async function startStreaming(assistantReply) {
       clearTimeout(currentStreamTimeout);
     }
 
-    // Split the reply into chunks of about 100 characters, breaking at spaces
-    const chunks = assistantReply.match(/[\s\S]{1,100}(?:\s|$)/g) || [];
+    // Split the reply into chunks of about 150 characters, breaking at spaces
+    const chunks = assistantReply.match(/[\s\S]{1,150}(?:\s|$)/g) || [];
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i].trim();
@@ -1617,7 +1623,6 @@ async function startStreaming(assistantReply) {
             },
           },
           config: {
-            stitch: true,
             fluent: true,
             pad_audio: 0,
             align_driver: true,
@@ -1651,23 +1656,31 @@ async function startStreaming(assistantReply) {
         // Start loading the video
         if (playResponseData.result_url) {
           streamVideoElement.src = playResponseData.result_url;
+          logger.debug('Setting video source:', playResponseData.result_url);
+
+          await new Promise((resolve) => {
+            streamVideoElement.onloadedmetadata = async () => {
+              // Add this delay before playing each chunk
+              await new Promise(innerResolve => setTimeout(innerResolve, 500));
+              streamVideoElement.play().then(resolve).catch(e => {
+                logger.error('Error playing stream video:', e);
+                resolve();
+              });
+            };
+            streamVideoElement.onerror = (e) => {
+              logger.error('Error loading stream video:', e);
+              resolve();
+            };
+          });
+
+          // Wait for the video to finish playing
+          await new Promise(resolve => {
+            streamVideoElement.onended = resolve;
+          });
         } else {
-          logger.error('No result_url in playResponseData');
+          logger.error('No result_url in playResponseData. Full response:', JSON.stringify(playResponseData));
           continue;
         }
-
-        // Wait for the chunk to finish playing before moving to the next one
-        await new Promise((resolve) => {
-          streamVideoElement.onended = resolve;
-          streamVideoElement.onerror = (e) => {
-            logger.error('Error loading stream video:', e);
-            resolve();
-          };
-          streamVideoElement.play().catch(e => {
-            logger.error('Error playing stream video:', e);
-            resolve();
-          });
-        });
 
         // Small pause between chunks
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -1698,51 +1711,51 @@ export function toggleSimpleMode() {
   const startButton = document.getElementById('start-button');
 
   if (content.style.display !== 'none') {
-      // Entering simple mode
-      content.style.display = 'none';
-      document.body.appendChild(videoWrapper);
-      videoWrapper.style.position = 'fixed';
-      videoWrapper.style.top = '50%';
-      videoWrapper.style.left = '50%';
-      videoWrapper.style.transform = 'translate(-50%, -50%)';
-      simpleModeButton.textContent = 'Exit';
-      simpleModeButton.classList.add('simple-mode');
-      header.style.position = 'fixed';
-      header.style.width = '100%';
-      header.style.zIndex = '1000';
-      
-      // Turn on auto-speak if it's not already on
-      if (autoSpeakToggle.textContent.includes('Off')) {
-          autoSpeakToggle.click();
-      }
-      
-      // Start recording if it's not already recording
-      if (startButton.textContent === 'Speak') {
-          startButton.click();
-      }
+    // Entering simple mode
+    content.style.display = 'none';
+    document.body.appendChild(videoWrapper);
+    videoWrapper.style.position = 'fixed';
+    videoWrapper.style.top = '50%';
+    videoWrapper.style.left = '50%';
+    videoWrapper.style.transform = 'translate(-50%, -50%)';
+    simpleModeButton.textContent = 'Exit';
+    simpleModeButton.classList.add('simple-mode');
+    header.style.position = 'fixed';
+    header.style.width = '100%';
+    header.style.zIndex = '1000';
+
+    // Turn on auto-speak if it's not already on
+    if (autoSpeakToggle.textContent.includes('Off')) {
+      autoSpeakToggle.click();
+    }
+
+    // Start recording if it's not already recording
+    if (startButton.textContent === 'Speak') {
+      startButton.click();
+    }
   } else {
-      // Exiting simple mode
-      content.style.display = 'flex';
-      const leftColumn = document.getElementById('left-column');
-      leftColumn.appendChild(videoWrapper);
-      videoWrapper.style.position = 'relative';
-      videoWrapper.style.top = 'auto';
-      videoWrapper.style.left = 'auto';
-      videoWrapper.style.transform = 'none';
-      simpleModeButton.textContent = 'Simple Mode';
-      simpleModeButton.classList.remove('simple-mode');
-      header.style.position = 'static';
-      header.style.width = 'auto';
-      
-      // Turn off auto-speak
-      if (autoSpeakToggle.textContent.includes('On')) {
-          autoSpeakToggle.click();
-      }
-      
-      // Stop recording
-      if (startButton.textContent === 'Stop') {
-          startButton.click();
-      }
+    // Exiting simple mode
+    content.style.display = 'flex';
+    const leftColumn = document.getElementById('left-column');
+    leftColumn.appendChild(videoWrapper);
+    videoWrapper.style.position = 'relative';
+    videoWrapper.style.top = 'auto';
+    videoWrapper.style.left = 'auto';
+    videoWrapper.style.transform = 'none';
+    simpleModeButton.textContent = 'Simple Mode';
+    simpleModeButton.classList.remove('simple-mode');
+    header.style.position = 'static';
+    header.style.width = 'auto';
+
+    // Turn off auto-speak
+    if (autoSpeakToggle.textContent.includes('On')) {
+      autoSpeakToggle.click();
+    }
+
+    // Stop recording
+    if (startButton.textContent === 'Stop') {
+      startButton.click();
+    }
   }
 }
 
