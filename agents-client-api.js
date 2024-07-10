@@ -472,7 +472,7 @@ async function destroyConnection() {
 }
 
 
-function smoothTransition(toStreaming, duration = 300) {
+function smoothTransition(toStreaming, duration = 1000) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
 
@@ -1572,7 +1572,7 @@ async function startStreaming(assistantReply) {
     let totalDuration = 0;
 
     // Start transition to streaming video immediately
-    smoothTransition(true, 300);  // x second transition
+    smoothTransition(true, 1000);  // x second transition
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i].trim();
