@@ -685,6 +685,7 @@ async function initializePersistentStream() {
           stitch: true,
           fluent: true,
           auto_match: true,
+          pad_audio: 1.0,
           normalization_factor: 0.1,
           align_driver: true,
           align_expand_factor: 0.3,
@@ -813,7 +814,7 @@ async function reinitializePersistentStream() {
 
 
 async function initialize() {
-  setLogLevel('INFO');
+  setLogLevel('DEBUG');
 
   const { idle, stream } = getVideoElements();
   idleVideoElement = idle;
@@ -1032,7 +1033,7 @@ function updateContext(action) {
     } else if (action === 'replace') {
       context = newContext;
     }
-    logger.info('Context updated:', context);
+    logger.debug('Context updated:', context);
     showToast('Context saved successfully');
 
     displayBothContexts(originalContext, context);
@@ -1204,10 +1205,10 @@ function scheduleReconnect() {
 }
 
 async function attemptReconnect() {
-  logger.info('Attempting to reconnect...');
+  logger.debug('Attempting to reconnect...');
   try {
     await reinitializeConnection();
-    logger.info('Reconnection successful');
+    logger.debug('Reconnection successful');
     reconnectAttempts = 0;
   } catch (error) {
     logger.error('Reconnection attempt failed:', error);
@@ -1229,7 +1230,7 @@ function onConnectionStateChange() {
     logger.warn('Peer connection failed or disconnected. Attempting to reconnect...');
     scheduleReconnect();
   } else if (peerConnection.connectionState === 'connected') {
-    logger.info('Peer connection established successfully');
+    logger.debug('Peer connection established successfully');
     reconnectAttempts = 0;
   }
 }
@@ -1521,6 +1522,7 @@ async function initializeConnection() {
           stitch: true,
           fluent: true,
           auto_match: true,
+          pad_audio: 1.0,
           normalization_factor: 0.1,
           align_driver: true,
           align_expand_factor: 0.3,
@@ -1633,8 +1635,9 @@ async function startStreaming(assistantReply) {
             },
           },
           config: {
+            stitch: true,
             fluent: true,
-            pad_audio: 0,
+            pad_audio: 1.0,
             align_driver: true,
             align_expand_factor: 0.3,
             motion_factor: 0.7,
