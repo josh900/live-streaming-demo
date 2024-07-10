@@ -472,7 +472,7 @@ async function destroyConnection() {
 }
 
 
-function smoothTransition(toStreaming, duration = 500) {
+function smoothTransition(toStreaming, duration = 1000) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
 
@@ -492,10 +492,9 @@ function smoothTransition(toStreaming, duration = 500) {
   const startElement = toStreaming ? idleVideoElement : streamVideoElement;
   const endElement = toStreaming ? streamVideoElement : idleVideoElement;
 
-  // Ensure both videos are visible and overlapping
-  startElement.style.display = 'block';
-  endElement.style.display = 'block';
-  
+  startElement.style.opacity = '1';
+  endElement.style.opacity = '0';
+
   let startTime = null;
 
   function animate(currentTime) {
@@ -515,12 +514,6 @@ function smoothTransition(toStreaming, duration = 500) {
       requestAnimationFrame(animate);
     } else {
       isTransitioning = false;
-      // Hide the non-active video
-      if (toStreaming) {
-        idleVideoElement.style.display = 'none';
-      } else {
-        streamVideoElement.style.display = 'none';
-      }
       logger.debug('Smooth transition completed');
     }
   }
@@ -1575,13 +1568,12 @@ async function startStreaming(assistantReply) {
     // Split the reply into chunks of about 150 characters, breaking at spaces
     const chunks = assistantReply.match(/[\s\S]{1,150}(?:\s|$)/g) || [];
 
+    let isFirstChunk = true;
     let totalDuration = 0;
 
-    // Prepare the stream video element
-    streamVideoElement.src = '';
-    streamVideoElement.style.opacity = '0';
+    // Start transition to streaming video immediately
+    smoothTransition(true, 1000);  // x second transition
 
-    // Process all chunks
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i].trim();
       if (chunk.length === 0) continue;
@@ -1623,40 +1615,53 @@ async function startStreaming(assistantReply) {
       const playResponseData = await playResponse.json();
       logger.debug('Streaming response:', playResponseData);
 
-      if (playResponseData.status === 'started' && playResponseData.result_url) {
-        if (i === 0) {
-          streamVideoElement.src = playResponseData.result_url;
-        } else {
-          const existingSrc = streamVideoElement.src.split('#t=')[0];
-          streamVideoElement.src = `${existingSrc},${playResponseData.result_url}`;
-        }
+      if (playResponseData.status === 'started') {
+        logger.debug('Stream chunk started successfully');
 
-        const chunkDuration = await getVideoDuration(playResponseData.result_url);
-        totalDuration += chunkDuration;
+        if (playResponseData.result_url) {
+          if (isFirstChunk) {
+            streamVideoElement.src = playResponseData.result_url;
+            logger.debug('Setting stream video source:', playResponseData.result_url);
 
-        streamVideoElement.src = `${streamVideoElement.src}#t=0,${totalDuration}`;
+            // Preload the video
+            streamVideoElement.load();
 
-        if (i === 0) {
-          // Preload and play the first chunk
-          await new Promise((resolve) => {
+            // Play the video as soon as it's ready
             streamVideoElement.oncanplay = () => {
               streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
-              resolve();
             };
-            streamVideoElement.load();
-          });
 
-          // Start transition to streaming video
-          smoothTransition(true, 500);
+            isFirstChunk = false;
+          } else {
+            // For subsequent chunks, append to the existing source
+            const existingSrc = streamVideoElement.src.split('#t=')[0];  // Remove any existing time fragment
+            streamVideoElement.src = `${existingSrc},${playResponseData.result_url}`;
+          }
+
+          // Calculate and accumulate the duration of each chunk
+          const chunkDuration = await getVideoDuration(playResponseData.result_url);
+          totalDuration += chunkDuration;
+
+          // Update the video end time
+          streamVideoElement.src = `${streamVideoElement.src}#t=0,${totalDuration}`;
+        } else {
+          logger.error('No result_url in playResponseData. Full response:', JSON.stringify(playResponseData));
         }
+      } else {
+        logger.warn('Unexpected response status:', playResponseData.status);
+      }
+
+      // If this is the first chunk, wait a short time to ensure video starts playing
+      if (i === 0) {
+        await new Promise(resolve => setTimeout(resolve, 500));  // Wait 500ms
       }
     }
 
-    // Wait for the total duration of all chunks
+    // Wait for the total duration of all chunks before transitioning back
     await new Promise(resolve => setTimeout(resolve, totalDuration * 1000));
 
     // Switch back to idle video after all chunks have played
-    smoothTransition(false, 500);
+    smoothTransition(false);
 
   } catch (error) {
     logger.error('Error during streaming:', error);
@@ -1666,7 +1671,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
 
 // Helper function to get the duration of a video
 async function getVideoDuration(videoUrl) {
