@@ -472,7 +472,7 @@ async function destroyConnection() {
 }
 
 
-function smoothTransition(toStreaming, duration = 250) {
+function smoothTransition(toStreaming, duration = 300) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
 
@@ -486,14 +486,14 @@ function smoothTransition(toStreaming, duration = 250) {
     return;
   }
 
-  // Don't transition if we're already in the desired state
-  if ((toStreaming && isCurrentlyStreaming) || (!toStreaming && !isCurrentlyStreaming)) {
-    logger.debug('Already in desired state, skipping transition');
-    return;
-  }
-
   isTransitioning = true;
   logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
+
+  const startElement = toStreaming ? idleVideoElement : streamVideoElement;
+  const endElement = toStreaming ? streamVideoElement : idleVideoElement;
+
+  startElement.style.opacity = '1';
+  endElement.style.opacity = '0';
 
   let startTime = null;
 
@@ -502,66 +502,25 @@ function smoothTransition(toStreaming, duration = 250) {
     const elapsed = currentTime - startTime;
     const progress = Math.min(elapsed / duration, 1);
 
-    if (!transitionCtx) {
-      logger.error('Transition context not found');
-      isTransitioning = false;
-      return;
-    }
+    // Use easeInOutCubic for smoother transition
+    const easeProgress = progress < 0.5
+      ? 4 * progress * progress * progress
+      : 1 - Math.pow(-2 * progress + 2, 3) / 2;
 
-    transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
-
-    try {
-      if (toStreaming) {
-        transitionCtx.globalAlpha = 1;
-        transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-
-        transitionCtx.globalAlpha = progress;
-        transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-      } else {
-        transitionCtx.globalAlpha = 1;
-        transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-
-        transitionCtx.globalAlpha = progress;
-        transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-      }
-
-      // Update the opacity of the video elements
-      streamVideoElement.style.opacity = toStreaming ? progress.toString() : (1 - progress).toString();
-      idleVideoElement.style.opacity = toStreaming ? (1 - progress).toString() : progress.toString();
-
-    } catch (error) {
-      logger.error('Error during transition animation:', error);
-      isTransitioning = false;
-      return;
-    }
+    startElement.style.opacity = (1 - easeProgress).toString();
+    endElement.style.opacity = easeProgress.toString();
 
     if (progress < 1) {
-      transitionAnimationFrame = requestAnimationFrame(animate);
+      requestAnimationFrame(animate);
     } else {
-      cancelAnimationFrame(transitionAnimationFrame);
-      transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
-      logger.debug('Smooth transition completed');
       isTransitioning = false;
-      isCurrentlyStreaming = toStreaming;
-
-      // Ensure final state is set correctly
-      if (toStreaming) {
-        streamVideoElement.style.opacity = '1';
-        streamVideoElement.style.display = 'block';
-        idleVideoElement.style.opacity = '0';
-        idleVideoElement.style.display = 'none';
-      } else {
-        streamVideoElement.style.opacity = '0';
-        streamVideoElement.style.display = 'none';
-        idleVideoElement.style.opacity = '1';
-        idleVideoElement.style.display = 'block';
-      }
+      logger.debug('Smooth transition completed');
     }
   }
 
-  cancelAnimationFrame(transitionAnimationFrame);
-  transitionAnimationFrame = requestAnimationFrame(animate);
+  requestAnimationFrame(animate);
 }
+
 
 
 function getVideoElements() {
@@ -1612,6 +1571,9 @@ async function startStreaming(assistantReply) {
     let isFirstChunk = true;
     let totalDuration = 0;
 
+    // Start transition to streaming video immediately
+    smoothTransition(true, 300);  // x second transition
+
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i].trim();
       if (chunk.length === 0) continue;
@@ -1667,8 +1629,6 @@ async function startStreaming(assistantReply) {
             // Play the video as soon as it's ready
             streamVideoElement.oncanplay = () => {
               streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
-              // Start the transition to streaming video when the first chunk is ready to play
-              smoothTransition(true);
             };
 
             isFirstChunk = false;
@@ -1689,6 +1649,11 @@ async function startStreaming(assistantReply) {
         }
       } else {
         logger.warn('Unexpected response status:', playResponseData.status);
+      }
+
+      // If this is the first chunk, wait a short time to ensure video starts playing
+      if (i === 0) {
+        await new Promise(resolve => setTimeout(resolve, 500));  // Wait 500ms
       }
     }
 
