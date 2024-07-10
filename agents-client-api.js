@@ -1607,7 +1607,7 @@ async function startStreaming(assistantReply) {
     }
 
     // Split the reply into chunks of about 150 characters, breaking at spaces
-    const chunks = assistantReply.match(/[\s\S]{1,50}(?:\s|$)/g) || [];
+    const chunks = assistantReply.match(/[\s\S]{1,75}(?:\s|$)/g) || [];
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i].trim();
