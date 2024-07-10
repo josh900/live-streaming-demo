@@ -1623,6 +1623,7 @@ async function startStreaming(assistantReply) {
             },
           },
           config: {
+            stitch: true,
             fluent: true,
             pad_audio: 0,
             align_driver: true,
