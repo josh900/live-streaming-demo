@@ -1612,9 +1612,13 @@ async function startStreaming(assistantReply) {
     // Start the transition to streaming video immediately
     smoothTransition(true);
 
+    let totalDuration = 0;
+
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i].trim();
       if (chunk.length === 0) continue;
+
+      logger.debug(`Processing chunk ${i + 1}/${chunks.length}: "${chunk}"`);
 
       const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
         method: 'POST',
@@ -1654,7 +1658,7 @@ async function startStreaming(assistantReply) {
       logger.debug('Streaming response:', playResponseData);
 
       if (playResponseData.status === 'started') {
-        logger.debug('Stream chunk started successfully');
+        logger.debug(`Stream chunk ${i + 1} started successfully`);
 
         if (playResponseData.result_url) {
           streamVideoElement.src = playResponseData.result_url;
@@ -1676,7 +1680,11 @@ async function startStreaming(assistantReply) {
 
           // Wait for this chunk to finish playing before moving to the next
           await new Promise(resolve => {
-            streamVideoElement.onended = resolve;
+            streamVideoElement.onended = () => {
+              totalDuration += streamVideoElement.duration;
+              logger.debug(`Chunk ${i + 1} finished. Duration: ${streamVideoElement.duration}s. Total duration: ${totalDuration}s`);
+              resolve();
+            };
           });
         } else {
           logger.error('No result_url in playResponseData. Full response:', JSON.stringify(playResponseData));
@@ -1685,6 +1693,11 @@ async function startStreaming(assistantReply) {
         logger.warn('Unexpected response status:', playResponseData.status);
       }
     }
+
+    logger.debug(`All chunks processed. Total duration: ${totalDuration}s`);
+
+    // Add a small delay before transitioning back to idle video
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Switch back to idle video after all chunks have played
     smoothTransition(false);
