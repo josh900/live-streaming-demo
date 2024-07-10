@@ -528,7 +528,27 @@ body {
   background-position: center;
 }
 
+#video-wrapper {
+  position: relative;
+  width: 400px;
+  height: 400px;
+}
 
+#idle-video-element,
+#stream-video-element,
+#preload-video-element {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: opacity 0.25s ease-in-out;
+}
+
+#preload-video-element {
+  display: none;
+}
 
 
 @media (max-width: 1024px) {

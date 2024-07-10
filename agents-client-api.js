@@ -1605,16 +1605,13 @@ async function startStreaming(assistantReply) {
     const chunks = assistantReply.match(/[\s\S]{1,150}(?:\s|$)/g) || [];
 
     const streamVideoElement = document.getElementById('stream-video-element');
+    const preloadVideoElement = document.getElementById('preload-video-element');
     const idleVideoElement = document.getElementById('idle-video-element');
 
-    if (!streamVideoElement || !idleVideoElement) {
+    if (!streamVideoElement || !idleVideoElement || !preloadVideoElement) {
       logger.error('Video elements not found');
       return;
     }
-
-    // Prepare the stream video element
-    streamVideoElement.style.opacity = '0';
-    streamVideoElement.style.display = 'block';
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i].trim();
@@ -1636,7 +1633,6 @@ async function startStreaming(assistantReply) {
             },
           },
           config: {
-            stitch: true,
             fluent: true,
             pad_audio: 0,
             align_driver: true,
@@ -1646,7 +1642,6 @@ async function startStreaming(assistantReply) {
           },
           session_id: persistentSessionId,
           driver_url: "bank://lively/driver-06",
-          stream_warmup: true,
         }),
       });
 
@@ -1661,29 +1656,31 @@ async function startStreaming(assistantReply) {
         logger.debug('Stream chunk started successfully');
 
         if (playResponseData.result_url) {
-          streamVideoElement.src = playResponseData.result_url;
-          logger.debug('Setting video source:', playResponseData.result_url);
+          // Preload the video
+          preloadVideoElement.src = playResponseData.result_url;
+          logger.debug('Setting preload video source:', playResponseData.result_url);
 
           await new Promise((resolve) => {
-            streamVideoElement.onloadedmetadata = async () => {
+            preloadVideoElement.onloadedmetadata = async () => {
+              // Preload the video
+              await preloadVideoElement.play();
+              preloadVideoElement.pause();
+              preloadVideoElement.currentTime = 0;
+
+              // Switch the videos
+              streamVideoElement.src = preloadVideoElement.src;
+              streamVideoElement.currentTime = 0;
+
+              // Fade in the stream video
               streamVideoElement.style.opacity = '1';
               idleVideoElement.style.opacity = '0';
 
-              // Preload the video
+              // Play the stream video
               await streamVideoElement.play();
-              streamVideoElement.pause();
-              streamVideoElement.currentTime = 0;
-
-              // Small delay to ensure the video is visible
-              await new Promise(innerResolve => setTimeout(innerResolve, 100));
-
-              streamVideoElement.play().then(resolve).catch(e => {
-                logger.error('Error playing stream video:', e);
-                resolve();
-              });
+              resolve();
             };
-            streamVideoElement.onerror = (e) => {
-              logger.error('Error loading stream video:', e);
+            preloadVideoElement.onerror = (e) => {
+              logger.error('Error loading preload video:', e);
               resolve();
             };
           });
@@ -1707,7 +1704,6 @@ async function startStreaming(assistantReply) {
     // Switch back to idle video after all chunks have played
     streamVideoElement.style.opacity = '0';
     idleVideoElement.style.opacity = '1';
-    streamVideoElement.style.display = 'none';
 
   } catch (error) {
     logger.error('Error during streaming:', error);
