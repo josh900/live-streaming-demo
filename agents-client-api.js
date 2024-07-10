@@ -492,10 +492,9 @@ function smoothTransition(toStreaming, duration = 500) {
   const startElement = toStreaming ? idleVideoElement : streamVideoElement;
   const endElement = toStreaming ? streamVideoElement : idleVideoElement;
 
-  // Ensure both videos are visible and overlapping
-  startElement.style.display = 'block';
-  endElement.style.display = 'block';
-  
+  startElement.style.opacity = '1';
+  endElement.style.opacity = '0';
+
   let startTime = null;
 
   function animate(currentTime) {
@@ -503,24 +502,13 @@ function smoothTransition(toStreaming, duration = 500) {
     const elapsed = currentTime - startTime;
     const progress = Math.min(elapsed / duration, 1);
 
-    // Use easeInOutCubic for smoother transition
-    const easeProgress = progress < 0.5
-      ? 4 * progress * progress * progress
-      : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-
-    startElement.style.opacity = (1 - easeProgress).toString();
-    endElement.style.opacity = easeProgress.toString();
+    startElement.style.opacity = (1 - progress).toString();
+    endElement.style.opacity = progress.toString();
 
     if (progress < 1) {
       requestAnimationFrame(animate);
     } else {
       isTransitioning = false;
-      // Hide the non-active video
-      if (toStreaming) {
-        idleVideoElement.style.display = 'none';
-      } else {
-        streamVideoElement.style.display = 'none';
-      }
       logger.debug('Smooth transition completed');
     }
   }
