@@ -1607,10 +1607,7 @@ async function startStreaming(assistantReply) {
     }
 
     // Split the reply into chunks of about 150 characters, breaking at spaces
-    const chunks = assistantReply.match(/[\s\S]{1,150}(?:\s|$)/g) || [];
-
-    // Start the transition to streaming video immediately
-    smoothTransition(true);
+    const chunks = assistantReply.match(/[\s\S]{1,125}(?:\s|$)/g) || [];
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i].trim();
@@ -1660,15 +1657,10 @@ async function startStreaming(assistantReply) {
           streamVideoElement.src = playResponseData.result_url;
           logger.debug('Setting stream video source:', playResponseData.result_url);
 
-          // Preload the video
-          streamVideoElement.load();
+          // Start playing immediately
+          streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
 
-          // Play the video as soon as it's ready
-          streamVideoElement.oncanplay = () => {
-            streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
-          };
-
-          // Ensure the streaming video is visible
+          // Fade in the stream video as soon as possible
           requestAnimationFrame(() => {
             streamVideoElement.style.opacity = '1';
             idleVideoElement.style.opacity = '0';
@@ -1687,7 +1679,8 @@ async function startStreaming(assistantReply) {
     }
 
     // Switch back to idle video after all chunks have played
-    smoothTransition(false);
+    streamVideoElement.style.opacity = '0';
+    idleVideoElement.style.opacity = '1';
 
   } catch (error) {
     logger.error('Error during streaming:', error);
@@ -1697,6 +1690,7 @@ async function startStreaming(assistantReply) {
     }
   }
 }
+
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
