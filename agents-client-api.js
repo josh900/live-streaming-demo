@@ -1632,6 +1632,7 @@ async function startStreaming(assistantReply) {
         },
         session_id: persistentSessionId,
         driver_url: "bank://lively/driver-06",
+        stream_warmup: true,
       }),
     });
 
