@@ -1607,10 +1607,12 @@ async function startStreaming(assistantReply) {
     }
 
     // Split the reply into chunks of about 150 characters, breaking at spaces
-    const chunks = assistantReply.match(/[\s\S]{1,50}(?:\s|$)/g) || [];
+    const chunks = assistantReply.match(/[\s\S]{1,150}(?:\s|$)/g) || [];
 
     // Start the transition to streaming video immediately
     smoothTransition(true);
+
+    let isFirstChunk = true;
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i].trim();
@@ -1657,26 +1659,35 @@ async function startStreaming(assistantReply) {
         logger.debug('Stream chunk started successfully');
 
         if (playResponseData.result_url) {
-          streamVideoElement.src = playResponseData.result_url;
-          logger.debug('Setting stream video source:', playResponseData.result_url);
+          if (isFirstChunk) {
+            streamVideoElement.src = playResponseData.result_url;
+            logger.debug('Setting stream video source:', playResponseData.result_url);
 
-          // Preload the video
-          streamVideoElement.load();
+            // Preload the video
+            streamVideoElement.load();
 
-          // Play the video as soon as it's ready
-          streamVideoElement.oncanplay = () => {
-            streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
-          };
+            // Play the video as soon as it's ready
+            streamVideoElement.oncanplay = () => {
+              streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
+            };
 
-          // Ensure the streaming video is visible
-          requestAnimationFrame(() => {
-            streamVideoElement.style.opacity = '1';
-            idleVideoElement.style.opacity = '0';
-          });
+            isFirstChunk = false;
+          }
+
+          // Ensure the streaming video remains visible
+          streamVideoElement.style.opacity = '1';
+          idleVideoElement.style.opacity = '0';
 
           // Wait for this chunk to finish playing before moving to the next
           await new Promise(resolve => {
-            streamVideoElement.onended = resolve;
+            const checkEnded = () => {
+              if (streamVideoElement.ended || streamVideoElement.paused) {
+                resolve();
+              } else {
+                requestAnimationFrame(checkEnded);
+              }
+            };
+            checkEnded();
           });
         } else {
           logger.error('No result_url in playResponseData. Full response:', JSON.stringify(playResponseData));
@@ -1697,7 +1708,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
