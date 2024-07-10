@@ -1606,74 +1606,77 @@ async function startStreaming(assistantReply) {
       return;
     }
 
-    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: assistantReply,
-          provider: {
-            type: 'microsoft',
-            voice_id: avatars[currentAvatar].voiceId,
+    // Split the reply into chunks of about 150 characters, breaking at spaces
+    const chunks = assistantReply.match(/[\s\S]{1,150}(?:\s|$)/g) || [];
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i].trim();
+      if (chunk.length === 0) continue;
+
+      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          script: {
+            type: 'text',
+            input: chunk,
+            provider: {
+              type: 'microsoft',
+              voice_id: avatars[currentAvatar].voiceId,
+            },
           },
-        },
-        config: {
-          fluent: true,
-          stitch: true,
-          pad_audio: 1.0,
-          align_driver: true,
-          align_expand_factor: 0.3,
-          motion_factor: 0.7,
-          result_format: "mp4",
-        },
-        session_id: persistentSessionId,
-        driver_url: "bank://lively/driver-06",
-        stream_warmup: true,
-      }),
-    });
+          config: {
+            fluent: true,
+            pad_audio: 0,
+            align_driver: true,
+            align_expand_factor: 0.3,
+            motion_factor: 0.7,
+            result_format: "mp4",
+          },
+          session_id: persistentSessionId,
+          driver_url: "bank://lively/driver-06",
+        }),
+      });
 
-    if (!playResponse.ok) {
-      throw new Error(`HTTP error! status: ${playResponse.status}`);
-    }
+      if (!playResponse.ok) {
+        throw new Error(`HTTP error! status: ${playResponse.status}`);
+      }
 
-    const playResponseData = await playResponse.json();
-    logger.debug('Streaming response:', playResponseData);
+      const playResponseData = await playResponse.json();
+      logger.debug('Streaming response:', playResponseData);
 
-    if (playResponseData.status === 'started') {
-      logger.debug('Stream started successfully');
+      if (playResponseData.status === 'started') {
+        logger.debug('Stream chunk started successfully');
 
-      if (playResponseData.result_url) {
-        streamVideoElement.src = playResponseData.result_url;
-        logger.debug('Setting stream video source:', playResponseData.result_url);
+        if (playResponseData.result_url) {
+          streamVideoElement.src = playResponseData.result_url;
+          logger.debug('Setting stream video source:', playResponseData.result_url);
 
-        // Start playing immediately
-        streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
+          // Start playing immediately
+          streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
 
-        // Fade in the stream video as soon as it can play
-        streamVideoElement.oncanplay = () => {
-          logger.debug('Stream video can play');
+          // Fade in the stream video as soon as possible
           requestAnimationFrame(() => {
             streamVideoElement.style.opacity = '1';
             idleVideoElement.style.opacity = '0';
           });
-        };
 
-        // Wait for the video to finish playing
-        await new Promise(resolve => {
-          streamVideoElement.onended = resolve;
-        });
+          // Wait for this chunk to finish playing before moving to the next
+          await new Promise(resolve => {
+            streamVideoElement.onended = resolve;
+          });
+        } else {
+          logger.error('No result_url in playResponseData. Full response:', JSON.stringify(playResponseData));
+        }
       } else {
-        logger.error('No result_url in playResponseData. Full response:', JSON.stringify(playResponseData));
+        logger.warn('Unexpected response status:', playResponseData.status);
       }
-    } else {
-      logger.warn('Unexpected response status:', playResponseData.status);
     }
 
-    // Switch back to idle video after playback ends
+    // Switch back to idle video after all chunks have played
     streamVideoElement.style.opacity = '0';
     idleVideoElement.style.opacity = '1';
 
