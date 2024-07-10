@@ -685,7 +685,7 @@ async function initializePersistentStream() {
           stitch: true,
           fluent: true,
           auto_match: true,
-          pad_audio: 1.0,
+          pad_audio: 0.0,
           normalization_factor: 0.1,
           align_driver: true,
           align_expand_factor: 0.3,
@@ -1522,7 +1522,7 @@ async function initializeConnection() {
           stitch: true,
           fluent: true,
           auto_match: true,
-          pad_audio: 1.0,
+          pad_audio: 0.0,
           normalization_factor: 0.1,
           align_driver: true,
           align_expand_factor: 0.3,
@@ -1630,7 +1630,8 @@ async function startStreaming(assistantReply) {
           },
           config: {
             fluent: true,
-            pad_audio: 0,
+            stitch: true,
+            pad_audio: 0.0,
             align_driver: true,
             align_expand_factor: 0.3,
             motion_factor: 0.7,
@@ -1638,6 +1639,7 @@ async function startStreaming(assistantReply) {
           },
           session_id: persistentSessionId,
           driver_url: "bank://lively/driver-06",
+          stream_warmup: true,
         }),
       });
 
