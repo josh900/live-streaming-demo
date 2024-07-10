@@ -443,7 +443,7 @@ function initializeTransitionCanvas() {
   transitionCanvas.style.top = '0';
   transitionCanvas.style.left = '0';
   transitionCanvas.style.zIndex = '3';
-  transitionCanvas.style.borderRadius = '50%';
+  transitionCanvas.style.borderRadius = '13%';
   document.querySelector('#video-wrapper').appendChild(transitionCanvas);
 }
 
