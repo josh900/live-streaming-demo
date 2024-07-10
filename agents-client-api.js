@@ -213,17 +213,17 @@ function smoothTransition(toStreaming, duration = 250) {
       isCurrentlyStreaming = toStreaming;
 
       // Ensure final state is set correctly
-
-      streamVideoElement.style.opacity = '1';
-      streamVideoElement.style.display = 'block';
-      idleVideoElement.style.opacity = '0';
-      idleVideoElement.style.display = 'none';
-
-      streamVideoElement.style.opacity = '0';
-      streamVideoElement.style.display = 'none';
-      idleVideoElement.style.opacity = '1';
-      idleVideoElement.style.display = 'block';
-
+      if (toStreaming) {
+        streamVideoElement.style.opacity = '1';
+        streamVideoElement.style.display = 'block';
+        idleVideoElement.style.opacity = '0';
+        idleVideoElement.style.display = 'none';
+      } else {
+        streamVideoElement.style.opacity = '0';
+        streamVideoElement.style.display = 'none';
+        idleVideoElement.style.opacity = '1';
+        idleVideoElement.style.display = 'block';
+      }
     }
   }
 
