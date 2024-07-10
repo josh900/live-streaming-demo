@@ -1,5 +1,3 @@
-app.js
-
 import express from 'express';
 import http from 'http';
 import { WebSocketServer } from 'ws';
@@ -97,4 +95,3 @@ server.listen(port, () => {
   console.log(`http://localhost:${port}`);
   console.log(`http://localhost:${port}/agents`);
 });
-
