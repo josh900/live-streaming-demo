@@ -734,6 +734,7 @@ async function initializePersistentStream() {
     }
 
     isPersistentStreamActive = true;
+    startKeepAlive();
     logger.info('Persistent stream initialized successfully');
   } catch (error) {
     logger.error('Failed to initialize persistent stream:', error);
@@ -1571,8 +1572,6 @@ async function initializeConnection() {
     throw error;
   } finally {
     isInitializing = false;
-    startKeepAlive();
-
   }
 }
 
