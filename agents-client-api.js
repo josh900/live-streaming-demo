@@ -680,6 +680,7 @@ async function initializePersistentStream() {
       body: JSON.stringify({
         source_url: avatars[currentAvatar].imageUrl,
         driver_url: "bank://lively/driver-06",
+        stream_warmup: true,
         config: {
           stitch: true,
           fluent: true,
@@ -1645,6 +1646,7 @@ async function startStreaming(assistantReply) {
           },
           session_id: persistentSessionId,
           driver_url: "bank://lively/driver-06",
+          stream_warmup: true,
         }),
       });
 
