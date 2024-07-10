@@ -1594,116 +1594,92 @@ async function startStreaming(assistantReply) {
       clearTimeout(currentStreamTimeout);
     }
 
-    // Ensure the input is at least 3 characters long
-    const input = assistantReply.length < 3 ? assistantReply.padEnd(3, '.') : assistantReply;
+    // Split the reply into chunks of about 100 characters, breaking at spaces
+    const chunks = assistantReply.match(/[\s\S]{1,100}(?:\s|$)/g) || [];
 
-    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: input,
-          provider: {
-            type: 'microsoft',
-            voice_id: avatars[currentAvatar].voiceId,
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i].trim();
+      if (chunk.length === 0) continue;
+
+      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          script: {
+            type: 'text',
+            input: chunk,
+            provider: {
+              type: 'microsoft',
+              voice_id: avatars[currentAvatar].voiceId,
+            },
           },
-        },
-        config: {
-          fluent: true,
-          pad_audio: 0,
-          align_driver: true,
-          align_expand_factor: 0.3,
-          motion_factor: 0.7,
-          result_format: "mp4",
-        },
-        session_id: persistentSessionId,
-        driver_url: "bank://lively/driver-06",
-      }),
-    });
+          config: {
+            stitch: true,
+            fluent: true,
+            pad_audio: 0,
+            align_driver: true,
+            align_expand_factor: 0.3,
+            motion_factor: 0.7,
+            result_format: "mp4",
+          },
+          session_id: persistentSessionId,
+          driver_url: "bank://lively/driver-06",
+        }),
+      });
 
-    if (!playResponse.ok) {
-      throw new Error(`HTTP error! status: ${playResponse.status}`);
-    }
-
-    const playResponseData = await playResponse.json();
-    logger.debug('Streaming response:', playResponseData);
-
-    if (playResponseData.status === 'started') {
-      logger.debug('Stream started successfully');
-
-      const streamVideoElement = document.getElementById('stream-video-element');
-      const idleVideoElement = document.getElementById('idle-video-element');
-
-      if (!streamVideoElement || !idleVideoElement) {
-        logger.error('Video elements not found');
-        return;
+      if (!playResponse.ok) {
+        throw new Error(`HTTP error! status: ${playResponse.status}`);
       }
 
-      // Prepare the stream video element
-      streamVideoElement.srcObject = null;
-      streamVideoElement.src = '';
-      streamVideoElement.style.display = 'none';
-      streamVideoElement.style.opacity = '0';
+      const playResponseData = await playResponse.json();
+      logger.debug('Streaming response:', playResponseData);
 
-      let playbackStarted = false;
+      if (playResponseData.status === 'started') {
+        logger.debug('Stream chunk started successfully');
 
-      const startPlaybackAndTransition = () => {
-        if (!playbackStarted) {
-          playbackStarted = true;
-          streamVideoElement.style.display = 'block';
-          streamVideoElement.play().then(() => {
-            if (!isCurrentlyStreaming) {
-              isCurrentlyStreaming = true;
-              smoothTransition(true, 250);
-            }
-          }).catch(e => logger.error('Error playing stream video:', e));
+        const streamVideoElement = document.getElementById('stream-video-element');
+        const idleVideoElement = document.getElementById('idle-video-element');
+
+        if (!streamVideoElement || !idleVideoElement) {
+          logger.error('Video elements not found');
+          return;
         }
-      };
 
-      // Preload the video
-      streamVideoElement.preload = 'auto';
+        // Start loading the video
+        if (playResponseData.result_url) {
+          streamVideoElement.src = playResponseData.result_url;
+        } else {
+          logger.error('No result_url in playResponseData');
+          continue;
+        }
 
-      // Set up event listeners for the stream video
-      streamVideoElement.oncanplay = startPlaybackAndTransition;
-      streamVideoElement.onplay = () => logger.debug('Video playback started');
+        // Wait for the chunk to finish playing before moving to the next one
+        await new Promise((resolve) => {
+          streamVideoElement.onended = resolve;
+          streamVideoElement.onerror = (e) => {
+            logger.error('Error loading stream video:', e);
+            resolve();
+          };
+          streamVideoElement.play().catch(e => {
+            logger.error('Error playing stream video:', e);
+            resolve();
+          });
+        });
 
-      streamVideoElement.onerror = (e) => {
-        logger.error('Error loading stream video:', e);
-        isCurrentlyStreaming = false;
-      };
-
-      // Start loading the video
-      if (playResponseData.result_url) {
-        streamVideoElement.src = playResponseData.result_url;
+        // Small pause between chunks
+        await new Promise(resolve => setTimeout(resolve, 100));
       } else {
-        logger.error('No result_url in playResponseData');
-        return;
+        logger.warn('Unexpected response status:', playResponseData.status);
       }
-
-      // Set a timeout in case the video takes too long to start
-      const videoStartTimeout = setTimeout(() => {
-        if (!playbackStarted) {
-          logger.warn('Video took too long to start, forcing playback');
-          startPlaybackAndTransition();
-        }
-      }, 1500);
-
-      const audioDuration = playResponseData.audio_duration * 1000;
-
-      // Set up a timeout to switch back to the idle video
-      currentStreamTimeout = setTimeout(() => {
-        clearTimeout(videoStartTimeout);
-        isCurrentlyStreaming = false;
-        smoothTransition(false, 250);
-      }, audioDuration + 400);
-
-    } else {
-      logger.warn('Unexpected response status:', playResponseData.status);
     }
+
+    // Switch back to idle video after all chunks have played
+    isCurrentlyStreaming = false;
+    smoothTransition(false, 250);
+
   } catch (error) {
     logger.error('Error during streaming:', error);
     if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
@@ -2037,8 +2013,6 @@ async function sendChatToGroq() {
     msgHistory.appendChild(assistantSpan);
     msgHistory.appendChild(document.createElement('br'));
 
-    let isFirstChunk = true;
-
     while (!done) {
       const { value, done: readerDone } = await reader.read();
       done = readerDone;
@@ -2062,12 +2036,6 @@ async function sendChatToGroq() {
               assistantReply += content;
               assistantSpan.innerHTML += content;
               logger.debug('Parsed content:', content);
-
-              if (isFirstChunk && content.trim() !== '') {
-                isFirstChunk = false;
-                // Start streaming with the first non-empty chunk
-                startStreaming(content);
-              }
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
@@ -2089,10 +2057,9 @@ async function sendChatToGroq() {
 
     logger.debug('Assistant reply:', assistantReply);
 
-    // If streaming hasn't started yet (e.g., all chunks were empty), start it now
-    if (isFirstChunk) {
-      startStreaming(assistantReply);
-    }
+    // Start streaming the entire response
+    await startStreaming(assistantReply);
+
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
     const msgHistory = document.getElementById('msgHistory');
