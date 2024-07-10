@@ -715,7 +715,7 @@ async function initializePersistentStream() {
       throw e;
     }
 
-    await new Promise(resolve => setTimeout(resolve, 6000));
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/sdp`, {
       method: 'POST',
@@ -741,6 +741,7 @@ async function initializePersistentStream() {
     throw error;
   }
 }
+
 
 function startKeepAlive() {
   if (keepAliveInterval) {
@@ -1149,7 +1150,7 @@ function onIceCandidate(event) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
     logger.debug('New ICE candidate:', candidate);
 
-    fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
+    fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/ice`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -1159,7 +1160,7 @@ function onIceCandidate(event) {
         candidate,
         sdpMid,
         sdpMLineIndex,
-        session_id: sessionId,
+        session_id: persistentSessionId,
       }),
     }).catch(error => {
       logger.error('Error sending ICE candidate:', error);
@@ -1593,6 +1594,9 @@ async function startStreaming(assistantReply) {
       clearTimeout(currentStreamTimeout);
     }
 
+    // Ensure the input is at least 3 characters long
+    const input = assistantReply.length < 3 ? assistantReply.padEnd(3, '.') : assistantReply;
+
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
       method: 'POST',
       headers: {
@@ -1602,7 +1606,7 @@ async function startStreaming(assistantReply) {
       body: JSON.stringify({
         script: {
           type: 'text',
-          input: assistantReply,
+          input: input,
           provider: {
             type: 'microsoft',
             voice_id: avatars[currentAvatar].voiceId,
