@@ -1400,7 +1400,7 @@ function onTrack(event) {
   }
 
   if (isDebugMode) {
-    downloadStreamVideo(event.streams[0]);
+    // downloadStreamVideo(event.streams[0]);
   }
 }
 
