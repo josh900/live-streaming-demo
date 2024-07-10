@@ -1598,113 +1598,80 @@ async function startStreaming(assistantReply) {
       return;
     }
 
-    // Clear any existing timeout
-    if (currentStreamTimeout) {
-      clearTimeout(currentStreamTimeout);
-    }
-
-    // Split the reply into chunks of about 150 characters, breaking at spaces
-    const chunks = assistantReply.match(/[\s\S]{1,150}(?:\s|$)/g) || [];
-
     const streamVideoElement = document.getElementById('stream-video-element');
-    const preloadVideoElement = document.getElementById('preload-video-element');
     const idleVideoElement = document.getElementById('idle-video-element');
 
-    if (!streamVideoElement || !idleVideoElement || !preloadVideoElement) {
+    if (!streamVideoElement || !idleVideoElement) {
       logger.error('Video elements not found');
       return;
     }
 
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i].trim();
-      if (chunk.length === 0) continue;
-
-      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${DID_API.key}`,
-          'Content-Type': 'application/json',
+    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: assistantReply,
+          provider: {
+            type: 'microsoft',
+            voice_id: avatars[currentAvatar].voiceId,
+          },
         },
-        body: JSON.stringify({
-          script: {
-            type: 'text',
-            input: chunk,
-            provider: {
-              type: 'microsoft',
-              voice_id: avatars[currentAvatar].voiceId,
-            },
-          },
-          config: {
-            stitch: true,
-            fluent: true,
-            pad_audio: 1.0,
-            align_driver: true,
-            align_expand_factor: 0.3,
-            motion_factor: 0.7,
-            result_format: "mp4",
-          },
-          session_id: persistentSessionId,
-          driver_url: "bank://lively/driver-06",
-        }),
-      });
+        config: {
+          fluent: true,
+          pad_audio: 0,
+          align_driver: true,
+          align_expand_factor: 0.3,
+          motion_factor: 0.7,
+          result_format: "mp4",
+        },
+        session_id: persistentSessionId,
+        driver_url: "bank://lively/driver-06",
+      }),
+    });
 
-      if (!playResponse.ok) {
-        throw new Error(`HTTP error! status: ${playResponse.status}`);
-      }
-
-      const playResponseData = await playResponse.json();
-      logger.debug('Streaming response:', playResponseData);
-
-      if (playResponseData.status === 'started') {
-        logger.debug('Stream chunk started successfully');
-
-        if (playResponseData.result_url) {
-          // Preload the video
-          preloadVideoElement.src = playResponseData.result_url;
-          logger.debug('Setting preload video source:', playResponseData.result_url);
-
-          await new Promise((resolve) => {
-            preloadVideoElement.onloadedmetadata = async () => {
-              // Preload the video
-              await preloadVideoElement.play();
-              preloadVideoElement.pause();
-              preloadVideoElement.currentTime = 0;
-
-              // Switch the videos
-              streamVideoElement.src = preloadVideoElement.src;
-              streamVideoElement.currentTime = 0;
-
-              // Fade in the stream video
-              streamVideoElement.style.opacity = '1';
-              idleVideoElement.style.opacity = '0';
-
-              // Play the stream video
-              await streamVideoElement.play();
-              resolve();
-            };
-            preloadVideoElement.onerror = (e) => {
-              logger.error('Error loading preload video:', e);
-              resolve();
-            };
-          });
-
-          // Wait for the video to finish playing
-          await new Promise(resolve => {
-            streamVideoElement.onended = resolve;
-          });
-        } else {
-          logger.error('No result_url in playResponseData. Full response:', JSON.stringify(playResponseData));
-          continue;
-        }
-
-        // Small pause between chunks
-        await new Promise(resolve => setTimeout(resolve, 100));
-      } else {
-        logger.warn('Unexpected response status:', playResponseData.status);
-      }
+    if (!playResponse.ok) {
+      throw new Error(`HTTP error! status: ${playResponse.status}`);
     }
 
-    // Switch back to idle video after all chunks have played
+    const playResponseData = await playResponse.json();
+    logger.debug('Streaming response:', playResponseData);
+
+    if (playResponseData.status === 'started') {
+      logger.debug('Stream started successfully');
+
+      if (playResponseData.result_url) {
+        streamVideoElement.src = playResponseData.result_url;
+        logger.debug('Setting stream video source:', playResponseData.result_url);
+
+        // Start playing immediately
+        streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
+
+        // Fade in the stream video as soon as it can play
+        streamVideoElement.oncanplay = () => {
+          logger.debug('Stream video can play');
+          requestAnimationFrame(() => {
+            streamVideoElement.style.opacity = '1';
+            idleVideoElement.style.opacity = '0';
+          });
+        };
+
+        // Wait for the video to finish playing
+        await new Promise(resolve => {
+          streamVideoElement.onended = resolve;
+        });
+      } else {
+        logger.error('No result_url in playResponseData. Full response:', JSON.stringify(playResponseData));
+      }
+    } else {
+      logger.warn('Unexpected response status:', playResponseData.status);
+    }
+
+    // Switch back to idle video after playback ends
     streamVideoElement.style.opacity = '0';
     idleVideoElement.style.opacity = '1';
 
@@ -1716,6 +1683,7 @@ async function startStreaming(assistantReply) {
     }
   }
 }
+
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
