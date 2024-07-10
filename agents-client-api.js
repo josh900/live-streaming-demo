@@ -1603,6 +1603,18 @@ async function startStreaming(assistantReply) {
     // Split the reply into chunks of about 150 characters, breaking at spaces
     const chunks = assistantReply.match(/[\s\S]{1,150}(?:\s|$)/g) || [];
 
+    const streamVideoElement = document.getElementById('stream-video-element');
+    const idleVideoElement = document.getElementById('idle-video-element');
+
+    if (!streamVideoElement || !idleVideoElement) {
+      logger.error('Video elements not found');
+      return;
+    }
+
+    // Prepare the stream video element
+    streamVideoElement.style.opacity = '0';
+    streamVideoElement.style.display = 'block';
+
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i].trim();
       if (chunk.length === 0) continue;
@@ -1623,7 +1635,6 @@ async function startStreaming(assistantReply) {
             },
           },
           config: {
-            stitch: true,
             fluent: true,
             pad_audio: 0,
             align_driver: true,
@@ -1646,23 +1657,23 @@ async function startStreaming(assistantReply) {
       if (playResponseData.status === 'started') {
         logger.debug('Stream chunk started successfully');
 
-        const streamVideoElement = document.getElementById('stream-video-element');
-        const idleVideoElement = document.getElementById('idle-video-element');
-
-        if (!streamVideoElement || !idleVideoElement) {
-          logger.error('Video elements not found');
-          return;
-        }
-
-        // Start loading the video
         if (playResponseData.result_url) {
           streamVideoElement.src = playResponseData.result_url;
           logger.debug('Setting video source:', playResponseData.result_url);
 
           await new Promise((resolve) => {
             streamVideoElement.onloadedmetadata = async () => {
-              // Add this delay before playing each chunk
-              await new Promise(innerResolve => setTimeout(innerResolve, 500));
+              streamVideoElement.style.opacity = '1';
+              idleVideoElement.style.opacity = '0';
+
+              // Preload the video
+              await streamVideoElement.play();
+              streamVideoElement.pause();
+              streamVideoElement.currentTime = 0;
+
+              // Small delay to ensure the video is visible
+              await new Promise(innerResolve => setTimeout(innerResolve, 100));
+
               streamVideoElement.play().then(resolve).catch(e => {
                 logger.error('Error playing stream video:', e);
                 resolve();
@@ -1691,8 +1702,9 @@ async function startStreaming(assistantReply) {
     }
 
     // Switch back to idle video after all chunks have played
-    isCurrentlyStreaming = false;
-    smoothTransition(false, 250);
+    streamVideoElement.style.opacity = '0';
+    idleVideoElement.style.opacity = '1';
+    streamVideoElement.style.display = 'none';
 
   } catch (error) {
     logger.error('Error during streaming:', error);
