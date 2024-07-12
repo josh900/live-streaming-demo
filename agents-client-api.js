@@ -517,8 +517,6 @@ async function initialize() {
 
   await loadAvatars();
   populateAvatarSelect();
-  preloadAvatarVideos();
-
 
   const contextInput = document.getElementById('context-input');
   contextInput.value = context.trim();
@@ -566,7 +564,6 @@ async function handleAvatarChange() {
   const idleVideoElement = document.getElementById('idle-video-element');
   if (idleVideoElement) {
     idleVideoElement.src = avatars[currentAvatar].silentVideoUrl;
-    idleVideoElement.load(); // Force reload
     try {
       await idleVideoElement.load();
       logger.debug(`Idle video loaded for ${currentAvatar}`);
@@ -1133,28 +1130,23 @@ function playIdleVideo() {
 
   if (!currentAvatar || !avatars[currentAvatar]) {
     logger.warn(`No avatar selected or avatar ${currentAvatar} not found. Using default idle video.`);
-    idleVideoElement.src = 'https://skoop-general.s3.amazonaws.com/default-idle-video.mp4';
+    idleVideoElement.src = 'path/to/default/idle/video.mp4'; // Replace with your default video path
   } else {
     idleVideoElement.src = avatars[currentAvatar].silentVideoUrl;
   }
 
-  idleVideoElement.load(); // Force reload
   idleVideoElement.loop = true;
+
+  idleVideoElement.onloadeddata = () => {
+    logger.debug(`Idle video loaded successfully for ${currentAvatar || 'default'}`);
+  };
+
+  idleVideoElement.onerror = (e) => {
+    logger.error(`Error loading idle video for ${currentAvatar || 'default'}:`, e);
+  };
 
   idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e));
 }
-
-
-function preloadAvatarVideos() {
-  Object.values(avatars).forEach(avatar => {
-    const link = document.createElement('link');
-    link.rel = 'preload';
-    link.href = avatar.silentVideoUrl;
-    link.as = 'video';
-    document.head.appendChild(link);
-  });
-}
-
 
 function stopAllStreams() {
   if (streamVideoElement && streamVideoElement.srcObject) {
