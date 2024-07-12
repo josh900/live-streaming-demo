@@ -59,6 +59,8 @@ let isPersistentStreamActive = false;
 let keepAliveFailureCount = 0;
 let isStreamReady = false;
 let streamVideoOpacity = 0;
+let isUserSpeaking = false;
+let utteranceEndTimeout;
 
 export function setLogLevel(level) {
   logger.setLogLevel(level);
@@ -1406,6 +1408,57 @@ async function startStreaming(assistantReply) {
   }
 }
 
+async function fetchChunk(chunk) {
+  const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      script: {
+        type: 'text',
+        input: chunk,
+        provider: {
+          type: 'microsoft',
+          voice_id: avatars[currentAvatar].voiceId,
+        },
+      },
+      config: {
+        fluent: true,
+        stitch: true,
+        pad_audio: 0.0,
+        align_driver: true,
+        align_expand_factor: 0.3,
+        motion_factor: 0.7,
+        result_format: "mp4",
+      },
+      session_id: persistentSessionId,
+      driver_url: "bank://lively/driver-06",
+      stream_warmup: true,
+    }),
+  });
+
+
+  function playChunkVideo(videoElement, videoUrl) {
+    return new Promise((resolve) => {
+      videoElement.src = videoUrl;
+      videoElement.oncanplay = () => {
+        videoElement.play().catch(e => logger.error('Error playing stream video:', e));
+      };
+      videoElement.onended = resolve;
+    });
+  }
+
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
   const videoWrapper = document.getElementById('video-wrapper');
@@ -1515,20 +1568,30 @@ function handleTranscription(data) {
     if (transcript.trim()) {
       currentUtterance += transcript + ' ';
       updateTranscript(currentUtterance.trim(), true);
-      chatHistory.push({
-        role: 'user',
-        content: currentUtterance.trim(),
-      });
-      sendChatToGroq();
+      isUserSpeaking = false;
+      clearTimeout(utteranceEndTimeout);
+      utteranceEndTimeout = setTimeout(() => {
+        if (!isUserSpeaking) {
+          sendTranscriptionToGroq(currentUtterance.trim());
+          currentUtterance = '';
+          interimMessageAdded = false;
+        }
+      }, 1500); // Wait 1.5 seconds after the last final transcript before sending to Groq
     }
-    currentUtterance = '';
-    interimMessageAdded = false;
   } else {
     logger.debug('Interim transcript:', transcript);
+    isUserSpeaking = true;
     updateTranscript(currentUtterance + transcript, false);
   }
 }
 
+function sendTranscriptionToGroq(transcription) {
+  chatHistory.push({
+    role: 'user',
+    content: transcription,
+  });
+  sendChatToGroq();
+}
 async function startRecording() {
   if (isRecording) {
     logger.warn('Recording is already in progress. Stopping current recording.');
