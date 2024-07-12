@@ -59,10 +59,6 @@ let isPersistentStreamActive = false;
 let keepAliveFailureCount = 0;
 let isStreamReady = false;
 let streamVideoOpacity = 0;
-let interimTranscript = '';
-let isUtteranceComplete = false;
-
-
 
 export function setLogLevel(level) {
   logger.setLogLevel(level);
@@ -1297,7 +1293,7 @@ async function initializeConnection() {
 }
 
 
-async function startStreaming(assistantReply, isComplete = false) {
+async function startStreaming(assistantReply) {
   try {
     logger.debug('Starting streaming with reply:', assistantReply);
     if (!persistentStreamId || !persistentSessionId) {
@@ -1318,86 +1314,38 @@ async function startStreaming(assistantReply, isComplete = false) {
       return;
     }
 
+    // Split the reply into chunks of about 250 characters, breaking at spaces
+    const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
+
     // Start the transition to streaming video immediately
-    if (!isCurrentlyStreaming) {
-      smoothTransition(true);
-      isCurrentlyStreaming = true;
-    }
+    smoothTransition(true);
 
-    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: assistantReply,
-          provider: {
-            type: 'microsoft',
-            voice_id: avatars[currentAvatar].voiceId,
-          },
-        },
-        config: {
-          fluent: true,
-          stitch: true,
-          pad_audio: 0.0,
-          align_driver: true,
-          align_expand_factor: 0.3,
-          motion_factor: 0.7,
-          result_format: "mp4",
-        },
-        session_id: persistentSessionId,
-        driver_url: "bank://lively/driver-06",
-        stream_warmup: true,
-      }),
-    });
+    let currentChunkPromise = Promise.resolve();
+    let nextChunkPromise = null;
 
-    if (!playResponse.ok) {
-      throw new Error(`HTTP error! status: ${playResponse.status}`);
-    }
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i].trim();
+      if (chunk.length === 0) continue;
 
-    const playResponseData = await playResponse.json();
-    logger.debug('Streaming response:', playResponseData);
-
-    if (playResponseData.status === 'started') {
-      logger.debug('Stream started successfully');
-
-      if (playResponseData.result_url) {
-        streamVideoElement.src = playResponseData.result_url;
-        logger.debug('Setting stream video source:', playResponseData.result_url);
-
-        // Preload the video
-        streamVideoElement.load();
-
-        // Play the video as soon as it's ready
-        streamVideoElement.oncanplay = () => {
-          streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
-        };
-
-        // Ensure the streaming video is visible
-        requestAnimationFrame(() => {
-          streamVideoElement.style.opacity = '1';
-          idleVideoElement.style.opacity = '0';
-        });
-
-        // Wait for this chunk to finish playing
-        await new Promise(resolve => {
-          streamVideoElement.onended = resolve;
-        });
-      } else {
-        logger.error('No result_url in playResponseData. Full response:', JSON.stringify(playResponseData));
+      // Start fetching the next chunk (if there is one) while playing the current chunk
+      if (i < chunks.length - 1) {
+        nextChunkPromise = fetchChunk(chunks[i + 1]);
       }
-    } else {
-      logger.warn('Unexpected response status:', playResponseData.status);
+
+      // Wait for the current chunk to be fetched (if it's not the first one)
+      const chunkData = await currentChunkPromise;
+
+      if (chunkData && chunkData.result_url) {
+        await playChunkVideo(streamVideoElement, chunkData.result_url);
+      }
+
+      // Prepare for the next iteration
+      currentChunkPromise = nextChunkPromise;
+      nextChunkPromise = null;
     }
 
     // Switch back to idle video after all chunks have played
-    if (isComplete) {
-      smoothTransition(false);
-      isCurrentlyStreaming = false;
-    }
+    smoothTransition(false);
 
   } catch (error) {
     logger.error('Error during streaming:', error);
@@ -1585,26 +1533,22 @@ function handleTranscription(data) {
   if (!isRecording) return;
 
   const transcript = data.channel.alternatives[0].transcript;
-  
   if (data.is_final) {
     logger.debug('Final transcript:', transcript);
     if (transcript.trim()) {
       currentUtterance += transcript + ' ';
       updateTranscript(currentUtterance.trim(), true);
-      if (isUtteranceComplete) {
-        chatHistory.push({
-          role: 'user',
-          content: currentUtterance.trim(),
-        });
-        sendChatToGroq();
-        currentUtterance = '';
-        isUtteranceComplete = false;
-      }
+      chatHistory.push({
+        role: 'user',
+        content: currentUtterance.trim(),
+      });
+      sendChatToGroq();
     }
+    currentUtterance = '';
+    interimMessageAdded = false;
   } else {
     logger.debug('Interim transcript:', transcript);
-    interimTranscript = transcript;
-    updateTranscript(currentUtterance + interimTranscript, false);
+    updateTranscript(currentUtterance + transcript, false);
   }
 }
 
@@ -1646,7 +1590,7 @@ async function startRecording() {
       interim_results: true,
       utterance_end_ms: 1000,
       punctuate: true,
-      endpointing: 500,
+      // endpointing: 300,
       vad_events: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate
@@ -1728,7 +1672,6 @@ function handleUtteranceEnd(data) {
   if (!isRecording) return;
 
   logger.debug('Utterance end detected:', data);
-  isUtteranceComplete = true;
   if (currentUtterance.trim()) {
     updateTranscript(currentUtterance.trim(), true);
     chatHistory.push({
@@ -1737,10 +1680,9 @@ function handleUtteranceEnd(data) {
     });
     sendChatToGroq();
     currentUtterance = '';
+    interimMessageAdded = false;
   }
-  interimTranscript = '';
 }
-
 
 async function stopRecording() {
   if (isRecording) {
@@ -1834,11 +1776,6 @@ async function sendChatToGroq() {
               assistantReply += content;
               assistantSpan.innerHTML += content;
               logger.debug('Parsed content:', content);
-
-              // Start streaming as soon as we receive the first chunk
-              if (assistantReply.length > 0 && !isCurrentlyStreaming) {
-                startStreaming(assistantReply);
-              }
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
@@ -1860,8 +1797,8 @@ async function sendChatToGroq() {
 
     logger.debug('Assistant reply:', assistantReply);
 
-    // Ensure we finish streaming the entire response
-    await startStreaming(assistantReply, true);
+    // Start streaming the entire response
+    await startStreaming(assistantReply);
 
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
@@ -1870,7 +1807,6 @@ async function sendChatToGroq() {
     msgHistory.scrollTop = msgHistory.scrollHeight;
   }
 }
-
 
 function toggleAutoSpeak() {
   autoSpeakMode = !autoSpeakMode;
