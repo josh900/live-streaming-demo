@@ -598,67 +598,7 @@ async function loadAvatars() {
   } catch (error) {
     logger.error('Error loading avatars:', error);
     showErrorMessage('Failed to load avatars. Please try again.');
-  }async function startStreaming(assistantReply) {
-    try {
-      logger.debug('Starting streaming with reply:', assistantReply);
-      if (!persistentStreamId || !persistentSessionId) {
-        logger.error('Persistent stream not initialized. Cannot start streaming.');
-        await initializePersistentStream();
-      }
-  
-      if (!currentAvatar || !avatars[currentAvatar]) {
-        logger.error('No avatar selected or avatar not found. Cannot start streaming.');
-        return;
-      }
-  
-      const streamVideoElement = document.getElementById('stream-video-element');
-      const idleVideoElement = document.getElementById('idle-video-element');
-  
-      if (!streamVideoElement || !idleVideoElement) {
-        logger.error('Video elements not found');
-        return;
-      }
-  
-      // Split the reply into chunks of about 250 characters, breaking at spaces
-      const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
-  
-      // Start the transition to streaming video immediately
-      smoothTransition(true);
-  
-      let chunkPromises = [];
-  
-      for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i].trim();
-        if (chunk.length === 0) continue;
-  
-        // Start fetching the next chunk before the current one finishes
-        chunkPromises.push(fetchChunkVideo(chunk, i === chunks.length - 1));
-  
-        // If we have two chunks or it's the last chunk, wait for the first one and play it
-        if (chunkPromises.length === 2 || i === chunks.length - 1) {
-          const chunkData = await chunkPromises.shift();
-          await playChunkVideo(chunkData);
-        }
-      }
-  
-      // Wait for any remaining chunks to finish
-      while (chunkPromises.length > 0) {
-        const chunkData = await chunkPromises.shift();
-        await playChunkVideo(chunkData);
-      }
-  
-      // Switch back to idle video after all chunks have played
-      smoothTransition(false);
-  
-    } catch (error) {
-      logger.error('Error during streaming:', error);
-      if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
-        logger.warn('Stream not found or invalid session. Attempting to reinitialize persistent stream.');
-        await reinitializePersistentStream();
-      }
-    }
   }
-  
 }
 
 function populateAvatarSelect() {
@@ -1374,32 +1314,84 @@ async function startStreaming(assistantReply) {
       return;
     }
 
-    // Split the reply into chunks of about 250 characters, breaking at spaces
-    const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
+    // Split the reply into chunks of about 150 characters, breaking at spaces
+    const chunks = assistantReply.match(/[\s\S]{1,150}(?:\s|$)/g) || [];
 
     // Start the transition to streaming video immediately
     smoothTransition(true);
-
-    let chunkPromises = [];
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i].trim();
       if (chunk.length === 0) continue;
 
-      // Start fetching the next chunk before the current one finishes
-      chunkPromises.push(fetchChunkVideo(chunk, i === chunks.length - 1));
+      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          script: {
+            type: 'text',
+            input: chunk,
+            provider: {
+              type: 'microsoft',
+              voice_id: avatars[currentAvatar].voiceId,
+            },
+          },
+          config: {
+            fluent: true,
+            stitch: true,
+            pad_audio: 0.0,
+            align_driver: true,
+            align_expand_factor: 0.3,
+            motion_factor: 0.7,
+            result_format: "mp4",
+          },
+          session_id: persistentSessionId,
+          driver_url: "bank://lively/driver-06",
+          stream_warmup: true,
+        }),
+      });
 
-      // If we have two chunks or it's the last chunk, wait for the first one and play it
-      if (chunkPromises.length === 2 || i === chunks.length - 1) {
-        const chunkData = await chunkPromises.shift();
-        await playChunkVideo(chunkData);
+      if (!playResponse.ok) {
+        throw new Error(`HTTP error! status: ${playResponse.status}`);
       }
-    }
 
-    // Wait for any remaining chunks to finish
-    while (chunkPromises.length > 0) {
-      const chunkData = await chunkPromises.shift();
-      await playChunkVideo(chunkData);
+      const playResponseData = await playResponse.json();
+      logger.debug('Streaming response:', playResponseData);
+
+      if (playResponseData.status === 'started') {
+        logger.debug('Stream chunk started successfully');
+
+        if (playResponseData.result_url) {
+          streamVideoElement.src = playResponseData.result_url;
+          logger.debug('Setting stream video source:', playResponseData.result_url);
+
+          // Preload the video
+          streamVideoElement.load();
+
+          // Play the video as soon as it's ready
+          streamVideoElement.oncanplay = () => {
+            streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
+          };
+
+          // Ensure the streaming video is visible
+          requestAnimationFrame(() => {
+            streamVideoElement.style.opacity = '1';
+            idleVideoElement.style.opacity = '0';
+          });
+
+          // Wait for this chunk to finish playing before moving to the next
+          await new Promise(resolve => {
+            streamVideoElement.onended = resolve;
+          });
+        } else {
+          logger.error('No result_url in playResponseData. Full response:', JSON.stringify(playResponseData));
+        }
+      } else {
+        logger.warn('Unexpected response status:', playResponseData.status);
+      }
     }
 
     // Switch back to idle video after all chunks have played
@@ -1413,85 +1405,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
-async function fetchChunkVideo(chunk, isLastChunk) {
-  const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      script: {
-        type: 'text',
-        input: chunk,
-        provider: {
-          type: 'microsoft',
-          voice_id: avatars[currentAvatar].voiceId,
-        },
-      },
-      config: {
-        fluent: true,
-        stitch: true,
-        pad_audio: 0.0,
-        align_driver: true,
-        align_expand_factor: 0.3,
-        motion_factor: 0.7,
-        result_format: "mp4",
-      },
-      session_id: persistentSessionId,
-      driver_url: "bank://lively/driver-06",
-      stream_warmup: !isLastChunk, // Only warm up if it's not the last chunk
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
-  }
-
-  return await response.json();
-}
-
-
-async function playChunkVideo(chunkData) {
-  return new Promise((resolve) => {
-    if (chunkData.status === 'started') {
-      logger.debug('Stream chunk started successfully');
-
-      if (chunkData.result_url) {
-        const streamVideoElement = document.getElementById('stream-video-element');
-        streamVideoElement.src = chunkData.result_url;
-        logger.debug('Setting stream video source:', chunkData.result_url);
-
-        // Preload the video
-        streamVideoElement.load();
-
-        // Play the video as soon as it's ready
-        streamVideoElement.oncanplay = () => {
-          streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
-        };
-
-        // Ensure the streaming video is visible
-        requestAnimationFrame(() => {
-          streamVideoElement.style.opacity = '1';
-          document.getElementById('idle-video-element').style.opacity = '0';
-        });
-
-        // Resolve the promise when the video ends
-        streamVideoElement.onended = resolve;
-      } else {
-        logger.error('No result_url in chunkData. Full response:', JSON.stringify(chunkData));
-        resolve();
-      }
-    } else {
-      logger.warn('Unexpected response status:', chunkData.status);
-      resolve();
-    }
-  });
-}
-
-
-
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
