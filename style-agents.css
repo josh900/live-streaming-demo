@@ -336,11 +336,11 @@ body {
   flex: 1;
   display: flex;
   justify-content: space-between;
-  max-width: 1200px;
+  max-widtvh: 1200px;
   margin: 0 5%;
   padding: 20px;
 }
-
+ 
 
 #idle-video-element,
 #stream-video-element
@@ -352,13 +352,14 @@ body {
   height: 100%;
   object-fit: cover;
   transition: opacity 0.1s ease-in-out;
-
+/*
   max-width: 550px;
   max-height: 550px;
   aspect-ratio: 1 / 1;
   margin: 0 auto;
   overflow: hidden;
   border-radius: 13%;
+  */
 
 
 }

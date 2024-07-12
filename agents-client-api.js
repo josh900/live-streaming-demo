@@ -103,24 +103,43 @@ async function prepareForStreaming() {
 }
 
 function initializeTransitionCanvas() {
+  const videoWrapper = document.querySelector('#video-wrapper');
+  const rect = videoWrapper.getBoundingClientRect();
+  const size = Math.min(rect.width, rect.height, 550);
+
   transitionCanvas = document.createElement('canvas');
-  transitionCanvas.width = '100%';
-  transitionCanvas.height = '100%';
+  transitionCanvas.width = size;
+  transitionCanvas.height = size;
   transitionCtx = transitionCanvas.getContext('2d');
-  transitionCanvas.style.position = 'absolute';
-  transitionCanvas.style.top = '0';
-  transitionCanvas.style.left = '0';
-  transitionCanvas.style.zIndex = '3';
-  transitionCanvas.style.borderRadius = '13%';
-  transitionCanvas.style.objectFit = 'cover';
-  transitionCanvas.style.aspectRatio = '1 / 1';
-  transitionCanvas.style.maxHeight = '550px';
-  transitionCanvas.style.maxWidth = '550px';
-  transitionCanvas.style.margin = '0 auto';
-  transitionCanvas.style.overflow = 'hidden';
-  transitionCanvas.style.borderRadius = '13%';
-  document.querySelector('#video-wrapper').appendChild(transitionCanvas);
+
+  Object.assign(transitionCanvas.style, {
+    position: 'absolute',
+    top: '0',
+    left: '0',
+    width: '100%',
+    height: '100%',
+    maxWidth: '550px',
+    maxHeight: '550px',
+    zIndex: '3',
+    borderRadius: '13%',
+    objectFit: 'cover'
+  });
+
+  videoWrapper.appendChild(transitionCanvas);
+
+  window.addEventListener('resize', () => {
+    const videoWrapper = document.querySelector('#video-wrapper');
+    const rect = videoWrapper.getBoundingClientRect();
+    const size = Math.min(rect.width, rect.height, 550);
+  
+    transitionCanvas.width = size;
+    transitionCanvas.height = size;
+  });
+
+
 }
+
+
 
 async function destroyConnection() {
   if (streamId) {
@@ -1295,7 +1314,7 @@ async function startStreaming(assistantReply) {
     }
 
     // Split the reply into chunks of about 150 characters, breaking at spaces
-    const chunks = assistantReply.match(/[\s\S]{1,150}(?:\s|$)/g) || [];
+    const chunks = assistantReply.match(/[\s\S]{1,50}(?:\s|$)/g) || [];
 
     // Start the transition to streaming video immediately
     smoothTransition(true);
