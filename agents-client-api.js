@@ -1646,7 +1646,7 @@ async function startStreaming(assistantReply) {
     }
 
     // Split the reply into chunks of about 150 characters, breaking at spaces
-    const chunks = assistantReply.match(/[\s\S]{1,150}(?:\s|$)/g) || [];
+    const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
 
     // Start the transition to streaming video immediately
     smoothTransition(true);
