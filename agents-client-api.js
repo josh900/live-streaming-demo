@@ -61,6 +61,9 @@ let isStreamReady = false;
 let streamVideoOpacity = 0;
 let interimTranscript = '';
 let isUtteranceComplete = false;
+let utteranceBuffer = '';
+let lastTranscriptionTime = Date.now();
+const UTTERANCE_TIMEOUT = 1500; // 1.5 seconds
 
 
 
@@ -542,6 +545,12 @@ async function initialize() {
   replaceContextButton.addEventListener('click', () => updateContext('replace'));
   autoSpeakToggle.addEventListener('click', toggleAutoSpeak);
   editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatar));
+
+  setInterval(() => {
+    if (Date.now() - lastTranscriptionTime > UTTERANCE_TIMEOUT) {
+      processUtterance();
+    }
+  }, 500);
 
   initializeWebSocket();
   playIdleVideo();
@@ -1296,7 +1305,6 @@ async function initializeConnection() {
   }
 }
 
-
 async function startStreaming(assistantReply, isComplete = false) {
   try {
     logger.debug('Starting streaming with reply:', assistantReply);
@@ -1324,73 +1332,41 @@ async function startStreaming(assistantReply, isComplete = false) {
       isCurrentlyStreaming = true;
     }
 
-    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: assistantReply,
-          provider: {
-            type: 'microsoft',
-            voice_id: avatars[currentAvatar].voiceId,
-          },
-        },
-        config: {
-          fluent: true,
-          stitch: true,
-          pad_audio: 0.0,
-          align_driver: true,
-          align_expand_factor: 0.3,
-          motion_factor: 0.7,
-          result_format: "mp4",
-        },
-        session_id: persistentSessionId,
-        driver_url: "bank://lively/driver-06",
-        stream_warmup: true,
-      }),
-    });
+    // Split the reply into chunks of about 300 characters, breaking at spaces
+    const chunks = assistantReply.match(/[\s\S]{1,300}(?:\s|$)/g) || [];
 
-    if (!playResponse.ok) {
-      throw new Error(`HTTP error! status: ${playResponse.status}`);
-    }
+    let currentChunkPromise = Promise.resolve();
+    let nextChunkPromise = null;
 
-    const playResponseData = await playResponse.json();
-    logger.debug('Streaming response:', playResponseData);
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i].trim();
+      if (chunk.length === 0) continue;
 
-    if (playResponseData.status === 'started') {
-      logger.debug('Stream started successfully');
+      // Start fetching the current chunk
+      currentChunkPromise = fetchChunk(chunk);
 
-      if (playResponseData.result_url) {
-        streamVideoElement.src = playResponseData.result_url;
-        logger.debug('Setting stream video source:', playResponseData.result_url);
-
-        // Preload the video
-        streamVideoElement.load();
-
-        // Play the video as soon as it's ready
-        streamVideoElement.oncanplay = () => {
-          streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
-        };
-
-        // Ensure the streaming video is visible
-        requestAnimationFrame(() => {
-          streamVideoElement.style.opacity = '1';
-          idleVideoElement.style.opacity = '0';
-        });
-
-        // Wait for this chunk to finish playing
-        await new Promise(resolve => {
-          streamVideoElement.onended = resolve;
-        });
+      // If there's a next chunk, start fetching it in parallel
+      if (i < chunks.length - 1) {
+        nextChunkPromise = fetchChunk(chunks[i + 1].trim());
       } else {
-        logger.error('No result_url in playResponseData. Full response:', JSON.stringify(playResponseData));
+        nextChunkPromise = null;
       }
-    } else {
-      logger.warn('Unexpected response status:', playResponseData.status);
+
+      // Wait for the current chunk to be fetched
+      const playResponseData = await currentChunkPromise;
+
+      if (playResponseData && playResponseData.result_url) {
+        try {
+          await playChunkVideo(streamVideoElement, playResponseData.result_url);
+        } catch (error) {
+          logger.error('Error playing chunk video:', error);
+        }
+      } else {
+        logger.error('No result_url in playResponseData or fetch failed.');
+      }
+
+      // Prepare for the next iteration
+      currentChunkPromise = nextChunkPromise;
     }
 
     // Switch back to idle video after all chunks have played
@@ -1585,28 +1561,41 @@ function handleTranscription(data) {
   if (!isRecording) return;
 
   const transcript = data.channel.alternatives[0].transcript;
+  lastTranscriptionTime = Date.now();
   
   if (data.is_final) {
     logger.debug('Final transcript:', transcript);
-    if (transcript.trim()) {
-      currentUtterance += transcript + ' ';
-      updateTranscript(currentUtterance.trim(), true);
-      if (isUtteranceComplete) {
-        chatHistory.push({
-          role: 'user',
-          content: currentUtterance.trim(),
-        });
-        sendChatToGroq();
-        currentUtterance = '';
-        isUtteranceComplete = false;
-      }
-    }
+    utteranceBuffer += transcript + ' ';
+    updateTranscript(utteranceBuffer.trim(), false);
   } else {
     logger.debug('Interim transcript:', transcript);
     interimTranscript = transcript;
-    updateTranscript(currentUtterance + interimTranscript, false);
+    updateTranscript(utteranceBuffer + interimTranscript, false);
+  }
+
+  // Check if it's time to process the utterance
+  if (Date.now() - lastTranscriptionTime > UTTERANCE_TIMEOUT) {
+    processUtterance();
   }
 }
+
+function processUtterance() {
+  if (utteranceBuffer.trim()) {
+    currentUtterance = utteranceBuffer.trim();
+    updateTranscript(currentUtterance, true);
+    chatHistory.push({
+      role: 'user',
+      content: currentUtterance,
+    });
+    if (!isAvatarSpeaking) {
+      sendChatToGroq();
+    }
+    utteranceBuffer = '';
+    interimTranscript = '';
+  }
+}
+
+
 
 async function startRecording() {
   if (isRecording) {
@@ -1728,18 +1717,9 @@ function handleUtteranceEnd(data) {
   if (!isRecording) return;
 
   logger.debug('Utterance end detected:', data);
-  isUtteranceComplete = true;
-  if (currentUtterance.trim()) {
-    updateTranscript(currentUtterance.trim(), true);
-    chatHistory.push({
-      role: 'user',
-      content: currentUtterance.trim(),
-    });
-    sendChatToGroq();
-    currentUtterance = '';
-  }
-  interimTranscript = '';
+  processUtterance();
 }
+
 
 
 async function stopRecording() {
