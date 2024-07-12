@@ -1594,7 +1594,7 @@ function handleTranscription(data) {
     logger.debug('Final transcript:', transcript);
     if (transcript.trim()) {
       currentUtterance += transcript + ' ';
-      updateTranscript(currentUtterance.trim(), false);
+      updateTranscript(currentUtterance.trim() + interimTranscript, false);
       resetSilenceTimer();
     }
   } else {
@@ -1608,6 +1608,7 @@ function handleTranscription(data) {
     isSpeaking = true;
   }
 }
+
 
 
 
