@@ -61,10 +61,6 @@ let isStreamReady = false;
 let streamVideoOpacity = 0;
 let chunkBuffer = [];
 let isPlayingChunk = false;
-let interimTranscript = '';
-let isSpeaking = false;
-let utteranceTimeout;
-
 
 export function setLogLevel(level) {
   logger.setLogLevel(level);
@@ -318,24 +314,25 @@ function initializeWebSocket() {
 
 function updateTranscript(text, isFinal) {
   const msgHistory = document.getElementById('msgHistory');
-  let userMessageSpan = msgHistory.querySelector('span[data-user-message]');
-
-  if (!userMessageSpan) {
-    userMessageSpan = document.createElement('span');
-    userMessageSpan.setAttribute('data-user-message', '');
-    msgHistory.appendChild(userMessageSpan);
-  }
+  let interimSpan = msgHistory.querySelector('span[data-interim]');
 
   if (isFinal) {
-    userMessageSpan.innerHTML = `<u>User:</u> ${text}`;
-    userMessageSpan.style.opacity = '1';
-    msgHistory.appendChild(document.createElement('br'));
+    if (interimSpan) {
+      interimSpan.remove();
+    }
+    msgHistory.innerHTML += `<span><u>User:</u> ${text}</span><br>`;
     logger.debug('Final transcript added to chat history:', text);
+    interimMessageAdded = false;
   } else {
-    userMessageSpan.innerHTML = `<u>User (speaking):</u> ${text}`;
-    userMessageSpan.style.opacity = '0.7';
+    if (text.trim()) {
+      if (!interimMessageAdded) {
+        msgHistory.innerHTML += `<span data-interim style='opacity:0.5'><u>User (interim):</u> ${text}</span><br>`;
+        interimMessageAdded = true;
+      } else if (interimSpan) {
+        interimSpan.innerHTML = `<u>User (interim):</u> ${text}`;
+      }
+    }
   }
-
   msgHistory.scrollTop = msgHistory.scrollHeight;
 }
 
@@ -1579,29 +1576,17 @@ function handleTranscription(data) {
   if (!isRecording) return;
 
   const transcript = data.channel.alternatives[0].transcript;
-  
   if (data.is_final) {
     logger.debug('Final transcript:', transcript);
     if (transcript.trim()) {
       currentUtterance += transcript + ' ';
       updateTranscript(currentUtterance.trim(), true);
     }
-    interimTranscript = '';
-    clearTimeout(utteranceTimeout);
-    utteranceTimeout = setTimeout(handleUtteranceEnd, 1500); // Wait 1.5 seconds of silence before ending utterance
   } else {
     logger.debug('Interim transcript:', transcript);
-    interimTranscript = transcript;
-    updateTranscript(currentUtterance + interimTranscript, false);
-    clearTimeout(utteranceTimeout);
-    utteranceTimeout = setTimeout(handleUtteranceEnd, 1500); // Reset the timeout on new speech
-  }
-
-  if (!isSpeaking && (transcript.trim() || interimTranscript.trim())) {
-    isSpeaking = true;
+    updateTranscript(currentUtterance + transcript, false);
   }
 }
-
 
 
 async function startRecording() {
@@ -1614,8 +1599,7 @@ async function startRecording() {
   logger.debug('Starting recording process...');
 
   currentUtterance = '';
-  interimTranscript = '';
-  isSpeaking = false;
+  interimMessageAdded = false;
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1643,7 +1627,7 @@ async function startRecording() {
       interim_results: true,
       utterance_end_ms: 1000,
       punctuate: true,
-      endpointing: 500,
+      // endpointing: 300,
       vad_events: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate
@@ -1665,6 +1649,11 @@ async function startRecording() {
     deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
       logger.debug('Received transcription:', JSON.stringify(data));
       handleTranscription(data);
+    });
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.UtteranceEnd, (data) => {
+      logger.debug('Utterance end event received:', data);
+      handleUtteranceEnd(data);
     });
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
@@ -1694,7 +1683,6 @@ async function startRecording() {
   }
 }
 
-
 function handleDeepgramError(err) {
   logger.error('Deepgram error:', err);
   isRecording = false;
@@ -1717,24 +1705,21 @@ function handleDeepgramError(err) {
   }
 }
 
-function handleUtteranceEnd() {
-  if (!isRecording || !isSpeaking) return;
+function handleUtteranceEnd(data) {
+  if (!isRecording) return;
 
-  logger.debug('Utterance end detected');
-  if (currentUtterance.trim() || interimTranscript.trim()) {
-    const finalUtterance = (currentUtterance + interimTranscript).trim();
-    updateTranscript(finalUtterance, true);
+  logger.debug('Utterance end detected:', data);
+  if (currentUtterance.trim()) {
+    updateTranscript(currentUtterance.trim(), true);
     chatHistory.push({
       role: 'user',
-      content: finalUtterance,
+      content: currentUtterance.trim(),
     });
     sendChatToGroq();
     currentUtterance = '';
-    interimTranscript = '';
-    isSpeaking = false;
+    interimMessageAdded = false;
   }
 }
-
 
 async function stopRecording() {
   if (isRecording) {
