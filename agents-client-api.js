@@ -517,6 +517,8 @@ async function initialize() {
 
   await loadAvatars();
   populateAvatarSelect();
+  preloadAvatarVideos();
+
 
   const contextInput = document.getElementById('context-input');
   contextInput.value = context.trim();
@@ -564,8 +566,9 @@ async function handleAvatarChange() {
   const idleVideoElement = document.getElementById('idle-video-element');
   if (idleVideoElement) {
     idleVideoElement.src = avatars[currentAvatar].silentVideoUrl;
+    idleVideoElement.load(); // Force reload
     try {
-      await idleVideoElement.load();
+      await idleVideoElement.play();
       logger.debug(`Idle video loaded for ${currentAvatar}`);
     } catch (error) {
       logger.error(`Error loading idle video for ${currentAvatar}:`, error);
@@ -1130,11 +1133,12 @@ function playIdleVideo() {
 
   if (!currentAvatar || !avatars[currentAvatar]) {
     logger.warn(`No avatar selected or avatar ${currentAvatar} not found. Using default idle video.`);
-    idleVideoElement.src = 'path/to/default/idle/video.mp4'; // Replace with your default video path
+    idleVideoElement.src = 'https://skoop-general.s3.amazonaws.com/avatars/Guy5/silent_video.mp4'; // Replace with your default video path
   } else {
     idleVideoElement.src = avatars[currentAvatar].silentVideoUrl;
   }
 
+  idleVideoElement.load(); // Force reload
   idleVideoElement.loop = true;
 
   idleVideoElement.onloadeddata = () => {
@@ -1155,6 +1159,17 @@ function stopAllStreams() {
     streamVideoElement.srcObject = null;
   }
 }
+
+function preloadAvatarVideos() {
+  Object.values(avatars).forEach(avatar => {
+    const link = document.createElement('link');
+    link.rel = 'preload';
+    link.href = avatar.silentVideoUrl;
+    link.as = 'video';
+    document.head.appendChild(link);
+  });
+}
+
 
 function closePC(pc = peerConnection) {
   if (!pc) return;
