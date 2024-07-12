@@ -1,0 +1,8 @@
+{
+    "Brad": {
+      "name": "Brad",
+      "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/test3/image.png",
+      "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/en-US-GuyNeural/silent_video.mp4",
+      "voiceId": "en-US-ChristopherNeural"
+    }
+  }
