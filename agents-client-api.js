@@ -1133,7 +1133,7 @@ function playIdleVideo() {
 
   if (!currentAvatar || !avatars[currentAvatar]) {
     logger.warn(`No avatar selected or avatar ${currentAvatar} not found. Using default idle video.`);
-    idleVideoElement.src = 'https://skoop-general.s3.amazonaws.com/default-idle-video.mp4';
+    idleVideoElement.src = 'https://skoop-general.s3.amazonaws.com/avatars/Guy5/silent_video.mp4';
   } else {
     idleVideoElement.src = avatars[currentAvatar].silentVideoUrl;
   }
