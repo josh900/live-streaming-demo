@@ -146,22 +146,16 @@
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/@deepgram/sdk"></script>
-    htmlCopy<!-- Replace this line -->
-    <script type="module" src="agents-client-api.js"></script>
-    
-    <script src="agents-client-api.js"></script>
-    
-    <script>
-        // Instead of importing functions, use them from the global agentsAPI object
-        document.addEventListener('DOMContentLoaded', function() {
-          agentsAPI.initialize();
-        });
-      
-        // Make closeAvatarModal available globally
-        window.closeAvatarModal = agentsAPI.closeAvatarModal;
-      
-        document.getElementById('simple-mode-button').addEventListener('click', agentsAPI.toggleSimpleMode);
-      </script>
-
+    <script type="module">
+      import { initialize, handleAvatarChange, openAvatarModal, closeAvatarModal, saveAvatar, updateContext, handleTextInput, toggleAutoSpeak } from './agents-client-api.js';
+     
+  
+      // Make closeAvatarModal available globally
+      window.closeAvatarModal = closeAvatarModal;
+  </script>
+  <script type="module">
+    import { toggleSimpleMode } from './agents-client-api.js';
+    document.getElementById('simple-mode-button').addEventListener('click', toggleSimpleMode);
+</script>
   </body>
 </html>

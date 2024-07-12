@@ -60,9 +60,7 @@ let keepAliveFailureCount = 0;
 let isStreamReady = false;
 let streamVideoOpacity = 0;
 let lastTranscriptionTime = Date.now();
-const SPEECH_TIMEOUT = 1000; // 1 seconds of silence to consider speech ended
-
-
+const SPEECH_TIMEOUT = 1000; // 1.5 seconds of silence to consider speech ended
 
 export function setLogLevel(level) {
   logger.setLogLevel(level);
@@ -1549,25 +1547,21 @@ function handleTranscription(data) {
     logger.debug('Final transcript:', transcript);
     if (transcript.trim()) {
       currentUtterance += transcript + ' ';
-      updateTranscript(currentUtterance.trim(), false);
+      updateTranscript(currentUtterance.trim(), true);
     }
   } else {
     logger.debug('Interim transcript:', transcript);
     updateTranscript(currentUtterance + transcript, false);
   }
 
-  // Clear any existing timer
-  clearTimeout(transcriptionTimer);
-  // Set a new timer to check for speech end
-  transcriptionTimer = setTimeout(checkSpeechEnd, SPEECH_TIMEOUT);
+  // Check for speech end after a delay
+  setTimeout(checkSpeechEnd, SPEECH_TIMEOUT);
 }
-
 
 
 function checkSpeechEnd() {
   if (Date.now() - lastTranscriptionTime >= SPEECH_TIMEOUT) {
     if (currentUtterance.trim()) {
-      updateTranscript(currentUtterance.trim(), true);
       chatHistory.push({
         role: 'user',
         content: currentUtterance.trim(),
@@ -1578,7 +1572,6 @@ function checkSpeechEnd() {
     interimMessageAdded = false;
   }
 }
-
 
 
 async function startRecording() {
@@ -1592,7 +1585,6 @@ async function startRecording() {
 
   currentUtterance = '';
   interimMessageAdded = false;
-  lastTranscriptionTime = Date.now();
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1620,6 +1612,7 @@ async function startRecording() {
       interim_results: true,
       utterance_end_ms: 1000,
       punctuate: true,
+      // endpointing: 300,
       vad_events: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate
@@ -1717,8 +1710,6 @@ async function stopRecording() {
   if (isRecording) {
     logger.info('Stopping recording...');
 
-    clearTimeout(transcriptionTimer);  // Clear any pending timers
-
     if (audioContext) {
       await audioContext.close();
       logger.debug('AudioContext closed');
@@ -1727,16 +1718,6 @@ async function stopRecording() {
     if (deepgramConnection) {
       deepgramConnection.finish();
       logger.debug('Deepgram connection finished');
-    }
-
-    // Check if there's any remaining transcription to process
-    if (currentUtterance.trim()) {
-      updateTranscript(currentUtterance.trim(), true);
-      chatHistory.push({
-        role: 'user',
-        content: currentUtterance.trim(),
-      });
-      sendChatToGroq();
     }
 
     isRecording = false;
@@ -1970,8 +1951,7 @@ avatarImageInput.onchange = (event) => {
 };
 
 // Export functions and variables that need to be accessed from other modules
-window.agentsAPI = {
-  setLogLevel,
+export {
   initialize,
   handleAvatarChange,
   openAvatarModal,
@@ -1982,5 +1962,4 @@ window.agentsAPI = {
   toggleAutoSpeak,
   initializePersistentStream,
   destroyPersistentStream,
-  toggleSimpleMode
 };
