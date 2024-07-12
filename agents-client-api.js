@@ -371,7 +371,7 @@ async function initializePersistentStream() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        source_url: imageUrl,
+        source_url: avatars[currentAvatar].imageUrl,
         driver_url: "bank://lively/driver-06",
         stream_warmup: true,
         config: {
@@ -565,7 +565,7 @@ async function handleAvatarChange() {
 
   const idleVideoElement = document.getElementById('idle-video-element');
   if (idleVideoElement) {
-    idleVideoElement.src = silentVideoUrl;
+    idleVideoElement.src = avatars[currentAvatar].silentVideoUrl;
     idleVideoElement.load(); // Force reload
     try {
       await idleVideoElement.load();
@@ -1135,7 +1135,7 @@ function playIdleVideo() {
     logger.warn(`No avatar selected or avatar ${currentAvatar} not found. Using default idle video.`);
     idleVideoElement.src = 'https://skoop-general.s3.amazonaws.com/avatars/Guy5/silent_video.mp4';
   } else {
-    idleVideoElement.src = silentVideoUrl;
+    idleVideoElement.src = avatars[currentAvatar].silentVideoUrl;
   }
 
   idleVideoElement.load(); // Force reload
@@ -1234,7 +1234,7 @@ async function initializeConnection() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        source_url: imageUrl,
+        source_url: avatars[currentAvatar].imageUrl,
         driver_url: "bank://lively/driver-06",
         stream_warmup: true,
         output_resolution: 512,
@@ -1347,7 +1347,7 @@ async function startStreaming(assistantReply) {
             input: chunk,
             provider: {
               type: 'microsoft',
-              voice_id: voiceId,
+              voice_id: avatars[currentAvatar].voiceId,
             },
           },
           config: {
