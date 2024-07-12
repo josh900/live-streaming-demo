@@ -59,6 +59,9 @@ let isPersistentStreamActive = false;
 let keepAliveFailureCount = 0;
 let isStreamReady = false;
 let streamVideoOpacity = 0;
+let isUtteranceInProgress = false;
+let utteranceTimeout;
+
 
 export function setLogLevel(level) {
   logger.setLogLevel(level);
@@ -312,27 +315,29 @@ function initializeWebSocket() {
 
 function updateTranscript(text, isFinal) {
   const msgHistory = document.getElementById('msgHistory');
-  let interimSpan = msgHistory.querySelector('span[data-interim]');
+  let userSpan = msgHistory.querySelector('span[data-user-message]');
+
+  if (!userSpan) {
+    userSpan = document.createElement('span');
+    userSpan.setAttribute('data-user-message', '');
+    msgHistory.appendChild(userSpan);
+  }
 
   if (isFinal) {
-    if (interimSpan) {
-      interimSpan.remove();
-    }
-    msgHistory.innerHTML += `<span><u>User:</u> ${text}</span><br>`;
+    userSpan.innerHTML = `<u>User:</u> ${text}`;
+    userSpan.style.opacity = '1';
+    userSpan.removeAttribute('data-user-message');
+    msgHistory.appendChild(document.createElement('br'));
     logger.debug('Final transcript added to chat history:', text);
-    interimMessageAdded = false;
   } else {
-    if (text.trim()) {
-      if (!interimMessageAdded) {
-        msgHistory.innerHTML += `<span data-interim style='opacity:0.5'><u>User (interim):</u> ${text}</span><br>`;
-        interimMessageAdded = true;
-      } else if (interimSpan) {
-        interimSpan.innerHTML = `<u>User (interim):</u> ${text}`;
-      }
-    }
+    userSpan.innerHTML = `<u>User (interim):</u> ${text}`;
+    userSpan.style.opacity = '0.5';
   }
+
   msgHistory.scrollTop = msgHistory.scrollHeight;
 }
+
+
 
 function handleTextInput(text) {
   if (text.trim() === '') return;
@@ -1528,17 +1533,27 @@ function handleTranscription(data) {
   if (!isRecording) return;
 
   const transcript = data.channel.alternatives[0].transcript;
+  
   if (data.is_final) {
     logger.debug('Final transcript:', transcript);
     if (transcript.trim()) {
       currentUtterance += transcript + ' ';
-      updateTranscript(currentUtterance.trim(), true);
+      updateTranscript(currentUtterance.trim(), false);
     }
+    clearTimeout(utteranceTimeout);
+    utteranceTimeout = setTimeout(() => {
+      if (isUtteranceInProgress) {
+        handleUtteranceEnd();
+      }
+    }, 1500); // Wait 1.5 seconds of silence before considering the utterance complete
   } else {
     logger.debug('Interim transcript:', transcript);
+    isUtteranceInProgress = true;
     updateTranscript(currentUtterance + transcript, false);
+    clearTimeout(utteranceTimeout);
   }
 }
+
 
 
 
@@ -1552,7 +1567,7 @@ async function startRecording() {
   logger.debug('Starting recording process...');
 
   currentUtterance = '';
-  interimMessageAdded = false;
+  isUtteranceInProgress = false;
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1603,11 +1618,6 @@ async function startRecording() {
       handleTranscription(data);
     });
 
-    deepgramConnection.addListener(LiveTranscriptionEvents.UtteranceEnd, (data) => {
-      logger.debug('Utterance end event received:', data);
-      handleUtteranceEnd(data);
-    });
-
     deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
       logger.error('Deepgram error:', err);
       handleDeepgramError(err);
@@ -1635,6 +1645,7 @@ async function startRecording() {
   }
 }
 
+
 function handleDeepgramError(err) {
   logger.error('Deepgram error:', err);
   isRecording = false;
@@ -1657,10 +1668,11 @@ function handleDeepgramError(err) {
   }
 }
 
-function handleUtteranceEnd(data) {
+function handleUtteranceEnd() {
   if (!isRecording) return;
 
-  logger.debug('Utterance end detected:', data);
+  logger.debug('Utterance end detected');
+  isUtteranceInProgress = false;
   if (currentUtterance.trim()) {
     updateTranscript(currentUtterance.trim(), true);
     chatHistory.push({
@@ -1669,7 +1681,6 @@ function handleUtteranceEnd(data) {
     });
     sendChatToGroq();
     currentUtterance = '';
-    interimMessageAdded = false;
   }
 }
 
