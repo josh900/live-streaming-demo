@@ -62,27 +62,7 @@ async function uploadToS3(key, file) {
         Bucket: DID_API.awsConfig.bucketName,
         Key: key,
         Body: file,
-        ContentType: 'image/png',
-        Tagging: 'cache-control=true'
-    });
-
-    try {
-        await s3Client.send(command);
-    } catch (err) {
-        console.error("Error uploading file to S3:", err);
-        throw err;
-    }
-}
-
-async function uploadToS3Vid(key, file) {
-    const command = new PutObjectCommand({
-        Bucket: DID_API.awsConfig.bucketName,
-        Key: key,
-        Body: file,
-        ContentType: 'video/mp4',
-        Tagging: 'cache-control=true'
-
-
+        ContentType: 'image/png'
     });
 
     try {
@@ -177,7 +157,7 @@ async function generateSilentVideo(imageUrl, voiceId, name) {
 
     // Upload to S3
     const s3Key = `avatars/${name}/silent_video.mp4`;
-    await uploadToS3Vid(s3Key, await videoResponse.buffer());
+    await uploadToS3(s3Key, await videoResponse.buffer());
 
     const s3Url = `https://${DID_API.awsConfig.bucketName}.s3.${DID_API.awsConfig.region}.amazonaws.com/${s3Key}`;
     console.log(`Silent video uploaded to S3: ${s3Url}`);
