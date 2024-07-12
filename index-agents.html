@@ -9,6 +9,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@300;400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style-agents.css">
     <link rel="icon" type="image/png" sizes="192x192" href="https://cdn.prod.website-files.com/6316d11d553f411d6f1fa732/6343f55adbb1a12a532f2769_skoop-favicon.png">
+    <link rel="preload" href="https://skoop-general.s3.amazonaws.com/default-idle-video.mp4" as="video" type="video/mp4">
+
     <style>
         body, html {
             margin: 0;
@@ -64,11 +66,9 @@
 
 
             <div id="video-wrapper">
-                <video id="idle-video-element" width="400" height="400" autoplay loop muted></video>
-                <video id="stream-video-element" width="400" height="400" autoplay></video>
+                <video id="idle-video-element" preload="auto" width="400" height="400" autoplay loop muted playsinline></video>                <video id="stream-video-element" width="400" height="400" autoplay></video>
                 <video id="preload-video-element" width="400" height="400" style="display: none;"></video>
                 <div id="logo-wrapper"></div>
-
             </div>
         </div>
 

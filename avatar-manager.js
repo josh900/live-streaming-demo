@@ -1,198 +1,125 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
-import DID_API from './api.js';
-import fetch from 'node-fetch';
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import fs from 'fs/promises';
 import path from 'path';
-import { fileURLToPath } from 'url';
-import { Readable } from 'stream';
 import sharp from 'sharp';
+import { execSync } from 'child_process';
+import { createReadStream } from 'fs';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Initialize the S3 client
+const s3Client = new S3Client({ region: "us-east-1" }); // Replace with your AWS region
 
-const s3Client = new S3Client(DID_API.awsConfig);
+// Path to store avatars locally (temporary storage)
+const AVATARS_DIR = path.join(process.cwd(), 'avatars');
 
-export async function createOrUpdateAvatar(name, imageFile, voiceId) {
-    try {
-        let avatars = await getAvatars();
-        let avatar = avatars[name];
-        const isNewAvatar = !avatar;
-        const isImageChanged = imageFile !== undefined;
+// Ensure the avatars directory exists
+await fs.mkdir(AVATARS_DIR, { recursive: true });
 
-        if (isImageChanged) {
-            // Crop image to 512x512 px using mode "Fill"
-            const croppedImageBuffer = await sharp(imageFile.buffer)
-                .resize(512, 512, { fit: 'cover' })
-                .toBuffer();
-
-            // Upload image to S3
-            const imageKey = `avatars/${name}/image.png`;
-            await uploadToS3(imageKey, croppedImageBuffer);
-            const imageUrl = `https://${DID_API.awsConfig.bucketName}.s3.${DID_API.awsConfig.region}.amazonaws.com/${imageKey}`;
-
-            if (isNewAvatar || avatar.voiceId !== voiceId) {
-                // Generate silent video only if it's a new avatar or voice changed
-                const silentVideoUrl = await generateSilentVideo(imageUrl, voiceId, name);
-                avatar = { name, imageUrl, voiceId, silentVideoUrl };
-            } else {
-                avatar = { ...avatar, imageUrl, voiceId };
-            }
-        } else if (isNewAvatar || (avatar && avatar.voiceId !== voiceId)) {
-            // If only voice changed or it's a new avatar without image
-            const silentVideoUrl = await generateSilentVideo(avatar ? avatar.imageUrl : '', voiceId, name);
-            avatar = { ...(avatar || {}), name, voiceId, silentVideoUrl };
-        } else {
-            // No changes, return existing avatar
-            return avatar;
-        }
-
-        // Save avatar details
-        await saveAvatarDetails(name, avatar);
-
-        console.log(`Avatar created/updated successfully:`, JSON.stringify(avatar));
-        return avatar;
-    } catch (error) {
-        console.error(`Error creating/updating avatar:`, error);
-        throw error;
-    }
-}
-
-async function uploadToS3(key, file) {
-    const command = new PutObjectCommand({
-        Bucket: DID_API.awsConfig.bucketName,
-        Key: key,
-        Body: file,
-        ContentType: 'image/png'
-    });
+// Function to upload a file to S3
+async function uploadToS3(filePath, fileName, contentType) {
+    const fileStream = createReadStream(filePath);
+    
+    const uploadParams = {
+        Bucket: "skoop-general",
+        Key: `avatar-assets/${fileName}`,
+        Body: fileStream,
+        ContentType: contentType,
+        Tagging: "cache-control=true"
+    };
 
     try {
-        await s3Client.send(command);
+        const data = await s3Client.send(new PutObjectCommand(uploadParams));
+        console.log("File uploaded successfully to S3:", data);
+        return `https://skoop-general.s3.amazonaws.com/avatar-assets/${fileName}`;
     } catch (err) {
         console.error("Error uploading file to S3:", err);
         throw err;
     }
 }
 
-async function generateSilentVideo(imageUrl, voiceId, name) {
-    console.log(`Generating silent video for image: ${imageUrl}, voice: ${voiceId}`);
-    const response = await fetch(`${DID_API.url}/talks`, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Basic ${DID_API.key}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            source_url: imageUrl,
-            driver_url: "bank://lively/driver-06",
-            script: {
-                type: "text",
-                ssml: true,
-                input: "<break time=\"5000ms\"/><break time=\"5000ms\"/>",
-                provider: {
-                    type: "microsoft",
-                    voice_id: voiceId
-                }
-            },
-            config: {
-                normalization_factor: 0,           
-                output_resolution: 512,
-                stitch: true,
-                fluent: true,
-                result_format: "mp4",
-                normalization_factor: 0.1,
-                align_driver: true,
+// Function to process and save the avatar image
+async function processImage(imageFile) {
+    const fileName = `${Date.now()}_${imageFile.originalname}`;
+    const filePath = path.join(AVATARS_DIR, fileName);
 
-            }
-        })
-    });
+    await sharp(imageFile.buffer)
+        .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+        .toFile(filePath);
 
-    if (!response.ok) {
-        throw new Error(`Failed to generate silent video: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    
-    if (!data.id) {
-        throw new Error('Failed to get talk ID from response');
-    }
-
-    console.log(`Silent video generation started with ID: ${data.id}`);
-
-    // Poll for the result
-    let resultUrl;
-    for (let i = 0; i < 30; i++) { // Try for 5 minutes (30 * 10 seconds)
-        await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
-
-        const statusResponse = await fetch(`${DID_API.url}/talks/${data.id}`, {
-            headers: {
-                'Authorization': `Basic ${DID_API.key}`,
-            }
-        });
-
-        if (!statusResponse.ok) {
-            throw new Error(`Failed to get talk status: ${statusResponse.statusText}`);
-        }
-
-        const statusData = await statusResponse.json();
-
-        if (statusData.status === 'done') {
-            resultUrl = statusData.result_url;
-            break;
-        } else if (statusData.status === 'error') {
-            throw new Error(`Talk generation failed: ${statusData.error.message}`);
-        }
-    }
-
-    if (!resultUrl) {
-        throw new Error('Timed out waiting for silent video generation');
-    }
-
-    console.log(`Silent video generated successfully: ${resultUrl}`);
-
-    // Download the video
-    const videoResponse = await fetch(resultUrl);
-    if (!videoResponse.ok) {
-        throw new Error(`Failed to download video: ${videoResponse.statusText}`);
-    }
-
-    // Upload to S3
-    const s3Key = `avatars/${name}/silent_video.mp4`;
-    await uploadToS3(s3Key, await videoResponse.buffer());
-
-    const s3Url = `https://${DID_API.awsConfig.bucketName}.s3.${DID_API.awsConfig.region}.amazonaws.com/${s3Key}`;
-    console.log(`Silent video uploaded to S3: ${s3Url}`);
-
-    return s3Url;
+    return { fileName, filePath };
 }
 
-async function saveAvatarDetails(name, avatar) {
-    const avatarsFile = path.join(__dirname, 'avatars.json');
+// Function to generate a silent video (placeholder implementation)
+async function generateSilentVideo(imagePath, outputPath) {
+    // This is a placeholder. You'll need to implement the actual video generation logic.
+    // For example, using ffmpeg to create a short video from the image
+    const command = `ffmpeg -loop 1 -i "${imagePath}" -c:v libx264 -t 3 -pix_fmt yuv420p -vf scale=800:800 "${outputPath}"`;
+    execSync(command);
+}
+
+// Main function to create or update an avatar
+export async function createOrUpdateAvatar(name, imageFile, voiceId) {
+    try {
+        // Process and save the image
+        const { fileName: imageFileName, filePath: imageFilePath } = await processImage(imageFile);
+
+        // Upload the image to S3
+        const imageUrl = await uploadToS3(imageFilePath, imageFileName, 'image/jpeg');
+
+        // Generate a silent video
+        const videoFileName = `${name}_silent.mp4`;
+        const videoFilePath = path.join(AVATARS_DIR, videoFileName);
+        await generateSilentVideo(imageFilePath, videoFilePath);
+
+        // Upload the video to S3
+        const videoUrl = await uploadToS3(videoFilePath, videoFileName, 'video/mp4');
+
+        // Create the avatar object
+        const avatar = {
+            name,
+            imageUrl,
+            silentVideoUrl: videoUrl,
+            voiceId
+        };
+
+        // Save the avatar data (this is a placeholder - replace with your database logic)
+        await saveAvatarToDatabase(avatar);
+
+        // Clean up local files
+        await fs.unlink(imageFilePath);
+        await fs.unlink(videoFilePath);
+
+        return avatar;
+    } catch (error) {
+        console.error('Error in createOrUpdateAvatar:', error);
+        throw error;
+    }
+}
+
+// Placeholder function to save avatar to database
+async function saveAvatarToDatabase(avatar) {
+    // Implement your database saving logic here
+    console.log('Saving avatar to database:', avatar);
+    // For now, we'll just save to a local JSON file
+    const avatarsFilePath = path.join(AVATARS_DIR, 'avatars.json');
     let avatars = {};
-
     try {
-        const data = await fs.readFile(avatarsFile, 'utf8');
+        const data = await fs.readFile(avatarsFilePath, 'utf8');
         avatars = JSON.parse(data);
-    } catch (err) {
-        if (err.code !== 'ENOENT') {
-            console.error("Error reading avatars file:", err);
-            throw err;
-        }
+    } catch (error) {
+        // File doesn't exist or is invalid, start with an empty object
     }
-
-    avatars[name] = avatar;
-
-    await fs.writeFile(avatarsFile, JSON.stringify(avatars, null, 2));
+    avatars[avatar.name] = avatar;
+    await fs.writeFile(avatarsFilePath, JSON.stringify(avatars, null, 2));
 }
 
+// Function to get all avatars
 export async function getAvatars() {
+    const avatarsFilePath = path.join(AVATARS_DIR, 'avatars.json');
     try {
-        const data = await fs.readFile(path.join(__dirname, 'avatars.json'), 'utf8');
+        const data = await fs.readFile(avatarsFilePath, 'utf8');
         return JSON.parse(data);
-    } catch (err) {
-        if (err.code === 'ENOENT') {
-            return {};
-        }
-        console.error("Error reading avatars file:", err);
+    } catch (error) {
+        console.error('Error reading avatars file:', error);
         return {};
     }
 }
