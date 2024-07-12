@@ -1541,16 +1541,16 @@ function handleTranscription(data) {
     isUserSpeaking = true;
     
     // Update or add interim message
-    const interimTranscript = currentUtterance + transcript;
-    if (!interimMessageAdded) {
-      msgHistory.innerHTML += `<span data-interim style="opacity:0.5"><u>User (Interim):</u> ${interimTranscript}</span><br>`;
-      interimMessageAdded = true;
-    } else {
-      const interimElement = msgHistory.querySelector('span[data-interim]');
-      if (interimElement) {
-        // interimElement.innerHTML = `<u>User (Interim):</u> ${interimTranscript}`;
-      }
-    }
+    // const interimTranscript = currentUtterance + transcript;
+    // if (!interimMessageAdded) {
+    //   msgHistory.innerHTML += `<span data-interim style="opacity:0.5"><u>User (Interim):</u> ${interimTranscript}</span><br>`;
+    //   interimMessageAdded = true;
+    // } else {
+     //  const interimElement = msgHistory.querySelector('span[data-interim]');
+    //   if (interimElement) {
+    //     interimElement.innerHTML = `<u>User (Interim):</u> ${interimTranscript}`;
+     // }
+    //}
     
     msgHistory.scrollTop = msgHistory.scrollHeight;
   }
