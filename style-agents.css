@@ -349,7 +349,7 @@ body {
 
 #idle-video-element,
 #stream-video-element
-#preload-video-element {
+{
   position: absolute;
   top: 0;
   left: 0;
