@@ -59,8 +59,6 @@ let isPersistentStreamActive = false;
 let keepAliveFailureCount = 0;
 let isStreamReady = false;
 let streamVideoOpacity = 0;
-let isUtteranceComplete = false;
-let utteranceEndTimeout;
 
 export function setLogLevel(level) {
   logger.setLogLevel(level);
@@ -1316,14 +1314,16 @@ async function startStreaming(assistantReply) {
       return;
     }
 
-    // Split the reply into chunks of about 250 characters, breaking at spaces
-    const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
+    // Split the reply into chunks of about 150 characters, breaking at spaces
+    const chunks = assistantReply.match(/[\s\S]{1,150}(?:\s|$)/g) || [];
 
     // Start the transition to streaming video immediately
     smoothTransition(true);
 
-    // Function to fetch and play a chunk
-    async function fetchAndPlayChunk(chunk, index) {
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i].trim();
+      if (chunk.length === 0) continue;
+
       const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
         method: 'POST',
         headers: {
@@ -1350,6 +1350,7 @@ async function startStreaming(assistantReply) {
           },
           session_id: persistentSessionId,
           driver_url: "bank://lively/driver-06",
+          stream_warmup: true,
         }),
       });
 
@@ -1358,44 +1359,38 @@ async function startStreaming(assistantReply) {
       }
 
       const playResponseData = await playResponse.json();
-      logger.debug(`Chunk ${index} streaming response:`, playResponseData);
+      logger.debug('Streaming response:', playResponseData);
 
       if (playResponseData.status === 'started') {
-        logger.debug(`Chunk ${index} started successfully`);
-        return playResponseData.result_url;
+        logger.debug('Stream chunk started successfully');
+
+        if (playResponseData.result_url) {
+          streamVideoElement.src = playResponseData.result_url;
+          logger.debug('Setting stream video source:', playResponseData.result_url);
+
+          // Preload the video
+          streamVideoElement.load();
+
+          // Play the video as soon as it's ready
+          streamVideoElement.oncanplay = () => {
+            streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
+          };
+
+          // Ensure the streaming video is visible
+          requestAnimationFrame(() => {
+            streamVideoElement.style.opacity = '1';
+            idleVideoElement.style.opacity = '0';
+          });
+
+          // Wait for this chunk to finish playing before moving to the next
+          await new Promise(resolve => {
+            streamVideoElement.onended = resolve;
+          });
+        } else {
+          logger.error('No result_url in playResponseData. Full response:', JSON.stringify(playResponseData));
+        }
       } else {
-        logger.warn(`Unexpected response status for chunk ${index}:`, playResponseData.status);
-        return null;
-      }
-    }
-
-    // Function to play a chunk video
-    function playChunkVideo(videoUrl) {
-      return new Promise((resolve) => {
-        streamVideoElement.src = videoUrl;
-        streamVideoElement.oncanplay = () => {
-          streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
-        };
-        streamVideoElement.onended = resolve;
-      });
-    }
-
-    // Play chunks sequentially with look-ahead buffering
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i].trim();
-      if (chunk.length === 0) continue;
-
-      // Start fetching the next chunk (if it exists) while playing the current one
-      const nextChunkPromise = i < chunks.length - 1 ? fetchAndPlayChunk(chunks[i + 1], i + 1) : null;
-
-      const videoUrl = await fetchAndPlayChunk(chunk, i);
-      if (videoUrl) {
-        await playChunkVideo(videoUrl);
-      }
-
-      // If we've fetched the next chunk, wait for it to complete
-      if (nextChunkPromise) {
-        await nextChunkPromise;
+        logger.warn('Unexpected response status:', playResponseData.status);
       }
     }
 
@@ -1519,32 +1514,18 @@ function handleTranscription(data) {
     logger.debug('Final transcript:', transcript);
     if (transcript.trim()) {
       currentUtterance += transcript + ' ';
-      updateTranscript(currentUtterance.trim(), false);
+      updateTranscript(currentUtterance.trim(), true);
+      chatHistory.push({
+        role: 'user',
+        content: currentUtterance.trim(),
+      });
+      sendChatToGroq();
     }
-    isUtteranceComplete = false;
-    clearTimeout(utteranceEndTimeout);
-    utteranceEndTimeout = setTimeout(() => {
-      if (!isUtteranceComplete) {
-        isUtteranceComplete = true;
-        finalizeTrnascription();
-      }
-    }, 1500); // Wait 1.5 seconds of silence before considering the utterance complete
+    currentUtterance = '';
+    interimMessageAdded = false;
   } else {
     logger.debug('Interim transcript:', transcript);
     updateTranscript(currentUtterance + transcript, false);
-  }
-}
-
-function finalizeTrnascription() {
-  if (currentUtterance.trim()) {
-    updateTranscript(currentUtterance.trim(), true);
-    chatHistory.push({
-      role: 'user',
-      content: currentUtterance.trim(),
-    });
-    sendChatToGroq();
-    currentUtterance = '';
-    interimMessageAdded = false;
   }
 }
 
@@ -1559,7 +1540,6 @@ async function startRecording() {
 
   currentUtterance = '';
   interimMessageAdded = false;
-  isUtteranceComplete = false;
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1587,6 +1567,7 @@ async function startRecording() {
       interim_results: true,
       utterance_end_ms: 1000,
       punctuate: true,
+      // endpointing: 300,
       vad_events: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate
@@ -1612,8 +1593,7 @@ async function startRecording() {
 
     deepgramConnection.addListener(LiveTranscriptionEvents.UtteranceEnd, (data) => {
       logger.debug('Utterance end event received:', data);
-      isUtteranceComplete = true;
-      finalizeTrnascription();
+      handleUtteranceEnd(data);
     });
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
@@ -1642,7 +1622,6 @@ async function startRecording() {
     throw error;
   }
 }
-
 
 function handleDeepgramError(err) {
   logger.error('Deepgram error:', err);
