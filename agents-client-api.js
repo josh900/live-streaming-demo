@@ -1545,35 +1545,19 @@ function handleTranscription(data) {
 
   const transcript = data.channel.alternatives[0].transcript;
   
-  clearTimeout(utteranceTimeout);
-  clearTimeout(forceEndTimeout);
-
   if (data.is_final) {
     logger.debug('Final transcript:', transcript);
     if (transcript.trim()) {
       currentUtterance += transcript + ' ';
       updateTranscript(currentUtterance.trim(), false);
     }
-    utteranceTimeout = setTimeout(() => {
-      if (isUtteranceInProgress) {
-        handleUtteranceEnd();
-      }
-    }, 1500); // Wait 1 second of silence before considering the utterance complete
-
-    // Set a force-end timeout for 3 seconds
-    forceEndTimeout = setTimeout(() => {
-      if (isUtteranceInProgress) {
-        logger.debug('Forcing utterance end due to extended silence');
-        handleUtteranceEnd();
-      }
-    }, 10000);
+    scheduleUtteranceEnd();
   } else {
     logger.debug('Interim transcript:', transcript);
     isUtteranceInProgress = true;
     updateTranscript(currentUtterance + transcript, false);
   }
 }
-
 
 
 
@@ -1660,11 +1644,7 @@ async function startRecording() {
 
     deepgramConnection.addListener(LiveTranscriptionEvents.SpeechFinished, () => {
       logger.debug('Speech finished');
-      utteranceTimeout = setTimeout(() => {
-        if (isUtteranceInProgress) {
-          handleUtteranceEnd();
-        }
-      }, 1000);
+      scheduleUtteranceEnd();
     });
 
     isRecording = true;
@@ -1684,6 +1664,27 @@ async function startRecording() {
     throw error;
   }
 }
+
+
+function scheduleUtteranceEnd() {
+  clearTimeout(utteranceTimeout);
+  clearTimeout(forceEndTimeout);
+
+  utteranceTimeout = setTimeout(() => {
+    if (isUtteranceInProgress) {
+      handleUtteranceEnd();
+    }
+  }, 1000);
+
+  forceEndTimeout = setTimeout(() => {
+    if (isUtteranceInProgress) {
+      logger.debug('Forcing utterance end due to extended silence');
+      handleUtteranceEnd();
+    }
+  }, 3000);
+}
+
+
 
 
 function handleDeepgramError(err) {
