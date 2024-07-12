@@ -324,15 +324,16 @@ function updateTranscript(text, isFinal) {
   } else {
     if (text.trim()) {
       if (!interimMessageAdded) {
-        msgHistory.innerHTML += `<span data-interim style='opacity:0.5'><u>User (interim):</u> ${text}</span><br>`;
+        msgHistory.innerHTML += `<span data-interim style='opacity:0.5'><u>User (Interim):</u> ${text}</span><br>`;
         interimMessageAdded = true;
       } else if (interimSpan) {
-        interimSpan.innerHTML = `<u>User (interim):</u> ${text}`;
+        interimSpan.innerHTML = `<u>User (Interim):</u> ${text}`;
       }
     }
   }
   msgHistory.scrollTop = msgHistory.scrollHeight;
 }
+
 
 function handleTextInput(text) {
   if (text.trim() === '') return;
@@ -1314,16 +1315,14 @@ async function startStreaming(assistantReply) {
       return;
     }
 
-    // Split the reply into chunks of about 150 characters, breaking at spaces
-    const chunks = assistantReply.match(/[\s\S]{1,150}(?:\s|$)/g) || [];
+    // Split the reply into larger chunks of about 250 characters
+    const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
 
     // Start the transition to streaming video immediately
     smoothTransition(true);
 
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i].trim();
-      if (chunk.length === 0) continue;
-
+    // Function to handle API calls for each chunk
+    async function fetchChunk(chunk) {
       const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
         method: 'POST',
         headers: {
@@ -1358,39 +1357,45 @@ async function startStreaming(assistantReply) {
         throw new Error(`HTTP error! status: ${playResponse.status}`);
       }
 
-      const playResponseData = await playResponse.json();
+      return playResponse.json();
+    }
+
+    // Function to play a chunk video
+    function playChunkVideo(videoUrl) {
+      return new Promise((resolve) => {
+        streamVideoElement.src = videoUrl;
+        streamVideoElement.onended = resolve;
+        streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
+      });
+    }
+
+    // Process chunks
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i].trim();
+      if (chunk.length === 0) continue;
+
+      // Start fetching the next chunk while playing the current one
+      const currentChunkPromise = fetchChunk(chunk);
+      const nextChunkPromise = i < chunks.length - 1 ? fetchChunk(chunks[i + 1].trim()) : null;
+
+      const playResponseData = await currentChunkPromise;
       logger.debug('Streaming response:', playResponseData);
 
-      if (playResponseData.status === 'started') {
-        logger.debug('Stream chunk started successfully');
+      if (playResponseData.result_url) {
+        // Play the current chunk
+        await playChunkVideo(playResponseData.result_url);
 
-        if (playResponseData.result_url) {
-          streamVideoElement.src = playResponseData.result_url;
-          logger.debug('Setting stream video source:', playResponseData.result_url);
-
-          // Preload the video
-          streamVideoElement.load();
-
-          // Play the video as soon as it's ready
-          streamVideoElement.oncanplay = () => {
-            streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
-          };
-
-          // Ensure the streaming video is visible
-          requestAnimationFrame(() => {
-            streamVideoElement.style.opacity = '1';
-            idleVideoElement.style.opacity = '0';
-          });
-
-          // Wait for this chunk to finish playing before moving to the next
-          await new Promise(resolve => {
-            streamVideoElement.onended = resolve;
-          });
-        } else {
-          logger.error('No result_url in playResponseData. Full response:', JSON.stringify(playResponseData));
+        // Preload the next chunk if available
+        if (nextChunkPromise) {
+          const nextPlayResponseData = await nextChunkPromise;
+          if (nextPlayResponseData.result_url) {
+            const preloadVideo = document.createElement('video');
+            preloadVideo.src = nextPlayResponseData.result_url;
+            preloadVideo.preload = 'auto';
+          }
         }
       } else {
-        logger.warn('Unexpected response status:', playResponseData.status);
+        logger.error('No result_url in playResponseData. Full response:', JSON.stringify(playResponseData));
       }
     }
 
@@ -1405,6 +1410,7 @@ async function startStreaming(assistantReply) {
     }
   }
 }
+
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
@@ -1514,15 +1520,8 @@ function handleTranscription(data) {
     logger.debug('Final transcript:', transcript);
     if (transcript.trim()) {
       currentUtterance += transcript + ' ';
-      updateTranscript(currentUtterance.trim(), true);
-      chatHistory.push({
-        role: 'user',
-        content: currentUtterance.trim(),
-      });
-      sendChatToGroq();
+      updateTranscript(currentUtterance.trim(), false);
     }
-    currentUtterance = '';
-    interimMessageAdded = false;
   } else {
     logger.debug('Interim transcript:', transcript);
     updateTranscript(currentUtterance + transcript, false);
@@ -1567,7 +1566,6 @@ async function startRecording() {
       interim_results: true,
       utterance_end_ms: 1000,
       punctuate: true,
-      // endpointing: 300,
       vad_events: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate
@@ -1660,6 +1658,7 @@ function handleUtteranceEnd(data) {
     interimMessageAdded = false;
   }
 }
+
 
 async function stopRecording() {
   if (isRecording) {
