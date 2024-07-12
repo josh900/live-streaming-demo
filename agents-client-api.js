@@ -1045,7 +1045,7 @@ function onStreamEvent(message) {
           streamEventLabel.innerText = 'ready';
           streamEventLabel.className = 'streamEvent-ready';
         }
-      }, 1000);
+      }, 750);
     } else {
       console.log(event);
       const streamEventLabel = document.getElementById('stream-event-label');
@@ -1564,7 +1564,7 @@ async function startRecording() {
       language: "en-US",
       smart_format: true,
       interim_results: true,
-      utterance_end_ms: 1000,
+      utterance_end_ms: 2000,
       punctuate: true,
       vad_events: true,
       encoding: "linear16",
