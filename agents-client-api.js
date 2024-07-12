@@ -315,15 +315,24 @@ function initializeWebSocket() {
 
 function updateTranscript(text, isFinal) {
   const msgHistory = document.getElementById('msgHistory');
+  let messageElement = msgHistory.querySelector('span[data-current-message]');
   
-  if (isFinal) {
-    msgHistory.innerHTML += `<span><u>User:</u> ${text}</span><br>`;
-    logger.debug('Final transcript added to chat history:', text);
-    interimMessageAdded = false;
+  if (!messageElement) {
+    messageElement = document.createElement('span');
+    messageElement.setAttribute('data-current-message', '');
+    msgHistory.appendChild(messageElement);
   }
   
-  msgHistory.scrollTop = msgHistory.scrollHeight;
+  if (isFinal) {
+    messageElement.innerHTML = `<u>User:</u> ${text}`;
+    messageElement.style.opacity = '1';
+    messageElement.removeAttribute('data-current-message');
+  } else {
+    messageElement.innerHTML = `<u>User (Interim):</u> ${text}`;
+    messageElement.style.opacity = '0.5';
+  }
 }
+
 
 
 
@@ -1519,20 +1528,13 @@ function handleTranscription(data) {
       isUserSpeaking = false;
       clearTimeout(utteranceEndTimeout);
       
-      // Remove interim message if it exists
-      const interimElement = msgHistory.querySelector('span[data-interim]');
-      if (interimElement) {
-        interimElement.remove();
-      }
-      
-      // Add final transcript
+      // Update the existing interim message with the final transcript
       updateTranscript(currentUtterance.trim(), true);
       
       utteranceEndTimeout = setTimeout(() => {
         if (!isUserSpeaking) {
           sendTranscriptionToGroq(currentUtterance.trim());
           currentUtterance = '';
-          interimMessageAdded = false;
         }
       }, 1500); // Wait 1.5 seconds after the last final transcript before sending to Groq
     }
@@ -1540,21 +1542,13 @@ function handleTranscription(data) {
     logger.debug('Interim transcript:', transcript);
     isUserSpeaking = true;
     
-    // Update or add interim message
-    const interimTranscript = currentUtterance + transcript;
-    if (!interimMessageAdded) {
-      msgHistory.innerHTML += `<span data-interim style="opacity:0.5"><u>User (Interim):</u> ${interimTranscript}</span><br>`;
-      interimMessageAdded = true;
-    } else {
-      const interimElement = msgHistory.querySelector('span[data-interim]');
-      if (interimElement) {
-        interimElement.innerHTML = `<u>User (Interim):</u> ${interimTranscript}`;
-      }
-    }
-    
-    msgHistory.scrollTop = msgHistory.scrollHeight;
+    // Update the interim message
+    updateTranscript(currentUtterance + transcript, false);
   }
+  
+  msgHistory.scrollTop = msgHistory.scrollHeight;
 }
+
 
 
 
@@ -1565,6 +1559,7 @@ function sendTranscriptionToGroq(transcription) {
   });
   sendChatToGroq();
 }
+
 
 
 async function startRecording() {
