@@ -104,14 +104,20 @@ async function prepareForStreaming() {
 
 function initializeTransitionCanvas() {
   transitionCanvas = document.createElement('canvas');
-  transitionCanvas.width = 400;
-  transitionCanvas.height = 400;
+  transitionCanvas.width = '100%';
+  transitionCanvas.height = '100%';
   transitionCtx = transitionCanvas.getContext('2d');
-
   transitionCanvas.style.position = 'absolute';
   transitionCanvas.style.top = '0';
   transitionCanvas.style.left = '0';
   transitionCanvas.style.zIndex = '3';
+  transitionCanvas.style.borderRadius = '13%';
+  transitionCanvas.style.objectFit = 'cover';
+  transitionCanvas.style.aspectRatio = '1 / 1';
+  transitionCanvas.style.maxHeight = '550px';
+  transitionCanvas.style.maxWidth = '550px';
+  transitionCanvas.style.margin = '0 auto';
+  transitionCanvas.style.overflow = 'hidden';
   transitionCanvas.style.borderRadius = '13%';
   document.querySelector('#video-wrapper').appendChild(transitionCanvas);
 }
