@@ -312,27 +312,28 @@ function initializeWebSocket() {
 
 function updateTranscript(text, isFinal) {
   const msgHistory = document.getElementById('msgHistory');
-  let interimSpan = msgHistory.querySelector('span[data-interim]');
+  let userSpan = msgHistory.querySelector('span[data-user-message]');
+
+  if (!userSpan) {
+    userSpan = document.createElement('span');
+    userSpan.setAttribute('data-user-message', '');
+    msgHistory.appendChild(userSpan);
+  }
 
   if (isFinal) {
-    if (interimSpan) {
-      interimSpan.remove();
-    }
-    msgHistory.innerHTML += `<span><u>User:</u> ${text}</span><br>`;
+    userSpan.innerHTML = `<u>User:</u> ${text}`;
+    userSpan.style.opacity = '1';
+    userSpan.removeAttribute('data-user-message');
+    msgHistory.appendChild(document.createElement('br'));
     logger.debug('Final transcript added to chat history:', text);
-    interimMessageAdded = false;
-  } else {
-    if (text.trim()) {
-      if (!interimMessageAdded) {
-        msgHistory.innerHTML += `<span data-interim style='opacity:0.5'><u>User (interim):</u> ${text}</span><br>`;
-        interimMessageAdded = true;
-      } else if (interimSpan) {
-        interimSpan.innerHTML = `<u>User (interim):</u> ${text}`;
-      }
-    }
+
+    userSpan.innerHTML = `<u>User (interim):</u> ${text}`;
+    userSpan.style.opacity = '0.5';
   }
+
   msgHistory.scrollTop = msgHistory.scrollHeight;
 }
+
 
 function handleTextInput(text) {
   if (text.trim() === '') return;
@@ -1510,24 +1511,43 @@ function handleTranscription(data) {
   if (!isRecording) return;
 
   const transcript = data.channel.alternatives[0].transcript;
+  
+  clearTimeout(utteranceTimeout);
+  clearTimeout(forceEndTimeout);
+
   if (data.is_final) {
     logger.debug('Final transcript:', transcript);
     if (transcript.trim()) {
       currentUtterance += transcript + ' ';
-      updateTranscript(currentUtterance.trim(), true);
-      chatHistory.push({
-        role: 'user',
-        content: currentUtterance.trim(),
-      });
-      sendChatToGroq();
+      updateTranscript(currentUtterance.trim(), false);
     }
-    currentUtterance = '';
-    interimMessageAdded = false;
+    utteranceTimeout = setTimeout(() => {
+      if (isUtteranceInProgress) {
+        handleUtteranceEnd();
+      }
+    }, 1500); // Wait 1 second of silence before considering the utterance complete
+
+    // Set a force-end timeout for 3 seconds
+    forceEndTimeout = setTimeout(() => {
+      if (isUtteranceInProgress) {
+        logger.debug('Forcing utterance end due to extended silence');
+        handleUtteranceEnd();
+      }
+    }, 10000);
   } else {
     logger.debug('Interim transcript:', transcript);
+    isUtteranceInProgress = true;
     updateTranscript(currentUtterance + transcript, false);
   }
 }
+
+function forceEndUtterance() {
+  if (isUtteranceInProgress) {
+    logger.debug('Forcing utterance end');
+    handleUtteranceEnd();
+  }
+}
+
 
 async function startRecording() {
   if (isRecording) {
@@ -1560,69 +1580,111 @@ async function startRecording() {
     source.connect(audioWorkletNode);
     logger.debug('Media stream source connected to audio worklet node');
 
-    const deepgramOptions = {
-      model: "nova-2",
-      language: "en-US",
-      smart_format: true,
-      interim_results: true,
-      utterance_end_ms: 1000,
-      punctuate: true,
-      // endpointing: 300,
-      vad_events: true,
-      encoding: "linear16",
-      sample_rate: audioContext.sampleRate
-    };
-
-    logger.debug('Creating Deepgram connection with options:', deepgramOptions);
-
-    deepgramConnection = await deepgramClient.listen.live(deepgramOptions);
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
-      logger.debug('Deepgram WebSocket Connection opened');
-      startSendingAudioData();
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Close, () => {
-      logger.debug('Deepgram WebSocket connection closed');
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
-      logger.debug('Received transcription:', JSON.stringify(data));
-      handleTranscription(data);
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.UtteranceEnd, (data) => {
-      logger.debug('Utterance end event received:', data);
-      handleUtteranceEnd(data);
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
-      logger.error('Deepgram error:', err);
-      handleDeepgramError(err);
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Warning, (warning) => {
-      logger.warn('Deepgram warning:', warning);
-    });
-
-    isRecording = true;
-    if (autoSpeakMode) {
-      autoSpeakInProgress = true;
+    async function startRecording() {
+      if (isRecording) {
+        logger.warn('Recording is already in progress. Stopping current recording.');
+        await stopRecording();
+        return;
+      }
+    
+      logger.debug('Starting recording process...');
+    
+      currentUtterance = '';
+      isUtteranceInProgress = false;
+    
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        logger.info('Microphone stream obtained');
+    
+        audioContext = new AudioContext();
+        logger.debug('Audio context created. Sample rate:', audioContext.sampleRate);
+    
+        await audioContext.audioWorklet.addModule('audio-processor.js');
+        logger.debug('Audio worklet module added successfully');
+    
+        const source = audioContext.createMediaStreamSource(stream);
+        logger.debug('Media stream source created');
+    
+        audioWorkletNode = new AudioWorkletNode(audioContext, 'audio-processor');
+        logger.debug('Audio worklet node created');
+    
+        source.connect(audioWorkletNode);
+        logger.debug('Media stream source connected to audio worklet node');
+    
+        const deepgramOptions = {
+          model: "nova-2",
+          language: "en-US",
+          smart_format: true,
+          interim_results: true,
+          utterance_end_ms: 1000,
+          punctuate: true,
+          vad_events: true,
+          encoding: "linear16",
+          sample_rate: audioContext.sampleRate
+        };
+    
+        logger.debug('Creating Deepgram connection with options:', deepgramOptions);
+    
+        deepgramConnection = await deepgramClient.listen.live(deepgramOptions);
+    
+        deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
+          logger.debug('Deepgram WebSocket Connection opened');
+          startSendingAudioData();
+        });
+    
+        deepgramConnection.addListener(LiveTranscriptionEvents.Close, () => {
+          logger.debug('Deepgram WebSocket connection closed');
+        });
+    
+        deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
+          logger.debug('Received transcription:', JSON.stringify(data));
+          handleTranscription(data);
+        });
+    
+        deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
+          logger.error('Deepgram error:', err);
+          handleDeepgramError(err);
+        });
+    
+        deepgramConnection.addListener(LiveTranscriptionEvents.Warning, (warning) => {
+          logger.warn('Deepgram warning:', warning);
+        });
+    
+        // Add VAD event listeners
+        deepgramConnection.addListener(LiveTranscriptionEvents.SpeechStarted, () => {
+          logger.debug('Speech started');
+          isUtteranceInProgress = true;
+          clearTimeout(utteranceTimeout);
+          clearTimeout(forceEndTimeout);
+        });
+    
+        deepgramConnection.addListener(LiveTranscriptionEvents.SpeechFinished, () => {
+          logger.debug('Speech finished');
+          utteranceTimeout = setTimeout(() => {
+            if (isUtteranceInProgress) {
+              handleUtteranceEnd();
+            }
+          }, 1000);
+        });
+    
+        isRecording = true;
+        if (autoSpeakMode) {
+          autoSpeakInProgress = true;
+        }
+        const startButton = document.getElementById('start-button');
+        startButton.textContent = 'Stop';
+    
+        logger.debug('Recording and transcription started successfully');
+      } catch (error) {
+        logger.error('Error starting recording:', error);
+        isRecording = false;
+        const startButton = document.getElementById('start-button');
+        startButton.textContent = 'Speak';
+        showErrorMessage('Failed to start recording. Please try again.');
+        throw error;
+      }
     }
-    const startButton = document.getElementById('start-button');
-    startButton.textContent = 'Stop';
-
-    logger.debug('Recording and transcription started successfully');
-  } catch (error) {
-    logger.error('Error starting recording:', error);
-    isRecording = false;
-    const startButton = document.getElementById('start-button');
-    startButton.textContent = 'Speak';
-    showErrorMessage('Failed to start recording. Please try again.');
-    throw error;
-  }
-}
-
+    
 function handleDeepgramError(err) {
   logger.error('Deepgram error:', err);
   isRecording = false;
@@ -1645,10 +1707,14 @@ function handleDeepgramError(err) {
   }
 }
 
-function handleUtteranceEnd(data) {
+function handleUtteranceEnd() {
   if (!isRecording) return;
 
-  logger.debug('Utterance end detected:', data);
+  logger.debug('Utterance end detected');
+  isUtteranceInProgress = false;
+  clearTimeout(utteranceTimeout);
+  clearTimeout(forceEndTimeout);
+
   if (currentUtterance.trim()) {
     updateTranscript(currentUtterance.trim(), true);
     chatHistory.push({
@@ -1657,7 +1723,6 @@ function handleUtteranceEnd(data) {
     });
     sendChatToGroq();
     currentUtterance = '';
-    interimMessageAdded = false;
   }
 }
 
