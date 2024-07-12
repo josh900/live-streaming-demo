@@ -23,11 +23,6 @@
 .iceConnectionState-completed {
   color: green;
 }
-.peerConnectionState-disconnected,
-.peerConnectionState-closed,
-.peerConnectionState-failed {
-  color: red;
-}
 
 .iceGatheringState-new {
   color: cornflowerblue;
@@ -64,18 +59,11 @@
   width: 48%;
 }
 
-
 body * {
   font-family: 'Mulish', sans-serif;
 }
 
-#content {
-  display: flex;
-  justify-content: space-between;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
-}
+
 
 #buttons {
   clear: both;
@@ -91,14 +79,11 @@ button {
   cursor: pointer;
   transition: background-color 0.3s ease;
   padding: 10px 20px;
-
 }
-
 
 button:hover {
   background-color: #5a3dd3;
 }
-
 
 button#connect-button {
   background-color: #4CAF50;
@@ -143,18 +128,14 @@ h4 {
   font-size: 16px;
 }
 
-
 #status {
-
   margin-bottom: 20px;
-
 }
-
 
 #logo-wrapper {
   position: absolute;
-  left: 50px;
-  bottom: 50px;
+  left: 5.5%;
+  bottom: 5.5%;
   width: 50px;
   height: 50px;
   z-index: 10;
@@ -168,14 +149,11 @@ h4 {
   padding-bottom: 10px;
 }
 
-#video-wrapper {
- max-width: ;
-}
-
 
 .chat {
   width: 400px;
 }
+
 select {
   padding: 10px;
   border-radius: 5px;
@@ -183,7 +161,6 @@ select {
   font-size: 16px;
   margin-right: 10px;
 }
-
 
 #avatar-select {
   padding: 10px;
@@ -229,16 +206,6 @@ select {
   border-color: #7459fe;
 }
 
-#idle-video-element,
-#stream-video-element {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: opacity 0.3s ease-in-out;
-}
 
 
 #idle-video-element {
@@ -247,10 +214,6 @@ select {
 
 #stream-video-element {
   z-index: 2;
-}
-
-.animated {
-  transition: opacity 0.3s ease-in-out;
 }
 
 #context-wrapper {
@@ -271,8 +234,6 @@ select {
   margin-right: 10px;
 }
 
-
-
 #simple-mode-button {
   margin-left: auto;
   padding: 10px 20px;
@@ -282,6 +243,7 @@ select {
   border: none;
   border-radius: 5px;
   cursor: pointer;
+  transition: all 0.3s ease;
 }
 
 #simple-mode-button:hover {
@@ -289,11 +251,14 @@ select {
 }
 
 .header {
+  padding: 15px;
+  background-color: #f5f5f5;
   display: flex;
   align-items: center;
   justify-content: flex-start;
+  position: relative;
+  z-index: 1001;
 }
-
 
 @keyframes fadeInOut {
   0% { opacity: 0; }
@@ -318,53 +283,6 @@ select {
   border-radius: 5px;
   z-index: 1000;
 }
-
-@media (max-width: 768px) {
-  #content {
-    flex-direction: column;
-    align-items: center;
-  }
-
-  #video-wrapper,
-  #status,
-  .chat {
-    width: 90%;
-    margin-bottom: 20px;
-  }
-}
-
-/*
-#video-wrapper::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 100px;
-  background: linear-gradient(to bottom, 
-                rgba(255,255,255,0) 0%,
-                rgba(255,255,255,0.7) 70%,
-                rgba(255,255,255,1) 90%);
-  z-index: 3;
-  pointer-events: none; 
-  border-bottom-left-radius: 50%;
-  border-bottom-right-radius: 50%;
-}
-
-*/
-
-
-
-
-
-
-#idle-video-element,
-#stream-video-element {
-  background: transparent;
-}
-
-
-
 
 .modal {
   display: none;
@@ -392,51 +310,12 @@ select {
   margin: 10px 0;
 }
 
-
 body {
   margin: 0;
   padding: 0;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-}
-
-#content {
-  flex: 1;
-  display: flex;
-  justify-content: space-between;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
-}
-
-.header {
-  padding: 15px;
-  background-color: #f5f5f5;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-}
-
-#video-wrapper {
-  transition: all 0.3s ease-in-out;
-}
-
-
-#simple-mode-button {
-  margin-left: auto;
-  padding: 10px 20px;
-  font-size: 16px;
-  background-color: #7459fe;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-#simple-mode-button:hover {
-  background-color: #5a3dd3;
 }
 
 #simple-mode-button.simple-mode {
@@ -449,37 +328,47 @@ body {
   background-color: #e0e0e0;
 }
 
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  padding: 15px;
-  background-color: #f5f5f5;
-  position: relative;
-  z-index: 1001;
-}
 
-#video-wrapper {
-  transition: all 0.3s ease-in-out;
-}
 
-body {
-  margin: 0;
-  padding: 0;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
+
 
 #content {
   flex: 1;
   display: flex;
   justify-content: space-between;
-  max-width: 1200px;
-  margin: 0 auto;
+  max-widtvh: 1200px;
+  margin: 0 5%;
   padding: 20px;
 }
+ 
 
+#idle-video-element,
+#stream-video-element
+{
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: opacity 0.1s ease-in-out;
+/*
+  max-width: 550px;
+  max-height: 550px;
+  aspect-ratio: 1 / 1;
+  margin: 0 auto;
+  overflow: hidden;
+  border-radius: 13%;
+  */
+
+
+}
+
+
+
+.animated {
+  transition: opacity 0.1s ease-in-out;
+}
 
 
 #video-wrapper {
@@ -491,6 +380,7 @@ body {
   margin: 0 auto;
   overflow: hidden;
   border-radius: 13%;
+
 }
 
 #video-wrapper::before {
@@ -499,35 +389,10 @@ body {
   padding-top: 100%;
 }
 
-#idle-video-element,
-#stream-video-element {
-  position: absolute;
-  top: 0;
-  left: 1px;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+
+#preload-video-element {
+  visibility: hidden;
 }
-
-#stream-video-element {
-  width: 100%;
-  height: 100%;
-
-}
-
-#logo-wrapper {
-  position: absolute;
-  left: 5.5%;
-  bottom: 5.5%;
-  width: 50px;
-  height: 50px;
-  z-index: 10;
-  background-image: url('Slogo.svg');
-  background-size: cover;
-  background-repeat: no-repeat;
-  background-position: center;
-}
-
 
 
 
@@ -545,7 +410,19 @@ body {
   }
 }
 
+@media (max-width: 768px) {
+  #content {
+    flex-direction: column;
+    align-items: center;
+  }
 
+  #video-wrapper,
+  #status,
+  .chat {
+    width: 90%;
+    margin-bottom: 20px;
+  }
+}
 
 @media (max-width: 480px) {
   #video-wrapper {
