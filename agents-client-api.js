@@ -315,27 +315,17 @@ function initializeWebSocket() {
 
 function updateTranscript(text, isFinal) {
   const msgHistory = document.getElementById('msgHistory');
-  let interimSpan = msgHistory.querySelector('span[data-interim]');
-
+  
   if (isFinal) {
-    if (interimSpan) {
-      interimSpan.remove();
-    }
     msgHistory.innerHTML += `<span><u>User:</u> ${text}</span><br>`;
     logger.debug('Final transcript added to chat history:', text);
     interimMessageAdded = false;
-  } else {
-    if (text.trim()) {
-      if (!interimMessageAdded) {
-        msgHistory.innerHTML += `<span data-interim style='opacity:0.5'><u>User (interim):</u> ${text}</span><br>`;
-        interimMessageAdded = true;
-      } else if (interimSpan) {
-        interimSpan.innerHTML = `<u>User (interim):</u> ${text}`;
-      }
-    }
   }
+  
   msgHistory.scrollTop = msgHistory.scrollHeight;
 }
+
+
 
 function handleTextInput(text) {
   if (text.trim() === '') return;
@@ -1520,13 +1510,24 @@ function handleTranscription(data) {
   if (!isRecording) return;
 
   const transcript = data.channel.alternatives[0].transcript;
+  const msgHistory = document.getElementById('msgHistory');
+  
   if (data.is_final) {
     logger.debug('Final transcript:', transcript);
     if (transcript.trim()) {
       currentUtterance += transcript + ' ';
-      updateTranscript(currentUtterance.trim(), true);
       isUserSpeaking = false;
       clearTimeout(utteranceEndTimeout);
+      
+      // Remove interim message if it exists
+      const interimElement = msgHistory.querySelector('span[data-interim]');
+      if (interimElement) {
+        interimElement.remove();
+      }
+      
+      // Add final transcript
+      updateTranscript(currentUtterance.trim(), true);
+      
       utteranceEndTimeout = setTimeout(() => {
         if (!isUserSpeaking) {
           sendTranscriptionToGroq(currentUtterance.trim());
@@ -1538,9 +1539,24 @@ function handleTranscription(data) {
   } else {
     logger.debug('Interim transcript:', transcript);
     isUserSpeaking = true;
-    updateTranscript(currentUtterance + transcript, false);
+    
+    // Update or add interim message
+    const interimTranscript = currentUtterance + transcript;
+    if (!interimMessageAdded) {
+      msgHistory.innerHTML += `<span data-interim style="opacity:0.5"><u>User (Interim):</u> ${interimTranscript}</span><br>`;
+      interimMessageAdded = true;
+    } else {
+      const interimElement = msgHistory.querySelector('span[data-interim]');
+      if (interimElement) {
+        interimElement.innerHTML = `<u>User (Interim):</u> ${interimTranscript}`;
+      }
+    }
+    
+    msgHistory.scrollTop = msgHistory.scrollHeight;
   }
 }
+
+
 
 function sendTranscriptionToGroq(transcription) {
   chatHistory.push({
