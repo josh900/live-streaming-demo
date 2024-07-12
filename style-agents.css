@@ -149,11 +149,6 @@ h4 {
   padding-bottom: 10px;
 }
 
-#video-wrapper {
-  position: relative;
-  width: 400px;
-  height: 400px;
-}
 
 .chat {
   width: 400px;
@@ -357,6 +352,15 @@ body {
   height: 100%;
   object-fit: cover;
   transition: opacity 0.1s ease-in-out;
+
+  max-width: 550px;
+  max-height: 550px;
+  aspect-ratio: 1 / 1;
+  margin: 0 auto;
+  overflow: hidden;
+  border-radius: 13%;
+
+
 }
 
 .animated {
@@ -373,6 +377,7 @@ body {
   margin: 0 auto;
   overflow: hidden;
   border-radius: 13%;
+
 }
 
 #video-wrapper::before {
