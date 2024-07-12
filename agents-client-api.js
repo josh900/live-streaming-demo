@@ -1600,7 +1600,7 @@ async function startRecording() {
       language: "en-US",
       smart_format: true,
       interim_results: true,
-      utterance_end_ms: 1000,
+      utterance_end_ms: 1500,
       punctuate: true,
       vad_events: true,
       encoding: "linear16",
@@ -1674,14 +1674,14 @@ function scheduleUtteranceEnd() {
     if (isUtteranceInProgress) {
       handleUtteranceEnd();
     }
-  }, 1000);
+  }, 1500);
 
   forceEndTimeout = setTimeout(() => {
     if (isUtteranceInProgress) {
       logger.debug('Forcing utterance end due to extended silence');
       handleUtteranceEnd();
     }
-  }, 3000);
+  }, 10000);
 }
 
 
