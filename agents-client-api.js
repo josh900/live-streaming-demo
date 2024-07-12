@@ -1292,6 +1292,7 @@ async function initializeConnection() {
   }
 }
 
+
 async function startStreaming(assistantReply) {
   try {
     logger.debug('Starting streaming with reply:', assistantReply);
