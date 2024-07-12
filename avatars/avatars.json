@@ -1,0 +1,62 @@
+{
+  "Guy5": {
+    "name": "Guy5",
+    "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Guy5/image.png",
+    "voiceId": "en-US-GuyNeural",
+    "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Guy5/silent_video.mp4"
+  },
+  "JoshM1": {
+    "name": "JoshM1",
+    "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/JoshM1/image.png",
+    "voiceId": "en-US-GuyNeural",
+    "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/JoshM1/silent_video.mp4"
+  },
+  "test4": {
+    "name": "test4",
+    "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/test4/image.png",
+    "voiceId": "en-ZA-LukeNeural",
+    "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/test4/silent_video.mp4"
+  },
+  "Arshi": {
+    "name": "Arshi",
+    "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Arshi/image.png",
+    "voiceId": "en-US-AvaNeural",
+    "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Arshi/silent_video.mp4"
+  },
+  "Ava": {
+    "name": "Ava",
+    "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Ava/image.png",
+    "voiceId": "en-US-AvaNeural",
+    "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Ava/silent_video.mp4"
+  },
+  "Brianna ": {
+    "name": "Brianna ",
+    "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Brianna /image.png",
+    "voiceId": "en-US-AvaNeural",
+    "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Brianna /silent_video.mp4"
+  },
+  "Jane": {
+    "name": "Jane",
+    "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Jane/image.png",
+    "voiceId": "en-US-AvaNeural",
+    "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Jane/silent_video.mp4"
+  },
+  "Alex": {
+    "name": "Alex",
+    "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Alex/image.png",
+    "voiceId": "en-US-GuyNeural",
+    "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Alex/silent_video.mp4"
+  },
+  "Jake Summers - Coppertone ": {
+    "name": "Jake Summers - Coppertone ",
+    "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Jake Summers - Coppertone /image.png",
+    "voiceId": "en-AU-KenNeural",
+    "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Jake Summers - Coppertone /silent_video.mp4"
+  },
+  "Marc": {
+    "name": "Marc",
+    "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Marc/image.png",
+    "voiceId": "en-US-GuyNeural",
+    "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Marc/silent_video.mp4"
+  }
+}
