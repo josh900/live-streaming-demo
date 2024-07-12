@@ -64,8 +64,6 @@ let isPlayingChunk = false;
 let interimTranscript = '';
 let isSpeaking = false;
 let utteranceTimeout;
-let silenceTimer;
-const SILENCE_THRESHOLD = 1000; // 1 second of silence to end speech
 
 
 export function setLogLevel(level) {
@@ -331,7 +329,6 @@ function updateTranscript(text, isFinal) {
   if (isFinal) {
     userMessageSpan.innerHTML = `<u>User:</u> ${text}`;
     userMessageSpan.style.opacity = '1';
-    userMessageSpan.removeAttribute('data-user-message');
     msgHistory.appendChild(document.createElement('br'));
     logger.debug('Final transcript added to chat history:', text);
   } else {
@@ -341,13 +338,6 @@ function updateTranscript(text, isFinal) {
 
   msgHistory.scrollTop = msgHistory.scrollHeight;
 }
-
-function resetSilenceTimer() {
-  clearTimeout(silenceTimer);
-  silenceTimer = setTimeout(handleUtteranceEnd, SILENCE_THRESHOLD);
-}
-
-
 
 function handleTextInput(text) {
   if (text.trim() === '') return;
@@ -1594,21 +1584,23 @@ function handleTranscription(data) {
     logger.debug('Final transcript:', transcript);
     if (transcript.trim()) {
       currentUtterance += transcript + ' ';
-      updateTranscript(currentUtterance.trim(), false);
-      resetSilenceTimer();
+      updateTranscript(currentUtterance.trim(), true);
     }
+    interimTranscript = '';
+    clearTimeout(utteranceTimeout);
+    utteranceTimeout = setTimeout(handleUtteranceEnd, 1500); // Wait 1.5 seconds of silence before ending utterance
   } else {
     logger.debug('Interim transcript:', transcript);
     interimTranscript = transcript;
     updateTranscript(currentUtterance + interimTranscript, false);
-    resetSilenceTimer();
+    clearTimeout(utteranceTimeout);
+    utteranceTimeout = setTimeout(handleUtteranceEnd, 1500); // Reset the timeout on new speech
   }
 
   if (!isSpeaking && (transcript.trim() || interimTranscript.trim())) {
     isSpeaking = true;
   }
 }
-
 
 
 
@@ -1649,8 +1641,9 @@ async function startRecording() {
       language: "en-US",
       smart_format: true,
       interim_results: true,
+      utterance_end_ms: 1000,
       punctuate: true,
-      endpointing: 200,
+      endpointing: 500,
       vad_events: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate
@@ -1690,8 +1683,6 @@ async function startRecording() {
     const startButton = document.getElementById('start-button');
     startButton.textContent = 'Stop';
 
-    resetSilenceTimer(); // Start the silence timer
-
     logger.debug('Recording and transcription started successfully');
   } catch (error) {
     logger.error('Error starting recording:', error);
@@ -1702,7 +1693,6 @@ async function startRecording() {
     throw error;
   }
 }
-
 
 
 function handleDeepgramError(err) {
@@ -1750,8 +1740,6 @@ async function stopRecording() {
   if (isRecording) {
     logger.info('Stopping recording...');
 
-    clearTimeout(silenceTimer);
-
     if (audioContext) {
       await audioContext.close();
       logger.debug('AudioContext closed');
@@ -1766,9 +1754,6 @@ async function stopRecording() {
     autoSpeakInProgress = false;
     const startButton = document.getElementById('start-button');
     startButton.textContent = 'Speak';
-
-    // Finalize any remaining transcription
-    handleUtteranceEnd();
 
     logger.debug('Recording and transcription stopped');
   }
