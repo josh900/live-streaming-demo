@@ -60,10 +60,7 @@ let keepAliveFailureCount = 0;
 let isStreamReady = false;
 let streamVideoOpacity = 0;
 let lastTranscriptionTime = Date.now();
-const SPEECH_TIMEOUT = 1000; // 1 seconds of silence to consider speech ended
-
-
-
+const SPEECH_TIMEOUT = 1000; // 1.5 seconds of silence to consider speech ended
 
 export function setLogLevel(level) {
   logger.setLogLevel(level);
@@ -1550,25 +1547,21 @@ function handleTranscription(data) {
     logger.debug('Final transcript:', transcript);
     if (transcript.trim()) {
       currentUtterance += transcript + ' ';
-      updateTranscript(currentUtterance.trim(), false);
+      updateTranscript(currentUtterance.trim(), true);
     }
   } else {
     logger.debug('Interim transcript:', transcript);
     updateTranscript(currentUtterance + transcript, false);
   }
 
-  // Clear any existing timer
-  clearTimeout(transcriptionTimer);
-  // Set a new timer to check for speech end
-  transcriptionTimer = setTimeout(checkSpeechEnd, SPEECH_TIMEOUT);
+  // Check for speech end after a delay
+  setTimeout(checkSpeechEnd, SPEECH_TIMEOUT);
 }
-
 
 
 function checkSpeechEnd() {
   if (Date.now() - lastTranscriptionTime >= SPEECH_TIMEOUT) {
     if (currentUtterance.trim()) {
-      updateTranscript(currentUtterance.trim(), true);
       chatHistory.push({
         role: 'user',
         content: currentUtterance.trim(),
@@ -1581,66 +1574,17 @@ function checkSpeechEnd() {
 }
 
 
-
 async function startRecording() {
-  javascriptCopyagents-client-api.js
+  if (isRecording) {
+    logger.warn('Recording is already in progress. Stopping current recording.');
+    await stopRecording();
+    return;
+  }
 
-  // ... (previous code remains unchanged)
-  
-  let lastTranscriptionTime = Date.now();
-  const SPEECH_TIMEOUT = 1500; // 1.5 seconds of silence to consider speech ended
-  let transcriptionTimer;
-  
-  function handleTranscription(data) {
-    if (!isRecording) return;
-  
-    const transcript = data.channel.alternatives[0].transcript;
-    lastTranscriptionTime = Date.now();
-  
-    if (data.is_final) {
-      logger.debug('Final transcript:', transcript);
-      if (transcript.trim()) {
-        currentUtterance += transcript + ' ';
-        updateTranscript(currentUtterance.trim(), false);
-      }
-    } else {
-      logger.debug('Interim transcript:', transcript);
-      updateTranscript(currentUtterance + transcript, false);
-    }
-  
-    // Clear any existing timer
-    clearTimeout(transcriptionTimer);
-    // Set a new timer to check for speech end
-    transcriptionTimer = setTimeout(checkSpeechEnd, SPEECH_TIMEOUT);
-  }
-  
-  function checkSpeechEnd() {
-    if (Date.now() - lastTranscriptionTime >= SPEECH_TIMEOUT) {
-      if (currentUtterance.trim()) {
-        updateTranscript(currentUtterance.trim(), true);
-        chatHistory.push({
-          role: 'user',
-          content: currentUtterance.trim(),
-        });
-        sendChatToGroq();
-      }
-      currentUtterance = '';
-      interimMessageAdded = false;
-    }
-  }
-  
-  async function startRecording() {
-    if (isRecording) {
-      logger.warn('Recording is already in progress. Stopping current recording.');
-      await stopRecording();
-      return;
-    }
-  
-    logger.debug('Starting recording process...');
-  
-    currentUtterance = '';
-    interimMessageAdded = false;
-    lastTranscriptionTime = Date.now();
+  logger.debug('Starting recording process...');
+
+  currentUtterance = '';
+  interimMessageAdded = false;
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1766,8 +1710,6 @@ async function stopRecording() {
   if (isRecording) {
     logger.info('Stopping recording...');
 
-    clearTimeout(transcriptionTimer);  // Clear any pending timers
-
     if (audioContext) {
       await audioContext.close();
       logger.debug('AudioContext closed');
@@ -1778,16 +1720,6 @@ async function stopRecording() {
       logger.debug('Deepgram connection finished');
     }
 
-    // Check if there's any remaining transcription to process
-    if (currentUtterance.trim()) {
-      updateTranscript(currentUtterance.trim(), true);
-      chatHistory.push({
-        role: 'user',
-        content: currentUtterance.trim(),
-      });
-      sendChatToGroq();
-    }
-
     isRecording = false;
     autoSpeakInProgress = false;
     const startButton = document.getElementById('start-button');
@@ -1796,7 +1728,6 @@ async function stopRecording() {
     logger.debug('Recording and transcription stopped');
   }
 }
-
 
 async function sendChatToGroq() {
   if (chatHistory.length === 0 || chatHistory[chatHistory.length - 1].content.trim() === '') {
