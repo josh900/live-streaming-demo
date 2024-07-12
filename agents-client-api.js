@@ -13,7 +13,7 @@ const RTCPeerConnection = (
   window.mozRTCPeerConnection
 ).bind(window);
 
-let peerConnection;
+let  peerConnection;
 let pcDataChannel;
 let streamId;
 let sessionId;
@@ -59,6 +59,10 @@ let isPersistentStreamActive = false;
 let keepAliveFailureCount = 0;
 let isStreamReady = false;
 let streamVideoOpacity = 0;
+let isUserSpeaking = false;
+let utteranceEndTimeout;
+let chunkBuffer = [];
+let isPlayingChunk = false;
 
 export function setLogLevel(level) {
   logger.setLogLevel(level);
@@ -1314,16 +1318,17 @@ async function startStreaming(assistantReply) {
       return;
     }
 
-    // Split the reply into chunks of about 150 characters, breaking at spaces
-    const chunks = assistantReply.match(/[\s\S]{1,150}(?:\s|$)/g) || [];
+    // Split the reply into chunks of about 250 characters, breaking at spaces
+    const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
 
     // Start the transition to streaming video immediately
     smoothTransition(true);
 
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i].trim();
-      if (chunk.length === 0) continue;
+    // Initialize the chunk buffer
+    chunkBuffer = [];
 
+    // Function to fetch and buffer chunks
+    const fetchAndBufferChunk = async (chunk) => {
       const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
         method: 'POST',
         headers: {
@@ -1350,7 +1355,7 @@ async function startStreaming(assistantReply) {
           },
           session_id: persistentSessionId,
           driver_url: "bank://lively/driver-06",
-          stream_warmup: true,
+          stream_warmup: false,
         }),
       });
 
@@ -1359,21 +1364,22 @@ async function startStreaming(assistantReply) {
       }
 
       const playResponseData = await playResponse.json();
-      logger.debug('Streaming response:', playResponseData);
+      return playResponseData;
+    };
 
-      if (playResponseData.status === 'started') {
-        logger.debug('Stream chunk started successfully');
+    // Function to play a chunk video
+    const playChunkVideo = (chunkData) => {
+      return new Promise((resolve) => {
+        if (chunkData.result_url) {
+          streamVideoElement.src = chunkData.result_url;
+          logger.debug('Setting stream video source:', chunkData.result_url);
 
-        if (playResponseData.result_url) {
-          streamVideoElement.src = playResponseData.result_url;
-          logger.debug('Setting stream video source:', playResponseData.result_url);
-
-          // Preload the video
-          streamVideoElement.load();
-
-          // Play the video as soon as it's ready
           streamVideoElement.oncanplay = () => {
             streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
+          };
+
+          streamVideoElement.onended = () => {
+            resolve();
           };
 
           // Ensure the streaming video is visible
@@ -1381,16 +1387,36 @@ async function startStreaming(assistantReply) {
             streamVideoElement.style.opacity = '1';
             idleVideoElement.style.opacity = '0';
           });
-
-          // Wait for this chunk to finish playing before moving to the next
-          await new Promise(resolve => {
-            streamVideoElement.onended = resolve;
-          });
         } else {
-          logger.error('No result_url in playResponseData. Full response:', JSON.stringify(playResponseData));
+          logger.error('No result_url in chunkData. Full response:', JSON.stringify(chunkData));
+          resolve();
         }
-      } else {
-        logger.warn('Unexpected response status:', playResponseData.status);
+      });
+    };
+
+    // Main streaming loop
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i].trim();
+      if (chunk.length === 0) continue;
+
+      // Fetch and buffer the current chunk
+      const chunkData = await fetchAndBufferChunk(chunk);
+      chunkBuffer.push(chunkData);
+
+      // If it's the first chunk or we're not currently playing, start playing
+      if (i === 0 || !isPlayingChunk) {
+        isPlayingChunk = true;
+        while (chunkBuffer.length > 0) {
+          const nextChunk = chunkBuffer.shift();
+          await playChunkVideo(nextChunk);
+
+          // If there are more chunks and the buffer is empty, fetch the next chunk
+          if (i < chunks.length - 1 && chunkBuffer.length === 0) {
+            const nextChunkData = await fetchAndBufferChunk(chunks[i + 1].trim());
+            chunkBuffer.push(nextChunkData);
+          }
+        }
+        isPlayingChunk = false;
       }
     }
 
@@ -1515,19 +1541,28 @@ function handleTranscription(data) {
     if (transcript.trim()) {
       currentUtterance += transcript + ' ';
       updateTranscript(currentUtterance.trim(), true);
+    }
+  } else {
+    logger.debug('Interim transcript:', transcript);
+    updateTranscript(currentUtterance + transcript, false);
+  }
+
+  // Reset the utterance end timeout
+  clearTimeout(utteranceEndTimeout);
+  utteranceEndTimeout = setTimeout(() => {
+    if (currentUtterance.trim()) {
+      logger.debug('Utterance end detected');
       chatHistory.push({
         role: 'user',
         content: currentUtterance.trim(),
       });
       sendChatToGroq();
+      currentUtterance = '';
+      interimMessageAdded = false;
     }
-    currentUtterance = '';
-    interimMessageAdded = false;
-  } else {
-    logger.debug('Interim transcript:', transcript);
-    updateTranscript(currentUtterance + transcript, false);
-  }
+  }, 1000); // Wait for 1 second of silence before considering the utterance complete
 }
+
 
 async function startRecording() {
   if (isRecording) {
