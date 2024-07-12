@@ -1548,7 +1548,7 @@ function handleTranscription(data) {
     } else {
       const interimElement = msgHistory.querySelector('span[data-interim]');
       if (interimElement) {
-        // interimElement.innerHTML = `<u>User (Interim):</u> ${interimTranscript}`;
+        interimElement.innerHTML = `<u>User (Interim):</u> ${interimTranscript}`;
       }
     }
     
