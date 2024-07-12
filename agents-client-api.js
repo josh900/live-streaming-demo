@@ -1583,7 +1583,7 @@ async function startRecording() {
       language: "en-US",
       smart_format: true,
       interim_results: true,
-      utterance_end_ms: 1500,
+      utterance_end_ms: 2250,
       punctuate: true,
       vad_events: true,
       encoding: "linear16",
