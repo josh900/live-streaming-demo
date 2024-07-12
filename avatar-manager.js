@@ -20,7 +20,7 @@ async function uploadToS3(filePath, fileName, contentType) {
     
     const uploadParams = {
         Bucket: "skoop-general",
-        Key: `avatars/${fileName}`,
+        Key: `avatar-assets/${fileName}`,
         Body: fileStream,
         ContentType: contentType,
         Tagging: "cache-control=true"
@@ -29,7 +29,7 @@ async function uploadToS3(filePath, fileName, contentType) {
     try {
         const data = await s3Client.send(new PutObjectCommand(uploadParams));
         console.log("File uploaded successfully to S3:", data);
-        return `https://skoop-general.s3.amazonaws.com/avatars/${fileName}`;
+        return `https://skoop-general.s3.amazonaws.com/avatar-assets/${fileName}`;
     } catch (err) {
         console.error("Error uploading file to S3:", err);
         throw err;

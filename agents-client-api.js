@@ -1147,18 +1147,14 @@ function playIdleVideo() {
 
 function preloadAvatarVideos() {
   Object.values(avatars).forEach(avatar => {
-    const videoElement = document.createElement('video');
-    videoElement.preload = 'auto';
-    videoElement.src = avatar.silentVideoUrl;
-    videoElement.style.display = 'none';
-    document.body.appendChild(videoElement);
-    
-    // Remove the video element after it's loaded
-    videoElement.onloadeddata = () => {
-      document.body.removeChild(videoElement);
-    };
+    const link = document.createElement('link');
+    link.rel = 'preload';
+    link.href = avatar.silentVideoUrl;
+    link.as = 'video';
+    document.head.appendChild(link);
   });
 }
+
 
 function stopAllStreams() {
   if (streamVideoElement && streamVideoElement.srcObject) {
