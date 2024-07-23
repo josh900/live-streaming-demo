@@ -1672,11 +1672,11 @@ async function startStreaming(assistantReply) {
       return;
     }
 
-    // Split the reply into chunks of about 150 characters, breaking at spaces
+    // Split the reply into chunks of about 250 characters, breaking at spaces
     const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
 
-    // Start the transition to streaming video immediately
-    smoothTransition(true);
+    // Start the transition to streaming video only once
+    let transitionStarted = false;
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i].trim();
@@ -1723,6 +1723,11 @@ async function startStreaming(assistantReply) {
         logger.debug('Stream chunk started successfully');
 
         if (playResponseData.result_url) {
+          if (!transitionStarted) {
+            smoothTransition(true);
+            transitionStarted = true;
+          }
+          
           streamVideoElement.src = playResponseData.result_url;
           logger.debug('Setting stream video source:', playResponseData.result_url);
 
@@ -1745,15 +1750,15 @@ async function startStreaming(assistantReply) {
             streamVideoElement.onended = resolve;
           });
         } else {
-          logger.warn('No result_url in playResponseData. Waiting for next chunk.');
-          continue;  // Skip to next chunk instead of breaking
+          logger.debug('No result_url in playResponseData. Waiting for next chunk.');
+          // Don't transition to idle here, just continue waiting
         }
       } else {
         logger.warn('Unexpected response status:', playResponseData.status);
       }
     }
 
-    // Switch back to idle video after all chunks have played
+    // Only transition back to idle after all chunks have been processed
     smoothTransition(false);
 
   } catch (error) {
