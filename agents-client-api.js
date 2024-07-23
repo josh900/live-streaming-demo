@@ -23,7 +23,6 @@ let videoIsPlaying;
 let lastBytesReceived;
 let chatHistory = [];
 let inactivityTimeout;
-let transcriptionTimer;
 let keepAliveInterval;
 let socket;
 let isInitializing = false;
@@ -36,26 +35,19 @@ let audioWorkletNode;
 let currentUtterance = '';
 let interimMessageAdded = false;
 let autoSpeakMode = true;
-let speakTimeout;
 let transitionCanvas;
 let transitionCtx;
 let transitionAnimationFrame;
 let isDebugMode = false;
-let autoSpeakInProgress = false;
-let reconnectTimeout;
 let isTransitioning = false;
 let lastVideoStatus = null;
-let isPreparing = false;
 let isCurrentlyStreaming = false;
-let currentStreamTimeout;
 let reconnectAttempts = 0;
 let isReconnecting = false;
 let persistentStreamId = null;
 let persistentSessionId = null;
 let isPersistentStreamActive = false;
 let keepAliveFailureCount = 0;
-let isStreamReady = false;
-let streamVideoOpacity = 0;
 const API_RATE_LIMIT = 30; // Maximum number of calls per minute
 const API_CALL_INTERVAL = 60000 / API_RATE_LIMIT; // Minimum time between API calls in milliseconds
 let lastApiCallTime = 0;
@@ -478,29 +470,6 @@ function initializeTransitionCanvas() {
 
 
 
-async function destroyConnection() {
-  if (streamId) {
-    try {
-      await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Basic ${DID_API.key}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ session_id: sessionId }),
-      });
-
-      logger.debug('Stream destroyed successfully');
-    } catch (error) {
-      logger.error('Error destroying stream:', error);
-    } finally {
-      stopAllStreams();
-      closePC();
-      streamId = null;
-      sessionId = null;
-    }
-  }
-}
 
 function smoothTransition(toStreaming, duration = 250) {
   const idleVideoElement = document.getElementById('idle-video-element');
@@ -648,18 +617,6 @@ function initializeWebSocket() {
 }
 
 
-async function rateLimitedApiCall(url, options) {
-  const now = Date.now();
-  const timeSinceLastCall = now - lastApiCallTime;
-
-  if (timeSinceLastCall < API_CALL_INTERVAL) {
-    await new Promise(resolve => setTimeout(resolve, API_CALL_INTERVAL - timeSinceLastCall));
-  }
-
-  lastApiCallTime = Date.now();
-  return fetch(url, options);
-}
-
 
 
 
@@ -786,6 +743,9 @@ async function initializePersistentStream() {
     logger.info('Persistent stream initialized successfully');
   } catch (error) {
     logger.error('Failed to initialize persistent stream:', error);
+    isPersistentStreamActive = false;
+    persistentStreamId = null;
+    persistentSessionId = null;
     throw error;
   }
 }
@@ -804,21 +764,24 @@ function startKeepAlive() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ session_id: persistentSessionId }),
-        });
+        }, 3, 5000); // Retry 3 times with 5 second delay
+
         if (!response.ok) {
           throw new Error(`Keepalive failed: ${response.status} ${response.statusText}`);
         }
         logger.debug('Keepalive sent successfully');
+        keepAliveFailureCount = 0;
       } catch (error) {
         logger.error('Error sending keepalive:', error);
-        // Only reinitialize if we've failed multiple times
-        if (++keepAliveFailureCount >= 3) {
+        keepAliveFailureCount++;
+        if (keepAliveFailureCount >= 3) {
+          logger.warn('Multiple keepalive failures. Attempting to reinitialize persistent stream.');
           await reinitializePersistentStream();
           keepAliveFailureCount = 0;
         }
       }
     }
-  }, 60000); // Send keepalive every 60 seconds
+  }, 30000); // Send keepalive every 30 seconds instead of 60
 }
 
 async function destroyPersistentStream() {
@@ -852,14 +815,27 @@ async function destroyPersistentStream() {
 async function reinitializePersistentStream() {
   logger.info('Reinitializing persistent stream...');
   
-  await destroyPersistentStream();
+  // Set a flag to prevent multiple simultaneous reinitialization attempts
+  if (isReconnecting) {
+    logger.warn('Reinitialization already in progress. Skipping.');
+    return;
+  }
+  
+  isReconnecting = true;
   
   try {
+    await destroyPersistentStream();
+    
+    // Add a delay before attempting to reconnect
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
     await initializePersistentStream();
     logger.info('Persistent stream reinitialized successfully');
+    isReconnecting = false;
   } catch (error) {
     logger.error('Failed to reinitialize persistent stream:', error);
-    showErrorMessage('Failed to reinitialize stream. Please try again or refresh the page.');
+    isReconnecting = false;
+    showErrorMessage('Failed to reinitialize stream. Please refresh the page.');
   }
 }
 
@@ -1526,7 +1502,7 @@ function closePC(pc = peerConnection) {
   }
 }
 
-async function fetchWithRetries(url, options, retries = 0) {
+async function fetchWithRetries(url, options, retries = 0, delayMs = 1000) {
   try {
     const now = Date.now();
     const timeSinceLastCall = now - lastApiCallTime;
@@ -1537,18 +1513,25 @@ async function fetchWithRetries(url, options, retries = 0) {
 
     lastApiCallTime = Date.now();
 
-    const response = await fetch(url, options);  // Use regular fetch here, not fetchWithRetries
+    const response = await fetch(url, options);
     if (!response.ok) {
+      if (response.status === 429) {
+        // If rate limited, wait for a longer time before retrying
+        const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
+        logger.warn(`Rate limited. Retrying after ${retryAfter} seconds.`);
+        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+        return fetchWithRetries(url, options, retries, delayMs);
+      }
       const errorText = await response.text();
       throw new Error(`HTTP error ${response.status}: ${errorText}`);
     }
     return response;
   } catch (err) {
     if (retries < maxRetryCount) {
-      const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 1000;
+      const delay = Math.min(Math.pow(2, retries) * delayMs + Math.random() * 1000, maxDelaySec * 1000);
       logger.warn(`Request failed, retrying ${retries + 1}/${maxRetryCount} in ${delay}ms. Error: ${err.message}`);
       await new Promise((resolve) => setTimeout(resolve, delay));
-      return fetchWithRetries(url, options, retries + 1);
+      return fetchWithRetries(url, options, retries + 1, delayMs);
     } else {
       throw new Error(`Max retries exceeded. Error: ${err.message}`);
     }
@@ -1828,14 +1811,6 @@ export function toggleSimpleMode() {
   }
 }
 
-function isValidUrl(string) {
-  try {
-    new URL(string);
-    return true;
-  } catch (_) {
-    return false;
-  }
-}
 
 function startSendingAudioData() {
   logger.debug('Starting to send audio data...');
