@@ -1255,20 +1255,6 @@ async function attemptReconnect() {
   }
 }
 
-
-
-async function attemptReconnect() {
-  logger.debug('Attempting to reconnect...');
-  try {
-    await reinitializeConnection();
-    logger.debug('Reconnection successful');
-  } catch (error) {
-    logger.error('Reconnection attempt failed:', error);
-    scheduleReconnect();
-  }
-}
-
-
 function onConnectionStateChange() {
   const { peer: peerStatusLabel } = getStatusLabels();
   if (peerStatusLabel) {
