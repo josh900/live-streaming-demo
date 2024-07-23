@@ -941,7 +941,7 @@ async function handleAvatarChange() {
 
 async function loadAvatars() {
   try {
-    const response = await fetchWithRetries('/avatars');
+    const response = await fetch('/avatars');
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -1022,7 +1022,7 @@ async function saveAvatar() {
   showToast('Saving avatar...', 0);
 
   try {
-    const response = await fetchWithRetries('/avatar', {
+    const response = await fetch('/avatar', {
       method: 'POST',
       body: formData
     });
@@ -1527,16 +1527,16 @@ async function fetchWithRetries(url, options, retries = 0) {
     
     lastApiCallTime = Date.now();
 
-    const response = await fetchWithRetries(url, options);
+    const response = await fetch(url, options);  // Use regular fetch here, not fetchWithRetries
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`HTTP error ${response.status}: ${errorText}`);
     }
     return response;
   } catch (err) {
-    if (retries <= maxRetryCount) {
+    if (retries < maxRetryCount) {
       const delay = Math.min(Math.pow(2, retries) / 4 + Math.random(), maxDelaySec) * 1000;
-      logger.warn(`Request failed, retrying ${retries}/${maxRetryCount} in ${delay}ms. Error: ${err.message}`);
+      logger.warn(`Request failed, retrying ${retries + 1}/${maxRetryCount} in ${delay}ms. Error: ${err.message}`);
       await new Promise((resolve) => setTimeout(resolve, delay));
       return fetchWithRetries(url, options, retries + 1);
     } else {
@@ -1544,7 +1544,6 @@ async function fetchWithRetries(url, options, retries = 0) {
     }
   }
 }
-
 
 async function initializeConnection() {
   if (isInitializing) {
@@ -2055,7 +2054,7 @@ async function sendChatToGroq() {
     };
     logger.debug('Request body:', JSON.stringify(requestBody));
 
-    const response = await fetchWithRetries('/chat', {
+    const response = await fetch('/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
