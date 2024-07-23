@@ -65,6 +65,7 @@ const MAX_RECONNECT_DELAY = 30000;
 
 
 
+
 export function setLogLevel(level) {
   logger.setLogLevel(level);
   isDebugMode = level === 'DEBUG';
@@ -467,7 +468,7 @@ function initializeTransitionCanvas() {
     const videoWrapper = document.querySelector('#video-wrapper');
     const rect = videoWrapper.getBoundingClientRect();
     const size = Math.min(rect.width, rect.height, 550);
-  
+
     transitionCanvas.width = size;
     transitionCanvas.height = size;
   });
@@ -650,11 +651,11 @@ function initializeWebSocket() {
 async function rateLimitedApiCall(url, options) {
   const now = Date.now();
   const timeSinceLastCall = now - lastApiCallTime;
-  
+
   if (timeSinceLastCall < API_CALL_INTERVAL) {
     await new Promise(resolve => setTimeout(resolve, API_CALL_INTERVAL - timeSinceLastCall));
   }
-  
+
   lastApiCallTime = Date.now();
   return fetch(url, options);
 }
@@ -817,14 +818,14 @@ function startKeepAlive() {
         }
       }
     }
-  }, 60000); // Send keepalive every 60 seconds instead of 30
+  }, 60000); // Send keepalive every 60 seconds
 }
 
 async function destroyPersistentStream() {
   if (persistentStreamId) {
     try {
       await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'DELETE',
+        method: 'DELETE',
         headers: {
           Authorization: `Basic ${DID_API.key}`,
           'Content-Type': 'application/json',
@@ -850,8 +851,16 @@ async function destroyPersistentStream() {
 
 async function reinitializePersistentStream() {
   logger.info('Reinitializing persistent stream...');
+  
   await destroyPersistentStream();
-  await initializePersistentStream();
+  
+  try {
+    await initializePersistentStream();
+    logger.info('Persistent stream reinitialized successfully');
+  } catch (error) {
+    logger.error('Failed to reinitialize persistent stream:', error);
+    showErrorMessage('Failed to reinitialize stream. Please try again or refresh the page.');
+  }
 }
 
 async function initialize() {
@@ -1193,11 +1202,11 @@ function onIceGatheringStateChange() {
 }
 
 function onIceCandidate(event) {
-  if (event.candidate) {
+  if (event.candidate && persistentStreamId && persistentSessionId) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
     logger.debug('New ICE candidate:', candidate);
 
-    fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
+    fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/ice`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -1207,13 +1216,14 @@ function onIceCandidate(event) {
         candidate,
         sdpMid,
         sdpMLineIndex,
-        session_id: sessionId,
+        session_id: persistentSessionId,
       }),
     }).catch(error => {
       logger.error('Error sending ICE candidate:', error);
     });
   }
 }
+
 
 function onIceConnectionStateChange() {
   const { ice: iceStatusLabel } = getStatusLabels();
@@ -1520,11 +1530,11 @@ async function fetchWithRetries(url, options, retries = 0) {
   try {
     const now = Date.now();
     const timeSinceLastCall = now - lastApiCallTime;
-    
+
     if (timeSinceLastCall < API_CALL_INTERVAL) {
       await new Promise(resolve => setTimeout(resolve, API_CALL_INTERVAL - timeSinceLastCall));
     }
-    
+
     lastApiCallTime = Date.now();
 
     const response = await fetch(url, options);  // Use regular fetch here, not fetchWithRetries
@@ -1735,7 +1745,8 @@ async function startStreaming(assistantReply) {
             streamVideoElement.onended = resolve;
           });
         } else {
-          logger.error('No result_url in playResponseData. Full response:', JSON.stringify(playResponseData));
+          logger.warn('No result_url in playResponseData. Waiting for next chunk.');
+          continue;  // Skip to next chunk instead of breaking
         }
       } else {
         logger.warn('Unexpected response status:', playResponseData.status);
@@ -1753,6 +1764,7 @@ async function startStreaming(assistantReply) {
     }
   }
 }
+
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
@@ -2209,7 +2221,7 @@ const destroyButton = document.getElementById('destroy-button');
 destroyButton.onclick = async () => {
   try {
     await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
-    method: 'DELETE',
+      method: 'DELETE',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
         'Content-Type': 'application/json',
