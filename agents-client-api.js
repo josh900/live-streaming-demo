@@ -55,9 +55,8 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 const INITIAL_RECONNECT_DELAY = 6000;
 const MAX_RECONNECT_DELAY = 30000;
 let keepAliveTimeout;
-const KEEPALIVE_INTERVAL = 60000; // Increase to 60 seconds
-const MAX_KEEPALIVE_FAILURES = 5; // Increase the failure threshold
-
+const KEEPALIVE_INTERVAL = 30000; // 30 seconds
+const MAX_KEEPALIVE_FAILURES = 3;
 
 
 
@@ -780,20 +779,19 @@ async function startKeepAlive() {
         logger.warn('Error sending keepalive:', error);
         keepAliveFailureCount++;
         if (keepAliveFailureCount >= MAX_KEEPALIVE_FAILURES) {
-          logger.warn(`${MAX_KEEPALIVE_FAILURES} consecutive keepalive failures. Attempting to reinitialize persistent stream.`);
-          await reinitializePersistentStream();
-          return; // Exit the function to prevent scheduling another keepalive
+          logger.warn(`${MAX_KEEPALIVE_FAILURES} consecutive keepalive failures. Creating a new stream.`);
+          await createNewStream();
+          return;
         }
       }
     }
     
-    // Schedule the next keepalive
     keepAliveTimeout = setTimeout(sendKeepAlive, KEEPALIVE_INTERVAL);
   };
 
-  // Start the keepalive process
   sendKeepAlive();
 }
+
 
 async function destroyPersistentStream() {
   if (persistentStreamId) {
@@ -822,6 +820,22 @@ async function destroyPersistentStream() {
     }
   }
 }
+
+async function createNewStream() {
+  logger.info('Creating a new stream...');
+  
+  try {
+    await destroyPersistentStream();
+    await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds before creating a new stream
+    await initializePersistentStream();
+    logger.info('New stream created successfully');
+  } catch (error) {
+    logger.error('Failed to create a new stream:', error);
+    showErrorMessage('Failed to create a new stream. Please refresh the page.');
+  }
+}
+
+
 
 async function reinitializePersistentStream() {
   if (isReconnecting) {
@@ -1186,26 +1200,35 @@ function onIceGatheringStateChange() {
   logger.debug('ICE gathering state changed:', peerConnection.iceGatheringState);
 }
 
-function onIceCandidate(event) {
+async function onIceCandidate(event) {
   if (event.candidate && persistentStreamId && persistentSessionId) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
-    logger.debug('New ICE candidate:', candidate);
+    try {
+      const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/ice`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          candidate,
+          sdpMid,
+          sdpMLineIndex,
+          session_id: persistentSessionId,
+        }),
+      });
 
-    fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/ice`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        candidate,
-        sdpMid,
-        sdpMLineIndex,
-        session_id: persistentSessionId,
-      }),
-    }).catch(error => {
+      if (!response.ok) {
+        if (response.status === 400 && (await response.text()).includes("missing or invalid session_id")) {
+          logger.warn('Session appears to be invalid. Creating a new stream.');
+          await createNewStream();
+        } else {
+          throw new Error(`Failed to send ICE candidate: ${response.status} ${response.statusText}`);
+        }
+      }
+    } catch (error) {
       logger.error('Error sending ICE candidate:', error);
-    });
+    }
   }
 }
 
