@@ -794,10 +794,6 @@ function startKeepAlive() {
   if (keepAliveInterval) {
     clearInterval(keepAliveInterval);
   }
-  
-  let keepAliveDelay = 60000; // Start with 1 minute
-  const maxKeepAliveDelay = 300000; // Max 5 minutes
-
   keepAliveInterval = setInterval(async () => {
     if (isPersistentStreamActive) {
       try {
@@ -813,17 +809,17 @@ function startKeepAlive() {
           throw new Error(`Keepalive failed: ${response.status} ${response.statusText}`);
         }
         logger.debug('Keepalive sent successfully');
-        keepAliveDelay = 60000; // Reset delay on success
       } catch (error) {
         logger.error('Error sending keepalive:', error);
-        keepAliveDelay = Math.min(keepAliveDelay * 2, maxKeepAliveDelay);
-        clearInterval(keepAliveInterval);
-        keepAliveInterval = setInterval(startKeepAlive, keepAliveDelay);
+        // Only reinitialize if we've failed multiple times
+        if (++keepAliveFailureCount >= 3) {
+          await reinitializePersistentStream();
+          keepAliveFailureCount = 0;
+        }
       }
     }
-  }, keepAliveDelay);
+  }, 60000); // Send keepalive every 60 seconds
 }
-
 
 async function destroyPersistentStream() {
   if (persistentStreamId) {
@@ -1253,29 +1249,21 @@ function scheduleReconnect() {
 
   const delay = Math.min(INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
   logger.debug(`Scheduling reconnection attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
-  clearTimeout(reconnectTimeout);
-  reconnectTimeout = setTimeout(attemptReconnect, delay);
+  setTimeout(attemptReconnect, delay);
   reconnectAttempts++;
 }
 
 async function attemptReconnect() {
-  if (isReconnecting) return;
-  
-  isReconnecting = true;
   logger.debug('Attempting to reconnect...');
   try {
     await reinitializeConnection();
     logger.debug('Reconnection successful');
     reconnectAttempts = 0;
-    isReconnecting = false;
   } catch (error) {
     logger.error('Reconnection attempt failed:', error);
-    isReconnecting = false;
     scheduleReconnect();
   }
 }
-
-
 
 function onConnectionStateChange() {
   const { peer: peerStatusLabel } = getStatusLabels();
@@ -1287,13 +1275,10 @@ function onConnectionStateChange() {
 
   if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
     logger.warn('Peer connection failed or disconnected. Attempting to reconnect...');
-    if (!isReconnecting) {
-      scheduleReconnect();
-    }
+    scheduleReconnect();
   } else if (peerConnection.connectionState === 'connected') {
     logger.debug('Peer connection established successfully');
     reconnectAttempts = 0;
-    isReconnecting = false;
   }
 }
 
@@ -1552,15 +1537,8 @@ async function fetchWithRetries(url, options, retries = 0) {
 
     lastApiCallTime = Date.now();
 
-    const response = await fetch(url, options);
+    const response = await fetch(url, options);  // Use regular fetch here, not fetchWithRetries
     if (!response.ok) {
-      if (response.status === 429) {
-        const retryAfter = response.headers.get('Retry-After');
-        const delay = retryAfter ? parseInt(retryAfter) * 1000 : API_CALL_INTERVAL;
-        logger.warn(`Rate limited. Retrying after ${delay}ms`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        return fetchWithRetries(url, options, retries);
-      }
       const errorText = await response.text();
       throw new Error(`HTTP error ${response.status}: ${errorText}`);
     }
@@ -2240,7 +2218,6 @@ async function reinitializeConnection() {
     isReconnecting = false;
   }
 }
-
 
 const connectButton = document.getElementById('connect-button');
 connectButton.onclick = initializeConnection;
