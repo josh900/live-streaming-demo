@@ -1231,22 +1231,23 @@ function scheduleReconnect() {
   }
 
   const delay = Math.min(INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
-  logger.debug(`Scheduling reconnection attempt in ${delay}ms`);
+  logger.debug(`Scheduling reconnection attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
   setTimeout(attemptReconnect, delay);
   reconnectAttempts++;
 }
+
 
 async function attemptReconnect() {
   logger.debug('Attempting to reconnect...');
   try {
     await reinitializeConnection();
     logger.debug('Reconnection successful');
-    reconnectAttempts = 0;
   } catch (error) {
     logger.error('Reconnection attempt failed:', error);
     scheduleReconnect();
   }
 }
+
 
 function onConnectionStateChange() {
   const { peer: peerStatusLabel } = getStatusLabels();
@@ -2135,8 +2136,8 @@ function toggleAutoSpeak() {
 }
 
 async function reinitializeConnection() {
-  if (isInitializing && !isReconnecting) {
-    logger.warn('Connection initialization already in progress. Skipping reinitialize.');
+  if (isInitializing || isReconnecting) {
+    logger.warn('Connection initialization or reconnection already in progress. Skipping reinitialize.');
     return;
   }
 
@@ -2157,6 +2158,9 @@ async function reinitializeConnection() {
 
     currentUtterance = '';
 
+    // Add a delay before initializing to avoid rapid successive calls
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
     await initializeConnection();
 
     if (!streamId || !sessionId) {
@@ -2172,6 +2176,7 @@ async function reinitializeConnection() {
 
     logger.info('Connection reinitialized successfully');
     logger.debug(`New Stream ID: ${streamId}, New Session ID: ${sessionId}`);
+    reconnectAttempts = 0; // Reset reconnect attempts on successful connection
   } catch (error) {
     logger.error('Error during reinitialization:', error);
     throw error;
