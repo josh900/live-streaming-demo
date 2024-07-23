@@ -59,11 +59,6 @@ let isPersistentStreamActive = false;
 let keepAliveFailureCount = 0;
 let isStreamReady = false;
 let streamVideoOpacity = 0;
-const API_RATE_LIMIT = 100; // Maximum number of calls per minute
-const API_CALL_INTERVAL = 60000 / API_RATE_LIMIT; // Minimum time between API calls in milliseconds
-let lastApiCallTime = 0;
-
-
 
 export function setLogLevel(level) {
   logger.setLogLevel(level);
@@ -646,22 +641,6 @@ function initializeWebSocket() {
   };
 }
 
-
-async function rateLimitedApiCall(url, options) {
-  const now = Date.now();
-  const timeSinceLastCall = now - lastApiCallTime;
-  
-  if (timeSinceLastCall < API_CALL_INTERVAL) {
-    await new Promise(resolve => setTimeout(resolve, API_CALL_INTERVAL - timeSinceLastCall));
-  }
-  
-  lastApiCallTime = Date.now();
-  return fetch(url, options);
-}
-
-
-
-
 function updateTranscript(text, isFinal) {
   const msgHistory = document.getElementById('msgHistory');
   let interimSpan = msgHistory.querySelector('span[data-interim]');
@@ -1197,7 +1176,7 @@ function onIceCandidate(event) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
     logger.debug('New ICE candidate:', candidate);
 
-    fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/ice`, {
+    fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/ice`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -1207,10 +1186,24 @@ function onIceCandidate(event) {
         candidate,
         sdpMid,
         sdpMLineIndex,
-        session_id: sessionId,
+        session_id: persistentSessionId,
       }),
     }).catch(error => {
       logger.error('Error sending ICE candidate:', error);
+    });
+  } else {
+    // For the initial 2 sec idle stream at the beginning of the connection, we utilize a null ice candidate.
+    fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/ice`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        session_id: persistentSessionId,
+      }),
+    }).catch(error => {
+      logger.error('Error sending null ICE candidate:', error);
     });
   }
 }
@@ -1243,19 +1236,6 @@ function scheduleReconnect() {
   reconnectAttempts++;
 }
 
-async function attemptReconnect() {
-  logger.debug('Attempting to reconnect...');
-  try {
-    await reinitializeConnection();
-    logger.debug('Reconnection successful');
-    reconnectAttempts = 0;
-  } catch (error) {
-    logger.error('Reconnection attempt failed:', error);
-    scheduleReconnect();
-  }
-}
-
-
 
 async function attemptReconnect() {
   logger.debug('Attempting to reconnect...');
@@ -1285,7 +1265,6 @@ function onConnectionStateChange() {
     reconnectAttempts = 0;
   }
 }
-
 
 function onSignalingStateChange() {
   const { signaling: signalingStatusLabel } = getStatusLabels();
@@ -1530,17 +1509,8 @@ function closePC(pc = peerConnection) {
   }
 }
 
-async function async function fetchWithRetries(url, options, retries = 0) {
+async function fetchWithRetries(url, options, retries = 0) {
   try {
-    const now = Date.now();
-    const timeSinceLastCall = now - lastApiCallTime;
-    
-    if (timeSinceLastCall < API_CALL_INTERVAL) {
-      await new Promise(resolve => setTimeout(resolve, API_CALL_INTERVAL - timeSinceLastCall));
-    }
-    
-    lastApiCallTime = Date.now();
-
     const response = await fetch(url, options);
     if (!response.ok) {
       const errorText = await response.text();
@@ -1558,7 +1528,6 @@ async function async function fetchWithRetries(url, options, retries = 0) {
     }
   }
 }
-
 
 async function initializeConnection() {
   if (isInitializing) {
