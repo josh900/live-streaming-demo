@@ -1516,7 +1516,7 @@ function closePC(pc = peerConnection) {
   }
 }
 
-async function fetchWithRetries(url, options, retries = 0) {
+async function async function fetchWithRetries(url, options, retries = 0) {
   try {
     const now = Date.now();
     const timeSinceLastCall = now - lastApiCallTime;
