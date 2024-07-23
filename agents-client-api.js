@@ -480,7 +480,7 @@ function initializeTransitionCanvas() {
 async function destroyConnection() {
   if (streamId) {
     try {
-      await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+      await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Basic ${DID_API.key}`,
@@ -796,7 +796,7 @@ function startKeepAlive() {
   keepAliveInterval = setInterval(async () => {
     if (isPersistentStreamActive) {
       try {
-        const response = await fetch(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/keepalive`, {
+        const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/keepalive`, {
           method: 'POST',
           headers: {
             Authorization: `Basic ${DID_API.key}`,
@@ -823,8 +823,8 @@ function startKeepAlive() {
 async function destroyPersistentStream() {
   if (persistentStreamId) {
     try {
-      await fetch(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-        method: 'DELETE',
+      await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      method: 'DELETE',
         headers: {
           Authorization: `Basic ${DID_API.key}`,
           'Content-Type': 'application/json',
@@ -941,7 +941,7 @@ async function handleAvatarChange() {
 
 async function loadAvatars() {
   try {
-    const response = await fetch('/avatars');
+    const response = await fetchWithRetries('/avatars');
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -1022,7 +1022,7 @@ async function saveAvatar() {
   showToast('Saving avatar...', 0);
 
   try {
-    const response = await fetch('/avatar', {
+    const response = await fetchWithRetries('/avatar', {
       method: 'POST',
       body: formData
     });
@@ -1527,7 +1527,7 @@ async function fetchWithRetries(url, options, retries = 0) {
     
     lastApiCallTime = Date.now();
 
-    const response = await fetch(url, options);
+    const response = await fetchWithRetries(url, options);
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`HTTP error ${response.status}: ${errorText}`);
@@ -2055,7 +2055,7 @@ async function sendChatToGroq() {
     };
     logger.debug('Request body:', JSON.stringify(requestBody));
 
-    const response = await fetch('/chat', {
+    const response = await fetchWithRetries('/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -2209,8 +2209,8 @@ connectButton.onclick = initializeConnection;
 const destroyButton = document.getElementById('destroy-button');
 destroyButton.onclick = async () => {
   try {
-    await fetch(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
-      method: 'DELETE',
+    await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+    method: 'DELETE',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
         'Content-Type': 'application/json',
