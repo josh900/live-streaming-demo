@@ -57,8 +57,6 @@ const MAX_RECONNECT_DELAY = 30000;
 let keepAliveTimeout;
 const KEEPALIVE_INTERVAL = 30000; // Send keepalive every 30 seconds
 const MAX_KEEPALIVE_FAILURES = 3;
-let isCreatingNewStream = false;
-
 
 
 
@@ -670,72 +668,6 @@ function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
 }
 
-
-async function createNewStream() {
-  if (isCreatingNewStream) {
-    logger.warn('New stream creation already in progress. Skipping.');
-    return;
-  }
-
-  isCreatingNewStream = true;
-  logger.info('Creating a new stream...');
-
-  try {
-    await destroyPersistentStream();
-    resetConnectionState();
-    
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        source_url: avatars[currentAvatar].imageUrl,
-        driver_url: "bank://lively/driver-06",
-        config: {
-          stitch: true,
-          fluent: true,
-          auto_match: true,
-          pad_audio: 0.0,
-          normalization_factor: 0.1,
-          align_driver: true,
-          align_expand_factor: 0.3,
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: "neutral",
-                intensity: 1
-              }
-            ]
-          }
-        }
-      }),
-    });
-
-    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
-
-    persistentStreamId = newStreamId;
-    persistentSessionId = newSessionId;
-
-    logger.info('New stream created:', { persistentStreamId, persistentSessionId });
-
-    await setupNewStreamConnection(offer, iceServers);
-
-    isPersistentStreamActive = true;
-    startKeepAlive();
-    logger.info('New stream initialized successfully');
-  } catch (error) {
-    logger.error('Failed to create new stream:', error);
-    showErrorMessage('Failed to create new stream. Please refresh the page.');
-  } finally {
-    isCreatingNewStream = false;
-  }
-}
-
 async function initializePersistentStream() {
   if (persistentStreamId) {
     logger.warn('Persistent stream already exists. Destroying existing stream before creating a new one.');
@@ -890,6 +822,70 @@ async function destroyPersistentStream() {
   }
 }
 
+async function createNewStream() {
+  if (isCreatingNewStream) {
+    logger.warn('New stream creation already in progress. Skipping.');
+    return;
+  }
+
+  isCreatingNewStream = true;
+  logger.info('Creating a new stream...');
+
+  try {
+    await destroyPersistentStream();
+    resetConnectionState();
+    
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        source_url: avatars[currentAvatar].imageUrl,
+        driver_url: "bank://lively/driver-06",
+        config: {
+          stitch: true,
+          fluent: true,
+          auto_match: true,
+          pad_audio: 0.0,
+          normalization_factor: 0.1,
+          align_driver: true,
+          align_expand_factor: 0.3,
+          driver_expressions: {
+            expressions: [
+              {
+                start_frame: 0,
+                expression: "neutral",
+                intensity: 1
+              }
+            ]
+          }
+        }
+      }),
+    });
+
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+
+    persistentStreamId = newStreamId;
+    persistentSessionId = newSessionId;
+
+    logger.info('New stream created:', { persistentStreamId, persistentSessionId });
+
+    await setupNewStreamConnection(offer, iceServers);
+
+    isPersistentStreamActive = true;
+    startKeepAlive();
+    logger.info('New stream initialized successfully');
+  } catch (error) {
+    logger.error('Failed to create new stream:', error);
+    showErrorMessage('Failed to create new stream. Please refresh the page.');
+  } finally {
+    isCreatingNewStream = false;
+  }
+}
 
 async function setupNewStreamConnection(offer, iceServers) {
   try {
