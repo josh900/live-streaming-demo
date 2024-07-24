@@ -414,40 +414,6 @@ Keep responses natural and focused solely on answering the customer's question.
 Don't be too formal. For example, instead of saying "Hello! How can I assist you today?", say something like "Hey! how's it going. What can I help you with?"
 `;
 
-
-async function reconnectStream() {
-  if (isReconnecting) {
-    logger.warn('Reconnection already in progress. Skipping.');
-    return;
-  }
-
-  isReconnecting = true;
-  reconnectAttempts++;
-
-  logger.info(`Attempting to reconnect (Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
-
-  try {
-    await destroyPersistentStream();
-    await createNewStream();
-    reconnectAttempts = 0;
-    logger.info('Reconnection successful');
-  } catch (error) {
-    logger.error('Reconnection failed:', error);
-    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-      const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000); // Exponential backoff, max 30 seconds
-      logger.info(`Retrying in ${delay/1000} seconds...`);
-      setTimeout(reconnectStream, delay);
-    } else {
-      logger.error('Max reconnection attempts reached. Please refresh the page.');
-      showErrorMessage('Connection lost. Please refresh the page.');
-    }
-  } finally {
-    isReconnecting = false;
-  }
-}
-
-
-
 async function prepareForStreaming() {
   if (!streamId || !sessionId) {
     throw new Error('Stream ID or Session ID is missing. Cannot prepare for streaming.');
@@ -706,9 +672,20 @@ function updateAssistantReply(text) {
 
 
 async function createNewStream() {
+  if (isCreatingNewStream) {
+    logger.warn('New stream creation already in progress. Skipping.');
+    return;
+  }
+
+  isCreatingNewStream = true;
   logger.info('Creating a new stream...');
 
   try {
+    await destroyPersistentStream();
+    resetConnectionState();
+    
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
     const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
       method: 'POST',
       headers: {
@@ -753,7 +730,9 @@ async function createNewStream() {
     logger.info('New stream initialized successfully');
   } catch (error) {
     logger.error('Failed to create new stream:', error);
-    throw error;
+    showErrorMessage('Failed to create new stream. Please refresh the page.');
+  } finally {
+    isCreatingNewStream = false;
   }
 }
 
@@ -886,7 +865,6 @@ async function startKeepAlive() {
 async function destroyPersistentStream() {
   if (persistentStreamId) {
     try {
-      logger.debug(`Destroying stream ${persistentStreamId}`);
       await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
         method: 'DELETE',
         headers: {
@@ -895,6 +873,7 @@ async function destroyPersistentStream() {
         },
         body: JSON.stringify({ session_id: persistentSessionId }),
       });
+
       logger.debug('Persistent stream destroyed successfully');
     } catch (error) {
       logger.error('Error destroying persistent stream:', error);
@@ -1368,8 +1347,8 @@ function onConnectionStateChange() {
   logger.debug('Peer connection state changed:', peerConnection.connectionState);
 
   if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
-    logger.warn('Peer connection failed or disconnected. Attempting to reconnect...');
-    reconnectStream();
+    logger.warn('Peer connection failed or disconnected. Attempting to create a new stream...');
+    createNewStream();
   } else if (peerConnection.connectionState === 'connected') {
     logger.debug('Peer connection established successfully');
     reconnectAttempts = 0;
