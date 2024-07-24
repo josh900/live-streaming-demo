@@ -59,6 +59,7 @@ const MAX_KEEPALIVE_FAILURES = 20;
 const KEEPALIVE_INTERVAL = 30000; // 30 seconds
 const maxRetryCount = 50;
 const maxDelaySec = 90;
+let reconnectTimeout;
 
 
 
@@ -779,7 +780,7 @@ function startKeepAlive() {
         await reinitializePersistentStream();
       }
     }
-  }, KEEPALIVE_INTERVAL);
+  }, 30000); // Send keepalive every 30 seconds
 }
 
 async function destroyPersistentStream() {
@@ -815,6 +816,7 @@ async function reinitializePersistentStream() {
   await destroyPersistentStream();
   await initializePersistentStream();
 }
+
 
 async function initialize() {
   setLogLevel('DEBUG');
@@ -1202,14 +1204,15 @@ function scheduleReconnect() {
 
   const delay = Math.min(INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
   logger.debug(`Scheduling reconnection attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
-  setTimeout(attemptReconnect, delay);
+  clearTimeout(reconnectTimeout);
+  reconnectTimeout = setTimeout(attemptReconnect, delay);
   reconnectAttempts++;
 }
 
 async function attemptReconnect() {
   logger.debug('Attempting to reconnect...');
   try {
-    await reinitializeConnection();
+    await reinitializePersistentStream();
     logger.debug('Reconnection successful');
     reconnectAttempts = 0;
   } catch (error) {
