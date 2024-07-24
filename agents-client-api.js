@@ -55,8 +55,8 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 const INITIAL_RECONNECT_DELAY = 6000;
 const MAX_RECONNECT_DELAY = 30000;
 let keepAliveTimeout;
-const MAX_KEEPALIVE_FAILURES = 3;
-const KEEPALIVE_INTERVAL = 30000; // 30 seconds
+const MAX_KEEPALIVE_FAILURES = 20;
+const KEEPALIVE_INTERVAL = 90000; // 30 seconds
 const maxRetryCount = 50;
 const maxDelaySec = 90;
 
