@@ -54,9 +54,6 @@ let lastApiCallTime = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
 const INITIAL_RECONNECT_DELAY = 6000;
 const MAX_RECONNECT_DELAY = 30000;
-let keepAliveTimeout;
-const MAX_KEEPALIVE_FAILURES = 3;
-const KEEPALIVE_INTERVAL = 30000; // 30 seconds
 
 
 
@@ -753,12 +750,11 @@ async function initializePersistentStream() {
   }
 }
 
-async function startKeepAlive() {
-  if (keepAliveTimeout) {
-    clearTimeout(keepAliveTimeout);
+function startKeepAlive() {
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval);
   }
-
-  const sendKeepAlive = async () => {
+  keepAliveInterval = setInterval(async () => {
     if (isPersistentStreamActive) {
       try {
         const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/keepalive`, {
@@ -778,20 +774,14 @@ async function startKeepAlive() {
       } catch (error) {
         logger.error('Error sending keepalive:', error);
         keepAliveFailureCount++;
-        if (keepAliveFailureCount >= MAX_KEEPALIVE_FAILURES) {
-          logger.warn(`${MAX_KEEPALIVE_FAILURES} consecutive keepalive failures. Attempting to reinitialize persistent stream.`);
+        if (keepAliveFailureCount >= 3) {
+          logger.warn('Multiple keepalive failures. Attempting to reinitialize persistent stream.');
           await reinitializePersistentStream();
-          return; // Exit the function to prevent scheduling another keepalive
+          keepAliveFailureCount = 0;
         }
       }
     }
-    
-    // Schedule the next keepalive
-    keepAliveTimeout = setTimeout(sendKeepAlive, KEEPALIVE_INTERVAL);
-  };
-
-  // Start the keepalive process
-  sendKeepAlive();
+  }, 30000); // Send keepalive every 30 seconds instead of 60
 }
 
 async function destroyPersistentStream() {
@@ -823,14 +813,16 @@ async function destroyPersistentStream() {
 }
 
 async function reinitializePersistentStream() {
+  logger.info('Reinitializing persistent stream...');
+  
+  // Set a flag to prevent multiple simultaneous reinitialization attempts
   if (isReconnecting) {
     logger.warn('Reinitialization already in progress. Skipping.');
     return;
   }
-
+  
   isReconnecting = true;
-  logger.info('Reinitializing persistent stream...');
-
+  
   try {
     await destroyPersistentStream();
     
@@ -839,11 +831,11 @@ async function reinitializePersistentStream() {
     
     await initializePersistentStream();
     logger.info('Persistent stream reinitialized successfully');
+    isReconnecting = false;
   } catch (error) {
     logger.error('Failed to reinitialize persistent stream:', error);
-    showErrorMessage('Failed to reinitialize stream. Please refresh the page.');
-  } finally {
     isReconnecting = false;
+    showErrorMessage('Failed to reinitialize stream. Please refresh the page.');
   }
 }
 
@@ -1530,7 +1522,8 @@ async function fetchWithRetries(url, options, retries = 0, delayMs = 1000) {
         await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
         return fetchWithRetries(url, options, retries, delayMs);
       }
-      throw new Error(`HTTP error ${response.status}: ${await response.text()}`);
+      const errorText = await response.text();
+      throw new Error(`HTTP error ${response.status}: ${errorText}`);
     }
     return response;
   } catch (err) {
@@ -1540,7 +1533,7 @@ async function fetchWithRetries(url, options, retries = 0, delayMs = 1000) {
       await new Promise((resolve) => setTimeout(resolve, delay));
       return fetchWithRetries(url, options, retries + 1, delayMs);
     } else {
-      throw err;
+      throw new Error(`Max retries exceeded. Error: ${err.message}`);
     }
   }
 }
