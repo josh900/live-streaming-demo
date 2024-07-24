@@ -886,6 +886,33 @@ async function createNewStream() {
 }
 
 
+async function setupNewStreamConnection(offer, iceServers) {
+  try {
+    closePC(); // Close any existing peer connection
+    sessionClientAnswer = await createPeerConnection(offer, iceServers);
+
+    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/sdp`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        answer: sessionClientAnswer,
+        session_id: persistentSessionId,
+      }),
+    });
+
+    if (!sdpResponse.ok) {
+      throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
+    }
+
+    logger.info('New stream connection set up successfully');
+  } catch (error) {
+    logger.error('Error setting up new stream connection:', error);
+    throw error;
+  }
+}
 
 async function initialize() {
   setLogLevel('DEBUG');
@@ -1253,10 +1280,12 @@ async function onIceCandidate(event) {
       }
     } catch (error) {
       logger.error('Error sending ICE candidate:', error);
+      if (error.message.includes('missing or invalid session_id')) {
+        await createNewStream();
+      }
     }
   }
 }
-
 
 
 
