@@ -869,6 +869,7 @@ async function initialize() {
   showLoadingSymbol();
   try {
     await initializePersistentStream();
+    scheduleNextReconnect();
     hideLoadingSymbol();
   } catch (error) {
     logger.error('Error during initialization:', error);
@@ -1627,7 +1628,8 @@ async function startStreaming(assistantReply) {
     logger.debug('Starting streaming with reply:', assistantReply);
     if (!persistentStreamId || !persistentSessionId) {
       logger.error('Persistent stream not initialized. Cannot start streaming.');
-      await initializePersistentStream();
+      await reinitializeConnection();
+      return;
     }
 
     if (!currentAvatar || !avatars[currentAvatar]) {
@@ -1650,63 +1652,75 @@ async function startStreaming(assistantReply) {
       const chunk = chunks[i].trim();
       if (chunk.length === 0) continue;
 
-      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${DID_API.key}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          script: {
-            type: 'text',
-            input: chunk,
-            provider: {
-              type: 'microsoft',
-              voice_id: avatars[currentAvatar].voiceId,
+      try {
+        const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Basic ${DID_API.key}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            script: {
+              type: 'text',
+              input: chunk,
+              provider: {
+                type: 'microsoft',
+                voice_id: avatars[currentAvatar].voiceId,
+              },
             },
-          },
-          config: {
-            fluent: true,
-            stitch: true,
-            pad_audio: 0.0,
-            align_driver: true,
-            align_expand_factor: 0.3,
-            motion_factor: 0.7,
-            result_format: "mp4",
-          },
-          session_id: persistentSessionId,
-          driver_url: "bank://lively/driver-06",
-          stream_warmup: true,
-        }),
-      });
+            config: {
+              fluent: true,
+              stitch: true,
+              pad_audio: 0.0,
+              align_driver: true,
+              align_expand_factor: 0.3,
+              motion_factor: 0.7,
+              result_format: "mp4",
+            },
+            session_id: persistentSessionId,
+            driver_url: "bank://lively/driver-06",
+            stream_warmup: true,
+          }),
+        });
 
-      if (!playResponse.ok) {
-        throw new Error(`HTTP error! status: ${playResponse.status}`);
-      }
-
-      const playResponseData = await playResponse.json();
-      logger.debug('Streaming response:', playResponseData);
-
-      if (playResponseData.status === 'started') {
-        logger.debug('Stream chunk started successfully');
-
-        if (playResponseData.result_url) {
-          smoothTransition(true);
-          streamVideoElement.src = playResponseData.result_url;
-          logger.debug('Setting stream video source:', playResponseData.result_url);
-
-          streamVideoElement.oncanplay = () => {
-            streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
-          };
-
-          await new Promise(resolve => {
-            streamVideoElement.onended = resolve;
-          });
-        } else {
-          logger.debug('No result_url in playResponseData. Waiting for next chunk.');
+        if (!playResponse.ok) {
+          throw new Error(`HTTP error! status: ${playResponse.status}`);
         }
-      } else {
-        logger.warn('Unexpected response status:', playResponseData.status);
+
+        const playResponseData = await playResponse.json();
+        logger.debug('Streaming response:', playResponseData);
+
+        if (playResponseData.status === 'started') {
+          logger.debug('Stream chunk started successfully');
+
+          if (playResponseData.result_url) {
+            smoothTransition(true);
+            streamVideoElement.src = playResponseData.result_url;
+            logger.debug('Setting stream video source:', playResponseData.result_url);
+
+            streamVideoElement.oncanplay = () => {
+              streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
+            };
+
+            await new Promise(resolve => {
+              streamVideoElement.onended = resolve;
+            });
+          } else {
+            logger.debug('No result_url in playResponseData. Waiting for next chunk.');
+          }
+        } else {
+          logger.warn('Unexpected response status:', playResponseData.status);
+        }
+      } catch (error) {
+        logger.error('Error during chunk streaming:', error);
+        if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
+          logger.warn('Stream not found or invalid session. Attempting to reinitialize connection.');
+          await reinitializeConnection();
+          // Retry streaming this chunk
+          i--;
+          continue;
+        }
+        throw error;
       }
     }
 
@@ -1716,11 +1730,12 @@ async function startStreaming(assistantReply) {
     logger.error('Error during streaming:', error);
     if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
       logger.warn('Stream not found or invalid session. Attempting to reinitialize persistent stream.');
-      await reinitializePersistentStream();
+      await reinitializeConnection();
     }
+  } finally {
+    isCurrentlyStreaming = false;
   }
 }
-
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
@@ -2121,15 +2136,11 @@ async function reinitializeConnection() {
   logger.debug('Reinitializing connection...');
 
   try {
-    await destroyPersistentStream();
-    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 2 seconds before reinitializing
-
-    await initializePersistentStream();
-
-    if (isRecording) {
-      await stopRecording();
-      await startRecording();
+    if (!backgroundPeerConnection || !backgroundStreamId || !backgroundSessionId) {
+      await initializeBackgroundConnection();
     }
+
+    await swapConnections();
 
     logger.info('Connection reinitialized successfully');
     reconnectAttempts = 0;
@@ -2144,8 +2155,28 @@ async function reinitializeConnection() {
 
 function scheduleNextReconnect() {
   clearTimeout(reconnectTimeout);
-  reconnectTimeout = setTimeout(reinitializeConnection, RECONNECT_INTERVAL);
+  const timeUntilReconnect = STREAM_DURATION - (Date.now() - lastReconnectTime);
+  const delay = Math.max(0, timeUntilReconnect - 10000); // Reconnect 10 seconds before stream expiration
+
+  reconnectTimeout = setTimeout(() => {
+    if (!isCurrentlyStreaming) {
+      reinitializeConnection();
+    } else {
+      waitForIdleToReconnect();
+    }
+  }, delay);
 }
+
+function waitForIdleToReconnect() {
+  if (!isCurrentlyStreaming) {
+    reinitializeConnection();
+  } else {
+    setTimeout(waitForIdleToReconnect, 1000);
+  }
+}
+
+
+
 
 function handleReconnectFailure() {
   reconnectAttempts++;
@@ -2172,34 +2203,21 @@ async function swapConnections() {
     return;
   }
 
-  isReconnecting = true;
-  logger.debug('Swapping connections...');
+  await destroyPersistentStream();
 
-  try {
-    await destroyPersistentStream();
+  peerConnection = backgroundPeerConnection;
+  persistentStreamId = backgroundStreamId;
+  persistentSessionId = backgroundSessionId;
 
-    peerConnection = backgroundPeerConnection;
-    persistentStreamId = backgroundStreamId;
-    persistentSessionId = backgroundSessionId;
+  backgroundPeerConnection = null;
+  backgroundStreamId = null;
+  backgroundSessionId = null;
 
-    backgroundPeerConnection = null;
-    backgroundStreamId = null;
-    backgroundSessionId = null;
-
-    updateVideoElement();
-    startKeepAlive();
-
-    logger.info('Connection swapped successfully');
-    lastReconnectTime = Date.now();
-  } catch (error) {
-    logger.error('Error during connection swap:', error);
-  } finally {
-    isReconnecting = false;
-    isBackgroundInitializing = false;
-  }
+  updateVideoElement();
+  startKeepAlive();
 
   // Schedule the next background initialization
-  setTimeout(reinitializeConnection, STREAM_DURATION / 2);
+  setTimeout(initializeBackgroundConnection, STREAM_DURATION / 2);
 }
 
 async function createNewStream() {
@@ -2237,6 +2255,29 @@ async function createNewStream() {
   return sessionResponse.json();
 }
 
+
+async function initializeBackgroundConnection() {
+  if (isBackgroundInitializing) {
+    return;
+  }
+
+  isBackgroundInitializing = true;
+  try {
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await createNewStream();
+    
+    backgroundPeerConnection = await createBackgroundPeerConnection(offer, iceServers);
+    backgroundStreamId = newStreamId;
+    backgroundSessionId = newSessionId;
+
+    logger.debug('Background connection initialized successfully');
+  } catch (error) {
+    logger.error('Error initializing background connection:', error);
+  } finally {
+    isBackgroundInitializing = false;
+  }
+}
+
+
 async function createBackgroundPeerConnection(offer, iceServers) {
   const pc = new RTCPeerConnection({ iceServers });
   pc.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
@@ -2254,6 +2295,7 @@ async function createBackgroundPeerConnection(offer, iceServers) {
 }
 
 
+
 function updateVideoElement() {
   const streamVideoElement = document.getElementById('stream-video-element');
   if (streamVideoElement && peerConnection) {
@@ -2261,6 +2303,8 @@ function updateVideoElement() {
     streamVideoElement.srcObject = stream;
   }
 }
+
+
 
 
 
