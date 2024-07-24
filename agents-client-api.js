@@ -58,7 +58,7 @@ let keepAliveTimeout;
 const MAX_KEEPALIVE_FAILURES = 3;
 const KEEPALIVE_INTERVAL = 30000; // 30 seconds
 const maxRetryCount = 50;
-const maxDelaySec = 50;
+const maxDelaySec = 90;
 
 
 
