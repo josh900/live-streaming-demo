@@ -1209,7 +1209,7 @@ function scheduleReconnect() {
 async function attemptReconnect() {
   logger.debug('Attempting to reconnect...');
   try {
-    await reinitializePersistentStream();
+    await reinitializeConnection();
     logger.debug('Reconnection successful');
     reconnectAttempts = 0;
   } catch (error) {
