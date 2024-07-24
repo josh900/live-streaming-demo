@@ -892,10 +892,10 @@ async function initialize() {
   try {
     await initializePersistentStream();
     startConnectionHealthCheck(); // Add this line
-    // hideLoadingSymbol();
+    hideLoadingSymbol();
   } catch (error) {
     logger.error('Error during initialization:', error);
-    // hideLoadingSymbol();
+    hideLoadingSymbol();
     showErrorMessage('Failed to connect. Please try again.');
   }
 }
