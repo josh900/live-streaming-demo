@@ -1229,25 +1229,28 @@ function onConnectionStateChange() {
 
   if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
     logger.warn('Peer connection failed or disconnected. Attempting to reconnect...');
-    reinitializeConnection();
+    if (!isReconnecting) {
+      reinitializeConnection(false);
+    }
   } else if (peerConnection.connectionState === 'connected') {
     logger.debug('Peer connection established successfully');
     reconnectAttempts = 0;
   }
 }
 
-
 function setupStreamRefresh() {
   const STREAM_REFRESH_INTERVAL = 110000; // Refresh every 110 seconds (just under 2 minutes)
   
   setInterval(async () => {
-    if (isPersistentStreamActive) {
+    if (isPersistentStreamActive && !isCurrentlyStreaming) {
       logger.debug('Performing periodic stream refresh');
       try {
-        await reinitializeConnection();
+        await reinitializeConnection(true);
       } catch (error) {
         logger.error('Error during periodic stream refresh:', error);
       }
+    } else {
+      logger.debug('Skipping stream refresh - stream is currently active or not persistent');
     }
   }, STREAM_REFRESH_INTERVAL);
 }
@@ -1654,6 +1657,8 @@ async function startStreaming(assistantReply) {
       const chunk = chunks[i].trim();
       if (chunk.length === 0) continue;
 
+      isCurrentlyStreaming = true;
+
       const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
         method: 'POST',
         headers: {
@@ -1715,16 +1720,22 @@ async function startStreaming(assistantReply) {
     }
 
     smoothTransition(false);
+    isCurrentlyStreaming = false;
 
   } catch (error) {
     logger.error('Error during streaming:', error);
+    isCurrentlyStreaming = false;
     if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
       logger.warn('Stream not found or invalid session. Attempting to reinitialize persistent stream.');
-      await reinitializePersistentStream();
+      await reinitializeConnection(true);
+      // Retry streaming after reinitialization
+      await startStreaming(assistantReply);
+    } else {
+      showErrorMessage('An error occurred during streaming. Please try again.');
+      throw error;
     }
   }
 }
-
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
@@ -2115,7 +2126,7 @@ function toggleAutoSpeak() {
   }
 }
 
-async function reinitializeConnection() {
+async function reinitializeConnection(silentRefresh = false) {
   if (isInitializing || isReconnecting) {
     logger.warn('Connection initialization or reconnection already in progress. Skipping reinitialize.');
     return;
@@ -2125,35 +2136,54 @@ async function reinitializeConnection() {
   logger.debug('Reinitializing connection...');
 
   try {
-    await destroyPersistentStream();
-    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 2 seconds before reinitializing
+    if (!silentRefresh) {
+      await destroyPersistentStream();
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 2 seconds before reinitializing
+    }
 
-    await initializePersistentStream();
+    if (!persistentStreamId || !persistentSessionId) {
+      await initializePersistentStream();
+    } else {
+      // Perform a keepalive instead of full reinitialization
+      await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/keepalive`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ session_id: persistentSessionId }),
+      });
+    }
 
-    if (isRecording) {
+    if (isRecording && !silentRefresh) {
       await stopRecording();
       await startRecording();
     }
 
-    await prepareForStreaming();
+    if (!silentRefresh) {
+      await prepareForStreaming();
+    }
 
     logger.info('Connection reinitialized successfully');
     reconnectAttempts = 0; // Reset reconnect attempts on successful connection
   } catch (error) {
     logger.error('Error during reinitialization:', error);
-    reconnectAttempts++;
-    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-      const delay = Math.min(INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
-      logger.debug(`Scheduling next reconnection attempt in ${delay}ms`);
-      setTimeout(reinitializeConnection, delay);
-    } else {
-      logger.error('Max reconnection attempts reached. Please refresh the page.');
-      showErrorMessage('Failed to reconnect after multiple attempts. Please refresh the page.');
+    if (!silentRefresh) {
+      reconnectAttempts++;
+      if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+        const delay = Math.min(INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
+        logger.debug(`Scheduling next reconnection attempt in ${delay}ms`);
+        setTimeout(() => reinitializeConnection(false), delay);
+      } else {
+        logger.error('Max reconnection attempts reached. Please refresh the page.');
+        showErrorMessage('Failed to reconnect after multiple attempts. Please refresh the page.');
+      }
     }
   } finally {
     isReconnecting = false;
   }
 }
+
 
 
 const connectButton = document.getElementById('connect-button');
