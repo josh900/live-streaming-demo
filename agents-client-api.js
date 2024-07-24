@@ -56,9 +56,11 @@ const INITIAL_RECONNECT_DELAY = 6000;
 const MAX_RECONNECT_DELAY = 30000;
 let keepAliveTimeout;
 const MAX_KEEPALIVE_FAILURES = 20;
-const KEEPALIVE_INTERVAL = 90000; // 30 seconds
+const KEEPALIVE_INTERVAL = 30000; // 30 seconds
 const maxRetryCount = 50;
 const maxDelaySec = 90;
+
+
 
 
 
@@ -751,12 +753,12 @@ async function initializePersistentStream() {
   }
 }
 
-async function startKeepAlive() {
-  if (keepAliveTimeout) {
-    clearTimeout(keepAliveTimeout);
+function startKeepAlive() {
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval);
   }
 
-  const sendKeepAlive = async () => {
+  keepAliveInterval = setInterval(async () => {
     if (isPersistentStreamActive) {
       try {
         const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/keepalive`, {
@@ -766,30 +768,18 @@ async function startKeepAlive() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ session_id: persistentSessionId }),
-        }, 3, 5000); // Retry 3 times with 5 second delay
+        });
 
         if (!response.ok) {
           throw new Error(`Keepalive failed: ${response.status} ${response.statusText}`);
         }
         logger.debug('Keepalive sent successfully');
-        keepAliveFailureCount = 0;
       } catch (error) {
         logger.error('Error sending keepalive:', error);
-        keepAliveFailureCount++;
-        if (keepAliveFailureCount >= MAX_KEEPALIVE_FAILURES) {
-          logger.warn(`${MAX_KEEPALIVE_FAILURES} consecutive keepalive failures. Attempting to reinitialize persistent stream.`);
-          await reinitializePersistentStream();
-          return; // Exit the function to prevent scheduling another keepalive
-        }
+        await reinitializePersistentStream();
       }
     }
-    
-    // Schedule the next keepalive
-    keepAliveTimeout = setTimeout(sendKeepAlive, KEEPALIVE_INTERVAL);
-  };
-
-  // Start the keepalive process
-  sendKeepAlive();
+  }, KEEPALIVE_INTERVAL);
 }
 
 async function destroyPersistentStream() {
@@ -821,28 +811,9 @@ async function destroyPersistentStream() {
 }
 
 async function reinitializePersistentStream() {
-  if (isReconnecting) {
-    logger.warn('Reinitialization already in progress. Skipping.');
-    return;
-  }
-
-  isReconnecting = true;
   logger.info('Reinitializing persistent stream...');
-
-  try {
-    await destroyPersistentStream();
-    
-    // Add a delay before attempting to reconnect
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    
-    await initializePersistentStream();
-    logger.info('Persistent stream reinitialized successfully');
-  } catch (error) {
-    logger.error('Failed to reinitialize persistent stream:', error);
-    showErrorMessage('Failed to reinitialize stream. Please refresh the page.');
-  } finally {
-    isReconnecting = false;
-  }
+  await destroyPersistentStream();
+  await initializePersistentStream();
 }
 
 async function initialize() {
@@ -1663,9 +1634,6 @@ async function startStreaming(assistantReply) {
     // Split the reply into chunks of about 250 characters, breaking at spaces
     const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
 
-    // Start the transition to streaming video only once
-    let transitionStarted = false;
-
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i].trim();
       if (chunk.length === 0) continue;
@@ -1711,42 +1679,25 @@ async function startStreaming(assistantReply) {
         logger.debug('Stream chunk started successfully');
 
         if (playResponseData.result_url) {
-          if (!transitionStarted) {
-            smoothTransition(true);
-            transitionStarted = true;
-          }
-          
+          smoothTransition(true);
           streamVideoElement.src = playResponseData.result_url;
           logger.debug('Setting stream video source:', playResponseData.result_url);
 
-          // Preload the video
-          streamVideoElement.load();
-
-          // Play the video as soon as it's ready
           streamVideoElement.oncanplay = () => {
             streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
           };
 
-          // Ensure the streaming video is visible
-          requestAnimationFrame(() => {
-            streamVideoElement.style.opacity = '1';
-            idleVideoElement.style.opacity = '0';
-          });
-
-          // Wait for this chunk to finish playing before moving to the next
           await new Promise(resolve => {
             streamVideoElement.onended = resolve;
           });
         } else {
           logger.debug('No result_url in playResponseData. Waiting for next chunk.');
-          // Don't transition to idle here, just continue waiting
         }
       } else {
         logger.warn('Unexpected response status:', playResponseData.status);
       }
     }
 
-    // Only transition back to idle after all chunks have been processed
     smoothTransition(false);
 
   } catch (error) {
