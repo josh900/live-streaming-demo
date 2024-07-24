@@ -833,9 +833,7 @@ async function createNewStream() {
 
   try {
     await destroyPersistentStream();
-    resetConnectionState();
-    
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 2000)); // Short delay before creating new stream
 
     const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
       method: 'POST',
@@ -886,6 +884,7 @@ async function createNewStream() {
     isCreatingNewStream = false;
   }
 }
+
 
 async function setupNewStreamConnection(offer, iceServers) {
   try {
@@ -1220,21 +1219,17 @@ function showErrorMessage(message) {
 }
 
 async function createPeerConnection(offer, iceServers) {
-  if (peerConnection) {
-    peerConnection.close();
-    peerConnection = null;
+  if (!peerConnection) {
+    peerConnection = new RTCPeerConnection({ iceServers });
+    pcDataChannel = peerConnection.createDataChannel('JanusDataChannel');
+    peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
+    peerConnection.addEventListener('icecandidate', onIceCandidate, true);
+    peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
+    peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
+    peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
+    peerConnection.addEventListener('track', onTrack, true);
+    pcDataChannel.addEventListener('message', onStreamEvent, true);
   }
-
-  peerConnection = new RTCPeerConnection({ iceServers });
-  pcDataChannel = peerConnection.createDataChannel('JanusDataChannel');
-  
-  peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
-  peerConnection.addEventListener('icecandidate', onIceCandidate, true);
-  peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
-  peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
-  peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
-  peerConnection.addEventListener('track', onTrack, true);
-  pcDataChannel.addEventListener('message', onStreamEvent, true);
 
   await peerConnection.setRemoteDescription(offer);
   logger.debug('Set remote SDP');
@@ -1343,8 +1338,8 @@ function onConnectionStateChange() {
   logger.debug('Peer connection state changed:', peerConnection.connectionState);
 
   if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
-    logger.warn('Peer connection failed or disconnected. Attempting to create a new stream...');
-    createNewStream();
+    logger.warn('Peer connection failed or disconnected. Attempting to reconnect...');
+    scheduleReconnect();
   } else if (peerConnection.connectionState === 'connected') {
     logger.debug('Peer connection established successfully');
     reconnectAttempts = 0;
@@ -1571,40 +1566,6 @@ function stopAllStreams() {
     streamVideoElement.srcObject.getTracks().forEach((track) => track.stop());
     streamVideoElement.srcObject = null;
   }
-}
-
-function resetConnectionState() {
-  peerConnection = null;
-  pcDataChannel = null;
-  streamId = null;
-  sessionId = null;
-  sessionClientAnswer = null;
-  statsIntervalId = null;
-  videoIsPlaying = false;
-  lastBytesReceived = null;
-  isInitializing = false;
-  isStreamReady = false;
-  streamVideoOpacity = 0;
-  isPersistentStreamActive = false;
-  keepAliveFailureCount = 0;
-
-  const streamVideoElement = document.getElementById('stream-video-element');
-  const idleVideoElement = document.getElementById('idle-video-element');
-  if (streamVideoElement) {
-    streamVideoElement.srcObject = null;
-    streamVideoElement.src = '';
-    streamVideoElement.style.display = 'none';
-  }
-  if (idleVideoElement) {
-    idleVideoElement.style.display = 'block';
-    idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e));
-  }
-
-  if (keepAliveTimeout) clearTimeout(keepAliveTimeout);
-  if (reconnectTimeout) clearTimeout(reconnectTimeout);
-  if (currentStreamTimeout) clearTimeout(currentStreamTimeout);
-
-  logger.debug('Connection state reset');
 }
 
 function closePC(pc = peerConnection) {
