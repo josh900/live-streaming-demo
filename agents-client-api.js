@@ -55,8 +55,8 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 const INITIAL_RECONNECT_DELAY = 6000;
 const MAX_RECONNECT_DELAY = 30000;
 let keepAliveTimeout;
-const KEEPALIVE_INTERVAL = 60000; // Increase to 60 seconds
-const MAX_KEEPALIVE_FAILURES = 5; // Increase the failure threshold
+const KEEPALIVE_INTERVAL = 30000; // Send keepalive every 30 seconds
+const MAX_KEEPALIVE_FAILURES = 3;
 
 
 
@@ -780,20 +780,19 @@ async function startKeepAlive() {
         logger.warn('Error sending keepalive:', error);
         keepAliveFailureCount++;
         if (keepAliveFailureCount >= MAX_KEEPALIVE_FAILURES) {
-          logger.warn(`${MAX_KEEPALIVE_FAILURES} consecutive keepalive failures. Attempting to reinitialize persistent stream.`);
-          await reinitializePersistentStream();
-          return; // Exit the function to prevent scheduling another keepalive
+          logger.warn(`${MAX_KEEPALIVE_FAILURES} consecutive keepalive failures. Creating a new stream.`);
+          await createNewStream();
+          return;
         }
       }
     }
     
-    // Schedule the next keepalive
     keepAliveTimeout = setTimeout(sendKeepAlive, KEEPALIVE_INTERVAL);
   };
 
-  // Start the keepalive process
   sendKeepAlive();
 }
+
 
 async function destroyPersistentStream() {
   if (persistentStreamId) {
@@ -823,30 +822,70 @@ async function destroyPersistentStream() {
   }
 }
 
-async function reinitializePersistentStream() {
-  if (isReconnecting) {
-    logger.warn('Reinitialization already in progress. Skipping.');
+async function createNewStream() {
+  if (isCreatingNewStream) {
+    logger.warn('New stream creation already in progress. Skipping.');
     return;
   }
 
-  isReconnecting = true;
-  logger.info('Reinitializing persistent stream...');
+  isCreatingNewStream = true;
+  logger.info('Creating a new stream...');
 
   try {
     await destroyPersistentStream();
-    
-    // Add a delay before attempting to reconnect
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    
-    await initializePersistentStream();
-    logger.info('Persistent stream reinitialized successfully');
+    await new Promise(resolve => setTimeout(resolve, 2000)); // Short delay before creating new stream
+
+    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        source_url: avatars[currentAvatar].imageUrl,
+        driver_url: "bank://lively/driver-06",
+        config: {
+          stitch: true,
+          fluent: true,
+          auto_match: true,
+          pad_audio: 0.0,
+          normalization_factor: 0.1,
+          align_driver: true,
+          align_expand_factor: 0.3,
+          driver_expressions: {
+            expressions: [
+              {
+                start_frame: 0,
+                expression: "neutral",
+                intensity: 1
+              }
+            ]
+          }
+        }
+      }),
+    });
+
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+
+    persistentStreamId = newStreamId;
+    persistentSessionId = newSessionId;
+
+    logger.info('New stream created:', { persistentStreamId, persistentSessionId });
+
+    await setupNewStreamConnection(offer, iceServers);
+
+    isPersistentStreamActive = true;
+    startKeepAlive();
+    logger.info('New stream initialized successfully');
   } catch (error) {
-    logger.error('Failed to reinitialize persistent stream:', error);
-    showErrorMessage('Failed to reinitialize stream. Please refresh the page.');
+    logger.error('Failed to create new stream:', error);
+    showErrorMessage('Failed to create new stream. Please refresh the page.');
   } finally {
-    isReconnecting = false;
+    isCreatingNewStream = false;
   }
 }
+
+
 
 async function initialize() {
   setLogLevel('DEBUG');
@@ -1186,28 +1225,39 @@ function onIceGatheringStateChange() {
   logger.debug('ICE gathering state changed:', peerConnection.iceGatheringState);
 }
 
-function onIceCandidate(event) {
+async function onIceCandidate(event) {
   if (event.candidate && persistentStreamId && persistentSessionId) {
     const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
-    logger.debug('New ICE candidate:', candidate);
+    try {
+      const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/ice`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          candidate,
+          sdpMid,
+          sdpMLineIndex,
+          session_id: persistentSessionId,
+        }),
+      });
 
-    fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/ice`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        candidate,
-        sdpMid,
-        sdpMLineIndex,
-        session_id: persistentSessionId,
-      }),
-    }).catch(error => {
+      if (!response.ok) {
+        if (response.status === 400 && (await response.text()).includes("missing or invalid session_id")) {
+          logger.warn('Session appears to be invalid. Creating a new stream.');
+          await createNewStream();
+        } else {
+          throw new Error(`Failed to send ICE candidate: ${response.status} ${response.statusText}`);
+        }
+      }
+    } catch (error) {
       logger.error('Error sending ICE candidate:', error);
-    });
+    }
   }
 }
+
+
 
 
 function onIceConnectionStateChange() {
@@ -1535,9 +1585,8 @@ async function fetchWithRetries(url, options, retries = 0, delayMs = 1000) {
     return response;
   } catch (err) {
     if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
-      // This could be a CORS error, which might not actually indicate a problem
       logger.warn('Fetch failed, possibly due to CORS. Treating as a soft error.');
-      return { ok: true, status: 200 }; // Treat as a successful response
+      return { ok: true, status: 200 };
     }
     if (retries < maxRetryCount) {
       const delay = Math.min(Math.pow(2, retries) * delayMs + Math.random() * 1000, maxDelaySec * 1000);
