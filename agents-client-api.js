@@ -65,9 +65,9 @@ let backgroundStreamId = null;
 let backgroundSessionId = null;
 let lastReconnectTime = 0;
 const RECONNECT_COOLDOWN = 60000; // 1 minute cooldown between reconnects
+let reconnectTimeout;
 const STREAM_DURATION = 110000; // Slightly less than 2 minutes
 const RECONNECT_INTERVAL = 120000; // 2 minutes
-let reconnectTimeout;
 
 
 
@@ -2127,13 +2127,20 @@ function toggleAutoSpeak() {
 }
 
 async function reinitializeConnection() {
+  const now = Date.now();
+  if (now - lastReconnectTime < RECONNECT_COOLDOWN) {
+    logger.debug('Reconnection attempt too soon. Skipping.');
+    return;
+  }
+
+
   if (isInitializing || isReconnecting) {
     logger.warn('Connection initialization or reconnection already in progress. Skipping reinitialize.');
     return;
   }
 
   isReconnecting = true;
-  logger.debug('Reinitializing connection...');
+  lastReconnectTime = now;
 
   try {
     if (!backgroundPeerConnection || !backgroundStreamId || !backgroundSessionId) {
@@ -2155,16 +2162,10 @@ async function reinitializeConnection() {
 
 function scheduleNextReconnect() {
   clearTimeout(reconnectTimeout);
-  const timeUntilReconnect = STREAM_DURATION - (Date.now() - lastReconnectTime);
-  const delay = Math.max(0, timeUntilReconnect - 10000); // Reconnect 10 seconds before stream expiration
-
-  reconnectTimeout = setTimeout(() => {
-    if (!isCurrentlyStreaming) {
-      reinitializeConnection();
-    } else {
-      waitForIdleToReconnect();
-    }
-  }, delay);
+  reconnectTimeout = setTimeout(async () => {
+    await initializeBackgroundConnection();
+    setTimeout(swapConnections, STREAM_DURATION - 10000); // Swap 10 seconds before expiration
+  }, RECONNECT_INTERVAL);
 }
 
 function waitForIdleToReconnect() {
@@ -2199,11 +2200,14 @@ function scheduleConnectionSwap() {
 
 async function swapConnections() {
   if (!backgroundPeerConnection || !backgroundStreamId || !backgroundSessionId) {
-    logger.warn('Background connection not ready. Skipping swap.');
+    logger.warn('Background connection not ready. Initializing new connection.');
+    await reinitializeConnection();
     return;
   }
 
-  await destroyPersistentStream();
+  const oldConnection = peerConnection;
+  const oldStreamId = persistentStreamId;
+  const oldSessionId = persistentSessionId;
 
   peerConnection = backgroundPeerConnection;
   persistentStreamId = backgroundStreamId;
@@ -2216,43 +2220,35 @@ async function swapConnections() {
   updateVideoElement();
   startKeepAlive();
 
-  // Schedule the next background initialization
-  setTimeout(initializeBackgroundConnection, STREAM_DURATION / 2);
+  // Clean up old connection
+  if (oldConnection) {
+    oldConnection.close();
+  }
+  if (oldStreamId && oldSessionId) {
+    try {
+      await destroyStream(oldStreamId, oldSessionId);
+    } catch (error) {
+      logger.error('Error destroying old stream:', error);
+    }
+  }
+
+  scheduleNextReconnect();
 }
 
-async function createNewStream() {
-  const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      source_url: avatars[currentAvatar].imageUrl,
-      driver_url: "bank://lively/driver-06",
-      stream_warmup: true,
-      config: {
-        stitch: true,
-        fluent: true,
-        auto_match: true,
-        pad_audio: 0.0,
-        normalization_factor: 0.1,
-        align_driver: true,
-        align_expand_factor: 0.3,
-        driver_expressions: {
-          expressions: [
-            {
-              start_frame: 0,
-              expression: "neutral",
-              intensity: 1
-            }
-          ]
-        }
-      }
-    }),
-  });
-
-  return sessionResponse.json();
+async function destroyStream(streamId, sessionId) {
+  try {
+    await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+    logger.debug(`Stream ${streamId} destroyed successfully`);
+  } catch (error) {
+    logger.error(`Error destroying stream ${streamId}:`, error);
+  }
 }
 
 
