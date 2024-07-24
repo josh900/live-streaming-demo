@@ -859,7 +859,6 @@ async function initialize() {
   showLoadingSymbol();
   try {
     await initializePersistentStream();
-    startConnectionHealthCheck(); // Add this line
     hideLoadingSymbol();
   } catch (error) {
     logger.error('Error during initialization:', error);
@@ -867,7 +866,6 @@ async function initialize() {
     showErrorMessage('Failed to connect. Please try again.');
   }
 }
-
 
 async function handleAvatarChange() {
   currentAvatar = avatarSelect.value;
@@ -1230,20 +1228,11 @@ function onConnectionStateChange() {
 
   if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
     logger.warn('Peer connection failed or disconnected. Attempting to reconnect...');
-    reinitializeConnection();
+    scheduleReconnect();
   } else if (peerConnection.connectionState === 'connected') {
     logger.debug('Peer connection established successfully');
     reconnectAttempts = 0;
   }
-}
-
-function startConnectionHealthCheck() {
-  setInterval(() => {
-    if (peerConnection && (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected')) {
-      logger.warn('Connection health check detected disconnected state. Attempting to reconnect...');
-      reinitializeConnection();
-    }
-  }, 30000); // Check every 30 seconds
 }
 
 
@@ -2120,9 +2109,6 @@ async function reinitializeConnection() {
   logger.debug('Reinitializing connection...');
 
   try {
-    await destroyPersistentStream();
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second
-
     stopAllStreams();
     closePC();
 
@@ -2133,40 +2119,33 @@ async function reinitializeConnection() {
     streamId = null;
     sessionId = null;
     peerConnection = null;
-    lastBytesReceived = 0;
-    videoIsPlaying = false;
 
     currentUtterance = '';
-    interimMessageAdded = false;
-
-    const msgHistory = document.getElementById('msgHistory');
-    msgHistory.innerHTML = '';
-    chatHistory = [];
-
-    // Reset video elements
-    const streamVideoElement = document.getElementById('stream-video-element');
-    const idleVideoElement = document.getElementById('idle-video-element');
-    if (streamVideoElement) streamVideoElement.srcObject = null;
-    if (idleVideoElement) idleVideoElement.style.display = 'block';
 
     // Add a delay before initializing to avoid rapid successive calls
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
-    await initializePersistentStream();
+    await initializeConnection();
 
-    if (!persistentStreamId || !persistentSessionId) {
-      throw new Error('Persistent Stream ID or Session ID is missing after initialization');
+    if (!streamId || !sessionId) {
+      throw new Error('Stream ID or Session ID is missing after initialization');
+    }
+
+    if (isRecording) {
+      await stopRecording();
+      await startRecording();
     }
 
     await prepareForStreaming();
 
     logger.info('Connection reinitialized successfully');
-    logger.debug(`New Persistent Stream ID: ${persistentStreamId}, New Persistent Session ID: ${persistentSessionId}`);
+    logger.debug(`New Stream ID: ${streamId}, New Session ID: ${sessionId}`);
     reconnectAttempts = 0; // Reset reconnect attempts on successful connection
   } catch (error) {
     logger.error('Error during reinitialization:', error);
-    showErrorMessage('Failed to reconnect. Please refresh the page.');
+    throw error;
   } finally {
+    isInitializing = false;
     isReconnecting = false;
   }
 }
