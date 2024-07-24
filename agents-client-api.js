@@ -55,7 +55,7 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 const INITIAL_RECONNECT_DELAY = 6000;
 const MAX_RECONNECT_DELAY = 30000;
 let keepAliveTimeout;
-const MAX_KEEPALIVE_FAILURES = 3;
+const MAX_KEEPALIVE_FAILURES = 20;
 const KEEPALIVE_INTERVAL = 30000; // 30 seconds
 const maxRetryCount = 50;
 const maxDelaySec = 90;
@@ -667,42 +667,6 @@ function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
 }
 
-
-function startKeepAlive() {
-  if (keepAliveInterval) {
-    clearInterval(keepAliveInterval);
-  }
-
-  keepAliveInterval = setInterval(async () => {
-    if (isPersistentStreamActive) {
-      try {
-        const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/keepalive`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Basic ${DID_API.key}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ session_id: persistentSessionId }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`Keepalive failed: ${response.status} ${response.statusText}`);
-        }
-        logger.debug('Keepalive sent successfully');
-        keepAliveFailureCount = 0;
-      } catch (error) {
-        logger.error('Error sending keepalive:', error);
-        keepAliveFailureCount++;
-        if (keepAliveFailureCount >= MAX_KEEPALIVE_FAILURES) {
-          logger.warn('Max keepalive failures reached. Reinitializing persistent stream...');
-          await reinitializePersistentStream();
-        }
-      }
-    }
-  }, KEEPALIVE_INTERVAL);
-}
-
-
 async function initializePersistentStream() {
   if (persistentStreamId) {
     logger.warn('Persistent stream already exists. Destroying existing stream before creating a new one.');
@@ -789,6 +753,35 @@ async function initializePersistentStream() {
   }
 }
 
+function startKeepAlive() {
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval);
+  }
+
+  keepAliveInterval = setInterval(async () => {
+    if (isPersistentStreamActive) {
+      try {
+        const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/keepalive`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Basic ${DID_API.key}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ session_id: persistentSessionId }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Keepalive failed: ${response.status} ${response.statusText}`);
+        }
+        logger.debug('Keepalive sent successfully');
+      } catch (error) {
+        logger.error('Error sending keepalive:', error);
+        await reinitializePersistentStream();
+      }
+    }
+  }, KEEPALIVE_INTERVAL);
+}
+
 async function destroyPersistentStream() {
   if (persistentStreamId) {
     try {
@@ -820,28 +813,7 @@ async function destroyPersistentStream() {
 async function reinitializePersistentStream() {
   logger.info('Reinitializing persistent stream...');
   await destroyPersistentStream();
-
-  let retryCount = 0;
-  const maxRetries = 3;
-  const retryDelay = 5000; // 5 seconds
-
-  while (retryCount < maxRetries) {
-    try {
-      await initializePersistentStream();
-      logger.info('Persistent stream reinitialized successfully');
-      return;
-    } catch (error) {
-      logger.error('Error reinitializing persistent stream:', error);
-      retryCount++;
-      if (retryCount < maxRetries) {
-        logger.info(`Retrying in ${retryDelay / 1000} seconds...`);
-        await new Promise(resolve => setTimeout(resolve, retryDelay));
-      }
-    }
-  }
-
-  logger.error('Failed to reinitialize persistent stream after multiple attempts');
-  showErrorMessage('Failed to reconnect. Please refresh the page.');
+  await initializePersistentStream();
 }
 
 async function initialize() {
