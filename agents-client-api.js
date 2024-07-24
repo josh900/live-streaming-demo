@@ -881,16 +881,21 @@ async function initialize() {
   autoSpeakToggle.addEventListener('click', toggleAutoSpeak);
   editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatar));
 
+
+
+
+
   initializeWebSocket();
   playIdleVideo();
 
   showLoadingSymbol();
   try {
     await initializePersistentStream();
-    hideLoadingSymbol();
+    startConnectionHealthCheck(); // Add this line
+    // hideLoadingSymbol();
   } catch (error) {
     logger.error('Error during initialization:', error);
-    hideLoadingSymbol();
+    // hideLoadingSymbol();
     showErrorMessage('Failed to connect. Please try again.');
   }
 }
@@ -1201,10 +1206,13 @@ function onIceCandidate(event) {
       }),
     }).catch(error => {
       logger.error('Error sending ICE candidate:', error);
+      if (error.message.includes('missing or invalid session_id')) {
+        logger.warn('Invalid session detected. Triggering reconnection...');
+        reinitializePersistentStream();
+      }
     });
   }
 }
-
 
 function onIceConnectionStateChange() {
   const { ice: iceStatusLabel } = getStatusLabels();
@@ -1256,13 +1264,21 @@ function onConnectionStateChange() {
 
   if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
     logger.warn('Peer connection failed or disconnected. Attempting to reconnect...');
-    scheduleReconnect();
+    reinitializePersistentStream();
   } else if (peerConnection.connectionState === 'connected') {
     logger.debug('Peer connection established successfully');
     reconnectAttempts = 0;
   }
 }
 
+function startConnectionHealthCheck() {
+  setInterval(async () => {
+    if (peerConnection && peerConnection.connectionState !== 'connected') {
+      logger.warn('Connection health check failed. Attempting to reconnect...');
+      await reinitializePersistentStream();
+    }
+  }, 30000); // Check every 30 seconds
+}
 
 function onSignalingStateChange() {
   const { signaling: signalingStatusLabel } = getStatusLabels();
