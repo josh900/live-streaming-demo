@@ -55,7 +55,7 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 const INITIAL_RECONNECT_DELAY = 5000;
 const MAX_RECONNECT_DELAY = 30000;
 let keepAliveTimeout;
-const MAX_KEEPALIVE_FAILURES = 20;
+const MAX_KEEPALIVE_FAILURES = 3;
 const KEEPALIVE_INTERVAL = 30000; // 30 seconds
 const maxRetryCount = 50;
 const maxDelaySec = 90;
@@ -769,7 +769,7 @@ function startKeepAlive() {
   }
 
   keepAliveInterval = setInterval(async () => {
-    if (isPersistentStreamActive) {
+    if (persistentStreamId && persistentSessionId) {
       try {
         const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/keepalive`, {
           method: 'POST',
@@ -786,11 +786,16 @@ function startKeepAlive() {
         logger.debug('Keepalive sent successfully');
       } catch (error) {
         logger.error('Error sending keepalive:', error);
-        await reinitializePersistentStream();
+        keepAliveFailureCount++;
+        if (keepAliveFailureCount >= MAX_KEEPALIVE_FAILURES) {
+          logger.warn('Max keepalive failures reached. Reinitializing connection.');
+          reinitializeConnection();
+        }
       }
     }
-  }, 30000); // Send keepalive every 30 seconds
+  }, KEEPALIVE_INTERVAL);
 }
+
 
 async function destroyPersistentStream() {
   if (persistentStreamId) {
@@ -1243,10 +1248,10 @@ function onConnectionStateChange() {
   } else if (peerConnection.connectionState === 'connected') {
     logger.debug('Peer connection established successfully');
     reconnectAttempts = 0;
+    keepAliveFailureCount = 0;
     scheduleNextReconnect();
   }
 }
-
 
 
 function onSignalingStateChange() {
@@ -2126,13 +2131,47 @@ function toggleAutoSpeak() {
   }
 }
 
+async function createNewStream() {
+  const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      source_url: avatars[currentAvatar].imageUrl,
+      driver_url: "bank://lively/driver-06",
+      stream_warmup: true,
+      config: {
+        stitch: true,
+        fluent: true,
+        auto_match: true,
+        pad_audio: 0.0,
+        normalization_factor: 0.1,
+        align_driver: true,
+        align_expand_factor: 0.3,
+        driver_expressions: {
+          expressions: [
+            {
+              start_frame: 0,
+              expression: "neutral",
+              intensity: 1
+            }
+          ]
+        }
+      }
+    }),
+  });
+
+  return sessionResponse.json();
+}
+
 async function reinitializeConnection() {
   const now = Date.now();
   if (now - lastReconnectTime < RECONNECT_COOLDOWN) {
     logger.debug('Reconnection attempt too soon. Skipping.');
     return;
   }
-
 
   if (isInitializing || isReconnecting) {
     logger.warn('Connection initialization or reconnection already in progress. Skipping reinitialize.');
@@ -2143,14 +2182,41 @@ async function reinitializeConnection() {
   lastReconnectTime = now;
 
   try {
-    if (!backgroundPeerConnection || !backgroundStreamId || !backgroundSessionId) {
-      await initializeBackgroundConnection();
+    logger.info('Reinitializing connection...');
+    await destroyPersistentStream();
+    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 2 seconds before reinitializing
+
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await createNewStream();
+
+    if (!newStreamId || !newSessionId) {
+      throw new Error('Failed to get valid stream ID or session ID from API');
     }
 
-    await swapConnections();
+    persistentStreamId = newStreamId;
+    persistentSessionId = newSessionId;
+
+    peerConnection = await createPeerConnection(offer, iceServers);
+
+    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/sdp`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        answer: peerConnection.localDescription,
+        session_id: persistentSessionId,
+      }),
+    });
+
+    if (!sdpResponse.ok) {
+      throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
+    }
+
+    updateVideoElement();
+    startKeepAlive();
 
     logger.info('Connection reinitialized successfully');
-    reconnectAttempts = 0;
     scheduleNextReconnect();
   } catch (error) {
     logger.error('Error during reinitialization:', error);
@@ -2178,7 +2244,6 @@ function waitForIdleToReconnect() {
 
 
 
-
 function handleReconnectFailure() {
   reconnectAttempts++;
   if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
@@ -2190,8 +2255,6 @@ function handleReconnectFailure() {
     showErrorMessage('Failed to reconnect after multiple attempts. Please refresh the page.');
   }
 }
-
-
 
 function scheduleConnectionSwap() {
   const timeUntilSwap = STREAM_DURATION - (Date.now() - lastReconnectTime);
