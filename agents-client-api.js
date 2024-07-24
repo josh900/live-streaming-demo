@@ -66,7 +66,8 @@ let backgroundSessionId = null;
 let lastReconnectTime = 0;
 const RECONNECT_COOLDOWN = 60000; // 1 minute cooldown between reconnects
 const STREAM_DURATION = 110000; // Slightly less than 2 minutes
-
+const RECONNECT_INTERVAL = 120000; // 2 minutes
+let reconnectTimeout;
 
 
 
@@ -752,6 +753,7 @@ async function initializePersistentStream() {
     isPersistentStreamActive = true;
     startKeepAlive();
     logger.info('Persistent stream initialized successfully');
+    scheduleNextReconnect();
   } catch (error) {
     logger.error('Failed to initialize persistent stream:', error);
     isPersistentStreamActive = false;
@@ -868,9 +870,6 @@ async function initialize() {
   try {
     await initializePersistentStream();
     hideLoadingSymbol();
-    
-    // Start the background initialization process
-    setTimeout(reinitializeConnection, STREAM_DURATION / 2);
   } catch (error) {
     logger.error('Error during initialization:', error);
     hideLoadingSymbol();
@@ -1243,8 +1242,10 @@ function onConnectionStateChange() {
   } else if (peerConnection.connectionState === 'connected') {
     logger.debug('Peer connection established successfully');
     reconnectAttempts = 0;
+    scheduleNextReconnect();
   }
 }
+
 
 
 function onSignalingStateChange() {
@@ -2111,42 +2112,53 @@ function toggleAutoSpeak() {
 }
 
 async function reinitializeConnection() {
-  const now = Date.now();
-  if (isInitializing || isReconnecting || isBackgroundInitializing) {
+  if (isInitializing || isReconnecting) {
     logger.warn('Connection initialization or reconnection already in progress. Skipping reinitialize.');
     return;
   }
 
-  if (now - lastReconnectTime < RECONNECT_COOLDOWN) {
-    logger.debug('Reconnect attempt too soon. Waiting for cooldown.');
-    setTimeout(reinitializeConnection, RECONNECT_COOLDOWN - (now - lastReconnectTime));
-    return;
-  }
-
-  isBackgroundInitializing = true;
-  logger.debug('Initializing background connection...');
+  isReconnecting = true;
+  logger.debug('Reinitializing connection...');
 
   try {
-    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await createNewStream();
+    await destroyPersistentStream();
+    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 2 seconds before reinitializing
 
-    backgroundPeerConnection = await createBackgroundPeerConnection(offer, iceServers);
-    backgroundStreamId = newStreamId;
-    backgroundSessionId = newSessionId;
+    await initializePersistentStream();
 
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    if (isRecording) {
+      await stopRecording();
+      await startRecording();
+    }
 
-    await setRemoteSdp(backgroundStreamId, backgroundSessionId, backgroundPeerConnection.localDescription);
-
-    logger.info('Background connection initialized successfully');
-    scheduleConnectionSwap();
+    logger.info('Connection reinitialized successfully');
+    reconnectAttempts = 0;
+    scheduleNextReconnect();
   } catch (error) {
-    logger.error('Error during background initialization:', error);
-    isBackgroundInitializing = false;
-    backgroundPeerConnection = null;
-    backgroundStreamId = null;
-    backgroundSessionId = null;
+    logger.error('Error during reinitialization:', error);
+    handleReconnectFailure();
+  } finally {
+    isReconnecting = false;
   }
 }
+
+function scheduleNextReconnect() {
+  clearTimeout(reconnectTimeout);
+  reconnectTimeout = setTimeout(reinitializeConnection, RECONNECT_INTERVAL);
+}
+
+function handleReconnectFailure() {
+  reconnectAttempts++;
+  if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+    const delay = Math.min(30000, 5000 * Math.pow(2, reconnectAttempts));
+    logger.debug(`Scheduling next reconnection attempt in ${delay}ms`);
+    setTimeout(reinitializeConnection, delay);
+  } else {
+    logger.error('Max reconnection attempts reached. Please refresh the page.');
+    showErrorMessage('Failed to reconnect after multiple attempts. Please refresh the page.');
+  }
+}
+
 
 
 function scheduleConnectionSwap() {
