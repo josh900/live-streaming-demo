@@ -779,7 +779,7 @@ function startKeepAlive() {
         await reinitializePersistentStream();
       }
     }
-  }, 30000); // Send keepalive every 30 seconds
+  }, KEEPALIVE_INTERVAL);
 }
 
 async function destroyPersistentStream() {
@@ -1209,7 +1209,7 @@ function scheduleReconnect() {
 async function attemptReconnect() {
   logger.debug('Attempting to reconnect...');
   try {
-    await reinitializePersistentStream();
+    await reinitializeConnection();
     logger.debug('Reconnection successful');
     reconnectAttempts = 0;
   } catch (error) {
