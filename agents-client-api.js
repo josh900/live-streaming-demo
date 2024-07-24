@@ -57,7 +57,8 @@ const MAX_RECONNECT_DELAY = 30000;
 let keepAliveTimeout;
 const MAX_KEEPALIVE_FAILURES = 3;
 const KEEPALIVE_INTERVAL = 30000; // 30 seconds
-
+const maxRetryCount = 50;
+const maxDelaySec = 50;
 
 
 
@@ -72,9 +73,6 @@ let currentAvatar = '';
 
 const avatarSelect = document.getElementById('avatar-select');
 avatarSelect.addEventListener('change', handleAvatarChange);
-
-const maxRetryCount = 20;
-const maxDelaySec = 10;
 
 let context = `
 
