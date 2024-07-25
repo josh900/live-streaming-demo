@@ -72,7 +72,6 @@ let reconnectTimeout;
 
 
 
-
 export function setLogLevel(level) {
   logger.setLogLevel(level);
   isDebugMode = level === 'DEBUG';
@@ -763,6 +762,97 @@ async function initializePersistentStream() {
   }
 }
 
+async function initializeBackgroundConnection() {
+  if (isBackgroundInitializing) {
+    logger.warn('Background connection initialization already in progress. Skipping initialize.');
+    return;
+  }
+
+  isBackgroundInitializing = true;
+  logger.info('Initializing background connection...');
+
+  try {
+    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        source_url: avatars[currentAvatar].imageUrl,
+        driver_url: "bank://lively/driver-06",
+        stream_warmup: true,
+        config: {
+          stitch: true,
+          fluent: true,
+          auto_match: true,
+          pad_audio: 0.0,
+          normalization_factor: 0.1,
+          align_driver: true,
+          align_expand_factor: 0.3,
+          driver_expressions: {
+            expressions: [
+              {
+                start_frame: 0,
+                expression: "neutral",
+                intensity: 1
+              }
+            ]
+          }
+        }
+      }),
+    });
+
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+
+    backgroundStreamId = newStreamId;
+    backgroundSessionId = newSessionId;
+
+    logger.info('Background stream created:', { backgroundStreamId, backgroundSessionId });
+
+    try {
+      backgroundPeerConnection = await createPeerConnection(offer, iceServers);
+    } catch (e) {
+      logger.error('Error during background streaming setup:', e);
+      throw e;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    const answer = backgroundPeerConnection.localDescription;
+    if (!answer) {
+      throw new Error('Local description not set');
+    }
+
+    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${backgroundStreamId}/sdp`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        answer: answer,
+        session_id: backgroundSessionId,
+      }),
+    });
+
+    if (!sdpResponse.ok) {
+      throw new Error(`Failed to set background SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
+    }
+
+    logger.info('Background connection initialized successfully');
+  } catch (error) {
+    logger.error('Failed to initialize background connection:', error);
+    backgroundStreamId = null;
+    backgroundSessionId = null;
+    backgroundPeerConnection = null;
+    throw error;
+  } finally {
+    isBackgroundInitializing = false;
+  }
+}
+
+
 function startKeepAlive() {
   if (keepAliveInterval) {
     clearInterval(keepAliveInterval);
@@ -784,12 +874,17 @@ function startKeepAlive() {
           throw new Error(`Keepalive failed: ${response.status} ${response.statusText}`);
         }
         logger.debug('Keepalive sent successfully');
+        keepAliveFailureCount = 0;
       } catch (error) {
         logger.error('Error sending keepalive:', error);
-        await reinitializePersistentStream();
+        keepAliveFailureCount++;
+        if (keepAliveFailureCount >= MAX_KEEPALIVE_FAILURES) {
+          logger.warn('Max keepalive failures reached. Attempting to reinitialize connection.');
+          await reinitializeConnection();
+        }
       }
     }
-  }, 30000); // Send keepalive every 30 seconds
+  }, KEEPALIVE_INTERVAL);
 }
 
 async function destroyPersistentStream() {
@@ -875,6 +970,9 @@ async function initialize() {
     hideLoadingSymbol();
     showErrorMessage('Failed to connect. Please try again.');
   }
+
+  // Add this line to periodically initialize the background connection
+  setInterval(initializeBackgroundConnection, 90000);
 }
 
 async function handleAvatarChange() {
@@ -1133,26 +1231,29 @@ function showErrorMessage(message) {
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
     peerConnection = new RTCPeerConnection({ iceServers });
-    pcDataChannel = peerConnection.createDataChannel('JanusDataChannel');
     peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
     peerConnection.addEventListener('icecandidate', onIceCandidate, true);
     peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
     peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
     peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
     peerConnection.addEventListener('track', onTrack, true);
-    pcDataChannel.addEventListener('message', onStreamEvent, true);
   }
 
-  await peerConnection.setRemoteDescription(offer);
-  logger.debug('Set remote SDP');
+  try {
+    await peerConnection.setRemoteDescription(offer);
+    logger.debug('Set remote SDP');
 
-  const sessionClientAnswer = await peerConnection.createAnswer();
-  logger.debug('Created local SDP');
+    const answer = await peerConnection.createAnswer();
+    logger.debug('Created local SDP');
 
-  await peerConnection.setLocalDescription(sessionClientAnswer);
-  logger.debug('Set local SDP');
+    await peerConnection.setLocalDescription(answer);
+    logger.debug('Set local SDP');
 
-  return sessionClientAnswer;
+    return answer;
+  } catch (error) {
+    logger.error('Error in createPeerConnection:', error);
+    throw error;
+  }
 }
 
 function onIceGatheringStateChange() {
@@ -1502,10 +1603,14 @@ async function fetchWithRetries(url, options, retries = 0, delayMs = 1000) {
 
     lastApiCallTime = Date.now();
 
-    const response = await fetch(url, options);
+    const response = await fetch(url, {
+      ...options,
+      mode: 'cors',
+      credentials: 'include'
+    });
+
     if (!response.ok) {
       if (response.status === 429) {
-        // If rate limited, wait for a longer time before retrying
         const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
         logger.warn(`Rate limited. Retrying after ${retryAfter} seconds.`);
         await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
@@ -2124,11 +2229,24 @@ async function reinitializeConnection() {
     await destroyPersistentStream();
     await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 2 seconds before reinitializing
 
-    await initializePersistentStream();
+    if (!backgroundPeerConnection || !backgroundStreamId || !backgroundSessionId) {
+      logger.warn('Background connection not ready. Initializing a new connection.');
+      await initializePersistentStream();
+    } else {
+      // Swap the connections
+      peerConnection = backgroundPeerConnection;
+      persistentStreamId = backgroundStreamId;
+      persistentSessionId = backgroundSessionId;
 
-    if (isRecording) {
-      await stopRecording();
-      await startRecording();
+      backgroundPeerConnection = null;
+      backgroundStreamId = null;
+      backgroundSessionId = null;
+
+      // Update video element with new connection
+      updateVideoElement();
+
+      isPersistentStreamActive = true;
+      startKeepAlive();
     }
 
     logger.info('Connection reinitialized successfully');
@@ -2139,6 +2257,16 @@ async function reinitializeConnection() {
     handleReconnectFailure();
   } finally {
     isReconnecting = false;
+  }
+}
+
+function updateVideoElement() {
+  const streamVideoElement = document.getElementById('stream-video-element');
+  if (streamVideoElement && peerConnection && peerConnection.getReceivers) {
+    const stream = new MediaStream(peerConnection.getReceivers().map(receiver => receiver.track));
+    streamVideoElement.srcObject = stream;
+  } else {
+    logger.warn('Unable to update video element: peerConnection or getReceivers not available');
   }
 }
 
@@ -2251,15 +2379,6 @@ async function createBackgroundPeerConnection(offer, iceServers) {
   await pc.setLocalDescription(answer);
 
   return pc;
-}
-
-
-function updateVideoElement() {
-  const streamVideoElement = document.getElementById('stream-video-element');
-  if (streamVideoElement && peerConnection) {
-    const stream = new MediaStream(peerConnection.getReceivers().map(receiver => receiver.track));
-    streamVideoElement.srcObject = stream;
-  }
 }
 
 
