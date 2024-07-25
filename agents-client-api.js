@@ -2196,6 +2196,7 @@ async function swapConnections() {
   setTimeout(initializeBackgroundConnection, STREAM_DURATION / 2);
 }
 
+
 async function initializeBackgroundConnection() {
   if (isBackgroundInitializing) {
     logger.warn('Background connection initialization already in progress. Skipping initialization.');
@@ -2214,6 +2215,9 @@ async function initializeBackgroundConnection() {
     backgroundSessionId = newSessionId;
 
     logger.info('Background connection initialized successfully');
+
+    // Call swapConnections after a successful background connection initialization
+    await swapConnections();
   } catch (error) {
     logger.error('Failed to initialize background connection:', error);
     throw error;
@@ -2221,6 +2225,7 @@ async function initializeBackgroundConnection() {
     isBackgroundInitializing = false;
   }
 }
+
 
 
 
