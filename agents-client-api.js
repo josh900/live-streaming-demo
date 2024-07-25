@@ -869,8 +869,6 @@ async function initialize() {
   showLoadingSymbol();
   try {
     await initializePersistentStream();
-    scheduleConnectionSwap();
-    initializeBackgroundConnection();
     hideLoadingSymbol();
   } catch (error) {
     logger.error('Error during initialization:', error);
@@ -2149,6 +2147,7 @@ function scheduleNextReconnect() {
   reconnectTimeout = setTimeout(reinitializeConnection, RECONNECT_INTERVAL);
 }
 
+
 function handleReconnectFailure() {
   reconnectAttempts++;
   if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
@@ -2164,20 +2163,9 @@ function handleReconnectFailure() {
 
 function scheduleConnectionSwap() {
   const timeUntilSwap = STREAM_DURATION - (Date.now() - lastReconnectTime);
-  setTimeout(() => {
-    if (!isCurrentlyStreaming) {
-      swapConnections();
-    } else {
-      // If the avatar is currently streaming, wait for it to finish
-      const checkAndSwap = setInterval(() => {
-        if (!isCurrentlyStreaming) {
-          clearInterval(checkAndSwap);
-          swapConnections();
-        }
-      }, 1000); // Check every second
-    }
-  }, Math.max(0, timeUntilSwap));
+  setTimeout(swapConnections, Math.max(0, timeUntilSwap));
 }
+
 
 
 async function swapConnections() {
@@ -2190,19 +2178,8 @@ async function swapConnections() {
   logger.debug('Swapping connections...');
 
   try {
-    // Prepare the new connection before destroying the old one
-    const newStreamVideoElement = document.createElement('video');
-    newStreamVideoElement.srcObject = new MediaStream(backgroundPeerConnection.getReceivers().map(receiver => receiver.track));
-    newStreamVideoElement.muted = true;
-    newStreamVideoElement.style.display = 'none';
-    document.body.appendChild(newStreamVideoElement);
-
-    await newStreamVideoElement.play();
-
-    // Now destroy the old connection
     await destroyPersistentStream();
 
-    // Swap the connections
     peerConnection = backgroundPeerConnection;
     persistentStreamId = backgroundStreamId;
     persistentSessionId = backgroundSessionId;
@@ -2211,11 +2188,7 @@ async function swapConnections() {
     backgroundStreamId = null;
     backgroundSessionId = null;
 
-    // Update the video element
-    const streamVideoElement = document.getElementById('stream-video-element');
-    streamVideoElement.srcObject = newStreamVideoElement.srcObject;
-    document.body.removeChild(newStreamVideoElement);
-
+    updateVideoElement();
     startKeepAlive();
 
     logger.info('Connection swapped successfully');
@@ -2228,10 +2201,8 @@ async function swapConnections() {
   }
 
   // Schedule the next background initialization 
-  setTimeout(initializeBackgroundConnection, RECONNECT_INTERVAL / 2);
+  setTimeout(initializeBackgroundConnection, STREAM_DURATION / 2);
 }
-
-
 
 
 async function initializeBackgroundConnection() {
@@ -2243,31 +2214,21 @@ async function initializeBackgroundConnection() {
   isBackgroundInitializing = true;
   logger.info('Initializing background connection...');
 
-  let retryCount = 0;
-  const maxRetries = 3;
+  try {
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await createNewStream();
 
-  while (retryCount < maxRetries) {
-    try {
-      const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await createNewStream();
+    backgroundPeerConnection = await createBackgroundPeerConnection(offer, iceServers);
 
-      backgroundPeerConnection = await createBackgroundPeerConnection(offer, iceServers);
+    backgroundStreamId = newStreamId;
+    backgroundSessionId = newSessionId;
 
-      backgroundStreamId = newStreamId;
-      backgroundSessionId = newSessionId;
-
-      logger.info('Background connection initialized successfully');
-      return;
-    } catch (error) {
-      logger.error(`Failed to initialize background connection (attempt ${retryCount + 1}/${maxRetries}):`, error);
-      retryCount++;
-      if (retryCount < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds before retrying
-      }
-    }
+    logger.info('Background connection initialized successfully');
+  } catch (error) {
+    logger.error('Failed to initialize background connection:', error);
+    throw error;
+  } finally {
+    isBackgroundInitializing = false;
   }
-
-  logger.error('Failed to initialize background connection after maximum retries');
-  throw new Error('Failed to initialize background connection');
 }
 
 
@@ -2324,6 +2285,15 @@ async function createBackgroundPeerConnection(offer, iceServers) {
   return pc;
 }
 
+
+
+function updateVideoElement() {
+  const streamVideoElement = document.getElementById('stream-video-element');
+  if (streamVideoElement && peerConnection) {
+    const stream = new MediaStream(peerConnection.getReceivers().map(receiver => receiver.track));
+    streamVideoElement.srcObject = stream;
+  }
+}
 
 
 
