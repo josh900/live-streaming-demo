@@ -72,6 +72,7 @@ let reconnectTimeout;
 
 
 
+
 export function setLogLevel(level) {
   logger.setLogLevel(level);
   isDebugMode = level === 'DEBUG';
@@ -762,94 +763,6 @@ async function initializePersistentStream() {
   }
 }
 
-
-async function initializeBackgroundConnection() {
-  if (isBackgroundInitializing) {
-    logger.warn('Background connection initialization already in progress. Skipping initialize.');
-    return;
-  }
-
-  isBackgroundInitializing = true;
-  logger.info('Initializing background connection...');
-
-  try {
-    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        source_url: avatars[currentAvatar].imageUrl,
-        driver_url: "bank://lively/driver-06",
-        stream_warmup: true,
-        config: {
-          stitch: true,
-          fluent: true,
-          auto_match: true,
-          pad_audio: 0.0,
-          normalization_factor: 0.1,
-          align_driver: true,
-          align_expand_factor: 0.3,
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: "neutral",
-                intensity: 1
-              }
-            ]
-          }
-        }
-      }),
-    });
-
-    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
-
-    backgroundStreamId = newStreamId;
-    backgroundSessionId = newSessionId;
-
-    logger.info('Background stream created:', { backgroundStreamId, backgroundSessionId });
-
-    try {
-      backgroundPeerConnection = await createPeerConnection(offer, iceServers);
-    } catch (e) {
-      logger.error('Error during background streaming setup:', e);
-      throw e;
-    }
-
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${backgroundStreamId}/sdp`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        answer: backgroundPeerConnection.localDescription,
-        session_id: backgroundSessionId,
-      }),
-    });
-
-    if (!sdpResponse.ok) {
-      throw new Error(`Failed to set background SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
-    }
-
-    logger.info('Background connection initialized successfully');
-  } catch (error) {
-    logger.error('Failed to initialize background connection:', error);
-    backgroundStreamId = null;
-    backgroundSessionId = null;
-    backgroundPeerConnection = null;
-    throw error;
-  } finally {
-    isBackgroundInitializing = false;
-  }
-}
-
-
-
 function startKeepAlive() {
   if (keepAliveInterval) {
     clearInterval(keepAliveInterval);
@@ -962,9 +875,6 @@ async function initialize() {
     hideLoadingSymbol();
     showErrorMessage('Failed to connect. Please try again.');
   }
-
-  // Add this line to periodically initialize the background connection
-  setInterval(initializeBackgroundConnection, 90000);
 }
 
 async function handleAvatarChange() {
@@ -2214,24 +2124,12 @@ async function reinitializeConnection() {
     await destroyPersistentStream();
     await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 2 seconds before reinitializing
 
-    if (!backgroundPeerConnection || !backgroundStreamId || !backgroundSessionId) {
-      await initializeBackgroundConnection();
+    await initializePersistentStream();
+
+    if (isRecording) {
+      await stopRecording();
+      await startRecording();
     }
-
-    // Swap the connections
-    peerConnection = backgroundPeerConnection;
-    persistentStreamId = backgroundStreamId;
-    persistentSessionId = backgroundSessionId;
-
-    backgroundPeerConnection = null;
-    backgroundStreamId = null;
-    backgroundSessionId = null;
-
-    // Update video element with new connection
-    updateVideoElement();
-
-    isPersistentStreamActive = true;
-    startKeepAlive();
 
     logger.info('Connection reinitialized successfully');
     reconnectAttempts = 0;
@@ -2241,14 +2139,6 @@ async function reinitializeConnection() {
     handleReconnectFailure();
   } finally {
     isReconnecting = false;
-  }
-}
-
-function updateVideoElement() {
-  const streamVideoElement = document.getElementById('stream-video-element');
-  if (streamVideoElement && peerConnection) {
-    const stream = new MediaStream(peerConnection.getReceivers().map(receiver => receiver.track));
-    streamVideoElement.srcObject = stream;
   }
 }
 
