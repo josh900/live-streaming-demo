@@ -42,7 +42,7 @@ let isDebugMode = false;
 let isTransitioning = false;
 let lastVideoStatus = null;
 let isCurrentlyStreaming = false;
-let reconnectAttempts = 5;
+let reconnectAttempts = 0;
 let isReconnecting = false;
 let persistentStreamId = null;
 let persistentSessionId = null;
@@ -51,7 +51,7 @@ let keepAliveFailureCount = 0;
 const API_RATE_LIMIT = 30; // Maximum number of calls per minute
 const API_CALL_INTERVAL = 60000 / API_RATE_LIMIT; // Minimum time between API calls in milliseconds
 let lastApiCallTime = 0;
-const MAX_RECONNECT_ATTEMPTS = 50;
+const MAX_RECONNECT_ATTEMPTS = 5;
 const INITIAL_RECONNECT_DELAY = 5000;
 const MAX_RECONNECT_DELAY = 30000;
 let keepAliveTimeout;
@@ -65,8 +65,8 @@ let backgroundStreamId = null;
 let backgroundSessionId = null;
 let lastReconnectTime = 0;
 const RECONNECT_COOLDOWN = 60000; // 1 minute cooldown between reconnects
-const STREAM_DURATION = 25000; // 110000 - Slightly less than 2 minutes
-const RECONNECT_INTERVAL = 320000; // 120000 - 2 minutes
+const STREAM_DURATION = 110000; // Slightly less than 2 minutes
+const RECONNECT_INTERVAL = 120000; // 2 minutes
 let reconnectTimeout;
 
 
@@ -753,9 +753,7 @@ async function initializePersistentStream() {
     isPersistentStreamActive = true;
     startKeepAlive();
     logger.info('Persistent stream initialized successfully');
-    
-    // Schedule the initial background connection initialization
-    setTimeout(initializeBackgroundConnection, STREAM_DURATION / 2);
+    scheduleNextReconnect();
   } catch (error) {
     logger.error('Failed to initialize persistent stream:', error);
     isPersistentStreamActive = false;
@@ -2162,34 +2160,12 @@ function handleReconnectFailure() {
   }
 }
 
-async function initializeBackgroundConnection() {
-  if (isBackgroundInitializing) {
-    logger.warn('Background connection initialization already in progress. Skipping initialization.');
-    return;
-  }
 
-  isBackgroundInitializing = true;
-  logger.info('Initializing background connection...');
-
-  try {
-    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await createNewStream();
-
-    backgroundPeerConnection = await createBackgroundPeerConnection(offer, iceServers);
-
-    backgroundStreamId = newStreamId;
-    backgroundSessionId = newSessionId;
-
-    logger.info('Background connection initialized successfully');
-
-    // Schedule the connection swap
-    scheduleConnectionSwap();
-  } catch (error) {
-    logger.error('Failed to initialize background connection:', error);
-    throw error;
-  } finally {
-    isBackgroundInitializing = false;
-  }
+function scheduleConnectionSwap() {
+  const timeUntilSwap = STREAM_DURATION - (Date.now() - lastReconnectTime);
+  setTimeout(swapConnections, Math.max(0, timeUntilSwap));
 }
+
 
 
 async function swapConnections() {
@@ -2224,9 +2200,37 @@ async function swapConnections() {
     isBackgroundInitializing = false;
   }
 
-  // Schedule the next background initialization
+  // Schedule the next background initialization 
   setTimeout(initializeBackgroundConnection, STREAM_DURATION / 2);
 }
+
+
+async function initializeBackgroundConnection() {
+  if (isBackgroundInitializing) {
+    logger.warn('Background connection initialization already in progress. Skipping initialization.');
+    return;
+  }
+
+  isBackgroundInitializing = true;
+  logger.info('Initializing background connection...');
+
+  try {
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await createNewStream();
+
+    backgroundPeerConnection = await createBackgroundPeerConnection(offer, iceServers);
+
+    backgroundStreamId = newStreamId;
+    backgroundSessionId = newSessionId;
+
+    logger.info('Background connection initialized successfully');
+  } catch (error) {
+    logger.error('Failed to initialize background connection:', error);
+    throw error;
+  } finally {
+    isBackgroundInitializing = false;
+  }
+}
+
 
 
 async function createNewStream() {
@@ -2280,12 +2284,6 @@ async function createBackgroundPeerConnection(offer, iceServers) {
 
   return pc;
 }
-
-function scheduleConnectionSwap() {
-  const timeUntilSwap = STREAM_DURATION - (Date.now() - lastReconnectTime);
-  setTimeout(swapConnections, Math.max(0, timeUntilSwap));
-}
-
 
 
 
