@@ -754,8 +754,8 @@ async function initializePersistentStream() {
     isPersistentStreamActive = true;
     startKeepAlive();
     logger.info('Persistent stream initialized successfully');
-    scheduleConnectionSwap()
     lastReconnectTime = Date.now();
+    scheduleConnectionSwap();
     initializeBackgroundConnection();
   } catch (error) {
     logger.error('Failed to initialize persistent stream:', error);
@@ -794,7 +794,6 @@ function startKeepAlive() {
     }
   }, 30000); // Send keepalive every 30 seconds
 }
-
 
 async function destroyPersistentStream() {
   if (persistentStreamId) {
@@ -879,9 +878,6 @@ async function initialize() {
     hideLoadingSymbol();
     showErrorMessage('Failed to connect. Please try again.');
   }
-
-  // Start periodic connection health checks
-  setInterval(checkConnectionHealth, 30000);
 }
 
 async function handleAvatarChange() {
@@ -2178,12 +2174,11 @@ function handleReconnectFailure() {
 }
 
 
-
 function scheduleConnectionSwap() {
   const timeUntilSwap = STREAM_DURATION - (Date.now() - lastReconnectTime);
-  logger.debug(`Scheduling next connection swap in ${timeUntilSwap}ms`);
   setTimeout(swapConnections, Math.max(0, timeUntilSwap));
 }
+
 
 
 async function swapConnections() {
@@ -2203,12 +2198,10 @@ async function swapConnections() {
   try {
     await destroyPersistentStream();
 
-    logger.debug('Old connection destroyed. Swapping to background connection.');
     peerConnection = backgroundPeerConnection;
     persistentStreamId = backgroundStreamId;
     persistentSessionId = backgroundSessionId;
 
-    logger.debug('Connection swapped. Resetting background connection.');
     backgroundPeerConnection = null;
     backgroundStreamId = null;
     backgroundSessionId = null;
@@ -2229,6 +2222,7 @@ async function swapConnections() {
   // Immediately start initializing the next background connection
   initializeBackgroundConnection();
 }
+
 
 
 async function initializeBackgroundConnection() {
@@ -2256,7 +2250,6 @@ async function initializeBackgroundConnection() {
     isBackgroundInitializing = false;
   }
 }
-
 
 
 
@@ -2311,6 +2304,7 @@ async function createBackgroundPeerConnection(offer, iceServers) {
 
   return pc;
 }
+
 
 
 function updateVideoElement() {
