@@ -3,6 +3,7 @@ import DID_API from './api.js';
 import logger from './logger.js';
 const { createClient, LiveTranscriptionEvents } = deepgram;
 
+
 if (DID_API.key == '🤫') alert('Please put your api key inside ./api.js and restart..');
 
 const deepgramClient = createClient(DID_API.deepgramKey);
