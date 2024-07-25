@@ -2160,6 +2160,14 @@ function handleReconnectFailure() {
   }
 }
 
+
+function scheduleConnectionSwap() {
+  const timeUntilSwap = STREAM_DURATION - (Date.now() - lastReconnectTime);
+  setTimeout(swapConnections, Math.max(0, timeUntilSwap));
+}
+
+
+
 async function swapConnections() {
   if (!backgroundPeerConnection || !backgroundStreamId || !backgroundSessionId) {
     logger.warn('Background connection not ready. Skipping swap.');
@@ -2192,9 +2200,10 @@ async function swapConnections() {
     isBackgroundInitializing = false;
   }
 
-  // Schedule the next background initialization
+  // Schedule the next background initialization 
   setTimeout(initializeBackgroundConnection, STREAM_DURATION / 2);
 }
+
 
 async function initializeBackgroundConnection() {
   if (isBackgroundInitializing) {
