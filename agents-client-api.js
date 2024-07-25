@@ -42,7 +42,7 @@ let isDebugMode = false;
 let isTransitioning = false;
 let lastVideoStatus = null;
 let isCurrentlyStreaming = false;
-let reconnectAttempts = 3;
+let reconnectAttempts = 0;
 let isReconnecting = false;
 let persistentStreamId = null;
 let persistentSessionId = null;
@@ -65,10 +65,9 @@ let backgroundStreamId = null;
 let backgroundSessionId = null;
 let lastReconnectTime = 0;
 const RECONNECT_COOLDOWN = 60000; // 1 minute cooldown between reconnects
-const STREAM_DURATION = 20000; // Slightly less than 2 minutes
-const RECONNECT_INTERVAL = 40000; // 2 minutes
+const STREAM_DURATION = 110000; // Slightly less than 2 minutes
+const RECONNECT_INTERVAL = 120000; // 2 minutes
 let reconnectTimeout;
-
 
 
 
@@ -754,9 +753,7 @@ async function initializePersistentStream() {
     isPersistentStreamActive = true;
     startKeepAlive();
     logger.info('Persistent stream initialized successfully');
-    lastReconnectTime = Date.now();
-    scheduleConnectionSwap();
-    initializeBackgroundConnection();
+    scheduleNextReconnect();
   } catch (error) {
     logger.error('Failed to initialize persistent stream:', error);
     isPersistentStreamActive = false;
@@ -1339,7 +1336,6 @@ function onStreamEvent(message) {
         break;
       case 'stream/done':
         status = 'done';
-        scheduleConnectionSwap();
         break;
       case 'stream/ready':
         status = 'ready';
@@ -1369,15 +1365,6 @@ function onStreamEvent(message) {
       if (streamEventLabel) {
         streamEventLabel.innerText = status === 'dont-care' ? event : status;
         streamEventLabel.className = 'streamEvent-' + status;
-      }
-    }
-
-    if (status === 'done') {
-      // Consider additional actions when the stream is done
-      // For example, you might want to check if it's time to swap connections
-      if (Date.now() - lastReconnectTime > STREAM_DURATION - 15000) { // 15 seconds before 2-minute mark
-        logger.debug('Stream done, close to reconnection time. Initiating connection swap.');
-        swapConnections();
       }
     }
   }
@@ -2182,14 +2169,9 @@ function scheduleConnectionSwap() {
 
 
 async function swapConnections() {
-  if (Date.now() - lastReconnectTime < RECONNECT_COOLDOWN) {
-    logger.debug('Too soon to swap connections. Skipping.');
-    return;
-  }
-
   if (!backgroundPeerConnection || !backgroundStreamId || !backgroundSessionId) {
-    logger.warn('Background connection not ready. Initializing now.');
-    await initializeBackgroundConnection();
+    logger.warn('Background connection not ready. Skipping swap.');
+    return;
   }
 
   isReconnecting = true;
@@ -2211,18 +2193,16 @@ async function swapConnections() {
 
     logger.info('Connection swapped successfully');
     lastReconnectTime = Date.now();
-    scheduleConnectionSwap();
   } catch (error) {
     logger.error('Error during connection swap:', error);
-    setTimeout(reinitializeConnection, 5000);
   } finally {
     isReconnecting = false;
+    isBackgroundInitializing = false;
   }
 
-  // Immediately start initializing the next background connection
-  initializeBackgroundConnection();
+  // Schedule the next background initialization 
+  setTimeout(initializeBackgroundConnection, STREAM_DURATION / 2);
 }
-
 
 
 async function initializeBackgroundConnection() {
