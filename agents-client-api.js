@@ -3,7 +3,6 @@ import DID_API from './api.js';
 import logger from './logger.js';
 const { createClient, LiveTranscriptionEvents } = deepgram;
 
-
 if (DID_API.key == '🤫') alert('Please put your api key inside ./api.js and restart..');
 
 const deepgramClient = createClient(DID_API.deepgramKey);
@@ -60,15 +59,6 @@ const MAX_KEEPALIVE_FAILURES = 20;
 const KEEPALIVE_INTERVAL = 30000; // 30 seconds
 const maxRetryCount = 50;
 const maxDelaySec = 90;
-let isBackgroundInitializing = false;
-let backgroundPeerConnection = null;
-let backgroundStreamId = null;
-let backgroundSessionId = null;
-let lastReconnectTime = 0;
-const RECONNECT_COOLDOWN = 60000; // 1 minute cooldown between reconnects
-const STREAM_DURATION = 110000; // Slightly less than 2 minutes
-const RECONNECT_INTERVAL = 120000; // 2 minutes
-let reconnectTimeout;
 
 
 
@@ -754,7 +744,6 @@ async function initializePersistentStream() {
     isPersistentStreamActive = true;
     startKeepAlive();
     logger.info('Persistent stream initialized successfully');
-    scheduleNextReconnect();
   } catch (error) {
     logger.error('Failed to initialize persistent stream:', error);
     isPersistentStreamActive = false;
@@ -870,6 +859,7 @@ async function initialize() {
   showLoadingSymbol();
   try {
     await initializePersistentStream();
+    setupStreamRefresh();
     hideLoadingSymbol();
   } catch (error) {
     logger.error('Error during initialization:', error);
@@ -1243,11 +1233,24 @@ function onConnectionStateChange() {
   } else if (peerConnection.connectionState === 'connected') {
     logger.debug('Peer connection established successfully');
     reconnectAttempts = 0;
-    scheduleNextReconnect();
   }
 }
 
 
+function setupStreamRefresh() {
+  const STREAM_REFRESH_INTERVAL = 110000; // Refresh every 110 seconds (just under 2 minutes)
+  
+  setInterval(async () => {
+    if (isPersistentStreamActive) {
+      logger.debug('Performing periodic stream refresh');
+      try {
+        await reinitializeConnection();
+      } catch (error) {
+        logger.error('Error during periodic stream refresh:', error);
+      }
+    }
+  }, STREAM_REFRESH_INTERVAL);
+}
 
 function onSignalingStateChange() {
   const { signaling: signalingStatusLabel } = getStatusLabels();
@@ -2132,137 +2135,25 @@ async function reinitializeConnection() {
       await startRecording();
     }
 
+    await prepareForStreaming();
+
     logger.info('Connection reinitialized successfully');
-    reconnectAttempts = 0;
-    scheduleNextReconnect();
+    reconnectAttempts = 0; // Reset reconnect attempts on successful connection
   } catch (error) {
     logger.error('Error during reinitialization:', error);
-    handleReconnectFailure();
+    reconnectAttempts++;
+    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      const delay = Math.min(INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
+      logger.debug(`Scheduling next reconnection attempt in ${delay}ms`);
+      setTimeout(reinitializeConnection, delay);
+    } else {
+      logger.error('Max reconnection attempts reached. Please refresh the page.');
+      showErrorMessage('Failed to reconnect after multiple attempts. Please refresh the page.');
+    }
   } finally {
     isReconnecting = false;
   }
 }
-
-function scheduleNextReconnect() {
-  clearTimeout(reconnectTimeout);
-  reconnectTimeout = setTimeout(reinitializeConnection, RECONNECT_INTERVAL);
-}
-
-function handleReconnectFailure() {
-  reconnectAttempts++;
-  if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-    const delay = Math.min(30000, 5000 * Math.pow(2, reconnectAttempts));
-    logger.debug(`Scheduling next reconnection attempt in ${delay}ms`);
-    setTimeout(reinitializeConnection, delay);
-  } else {
-    logger.error('Max reconnection attempts reached. Please refresh the page.');
-    showErrorMessage('Failed to reconnect after multiple attempts. Please refresh the page.');
-  }
-}
-
-
-
-function scheduleConnectionSwap() {
-  const timeUntilSwap = STREAM_DURATION - (Date.now() - lastReconnectTime);
-  setTimeout(swapConnections, Math.max(0, timeUntilSwap));
-}
-
-async function swapConnections() {
-  if (!backgroundPeerConnection || !backgroundStreamId || !backgroundSessionId) {
-    logger.warn('Background connection not ready. Skipping swap.');
-    return;
-  }
-
-  isReconnecting = true;
-  logger.debug('Swapping connections...');
-
-  try {
-    await destroyPersistentStream();
-
-    peerConnection = backgroundPeerConnection;
-    persistentStreamId = backgroundStreamId;
-    persistentSessionId = backgroundSessionId;
-
-    backgroundPeerConnection = null;
-    backgroundStreamId = null;
-    backgroundSessionId = null;
-
-    updateVideoElement();
-    startKeepAlive();
-
-    logger.info('Connection swapped successfully');
-    lastReconnectTime = Date.now();
-  } catch (error) {
-    logger.error('Error during connection swap:', error);
-  } finally {
-    isReconnecting = false;
-    isBackgroundInitializing = false;
-  }
-
-  // Schedule the next background initialization
-  setTimeout(reinitializeConnection, STREAM_DURATION / 2);
-}
-
-async function createNewStream() {
-  const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      source_url: avatars[currentAvatar].imageUrl,
-      driver_url: "bank://lively/driver-06",
-      stream_warmup: true,
-      config: {
-        stitch: true,
-        fluent: true,
-        auto_match: true,
-        pad_audio: 0.0,
-        normalization_factor: 0.1,
-        align_driver: true,
-        align_expand_factor: 0.3,
-        driver_expressions: {
-          expressions: [
-            {
-              start_frame: 0,
-              expression: "neutral",
-              intensity: 1
-            }
-          ]
-        }
-      }
-    }),
-  });
-
-  return sessionResponse.json();
-}
-
-async function createBackgroundPeerConnection(offer, iceServers) {
-  const pc = new RTCPeerConnection({ iceServers });
-  pc.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
-  pc.addEventListener('icecandidate', onIceCandidate, true);
-  pc.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
-  pc.addEventListener('connectionstatechange', onConnectionStateChange, true);
-  pc.addEventListener('signalingstatechange', onSignalingStateChange, true);
-  pc.addEventListener('track', onTrack, true);
-
-  await pc.setRemoteDescription(offer);
-  const answer = await pc.createAnswer();
-  await pc.setLocalDescription(answer);
-
-  return pc;
-}
-
-
-function updateVideoElement() {
-  const streamVideoElement = document.getElementById('stream-video-element');
-  if (streamVideoElement && peerConnection) {
-    const stream = new MediaStream(peerConnection.getReceivers().map(receiver => receiver.track));
-    streamVideoElement.srcObject = stream;
-  }
-}
-
 
 
 const connectButton = document.getElementById('connect-button');
