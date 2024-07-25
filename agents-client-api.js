@@ -755,6 +755,8 @@ async function initializePersistentStream() {
     startKeepAlive();
     logger.info('Persistent stream initialized successfully');
     scheduleConnectionSwap()
+    lastReconnectTime = Date.now();
+    initializeBackgroundConnection();
   } catch (error) {
     logger.error('Failed to initialize persistent stream:', error);
     isPersistentStreamActive = false;
