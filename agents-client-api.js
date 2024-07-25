@@ -2162,43 +2162,6 @@ function handleReconnectFailure() {
   }
 }
 
-async function swapConnections() {
-  if (!backgroundPeerConnection || !backgroundStreamId || !backgroundSessionId) {
-    logger.warn('Background connection not ready. Skipping swap.');
-    return;
-  }
-
-  isReconnecting = true;
-  logger.debug('Swapping connections...');
-
-  try {
-    await destroyPersistentStream();
-
-    peerConnection = backgroundPeerConnection;
-    persistentStreamId = backgroundStreamId;
-    persistentSessionId = backgroundSessionId;
-
-    backgroundPeerConnection = null;
-    backgroundStreamId = null;
-    backgroundSessionId = null;
-
-    updateVideoElement();
-    startKeepAlive();
-
-    logger.info('Connection swapped successfully');
-    lastReconnectTime = Date.now();
-  } catch (error) {
-    logger.error('Error during connection swap:', error);
-  } finally {
-    isReconnecting = false;
-    isBackgroundInitializing = false;
-  }
-
-  // Schedule the next background initialization
-  setTimeout(initializeBackgroundConnection, STREAM_DURATION / 2);
-}
-
-
 async function initializeBackgroundConnection() {
   if (isBackgroundInitializing) {
     logger.warn('Background connection initialization already in progress. Skipping initialization.');
