@@ -42,7 +42,7 @@ let isDebugMode = false;
 let isTransitioning = false;
 let lastVideoStatus = null;
 let isCurrentlyStreaming = false;
-let reconnectAttempts = 0;
+let reconnectAttempts = 3;
 let isReconnecting = false;
 let persistentStreamId = null;
 let persistentSessionId = null;
@@ -65,8 +65,8 @@ let backgroundStreamId = null;
 let backgroundSessionId = null;
 let lastReconnectTime = 0;
 const RECONNECT_COOLDOWN = 60000; // 1 minute cooldown between reconnects
-const STREAM_DURATION = 110000; // Slightly less than 2 minutes
-const RECONNECT_INTERVAL = 120000; // 2 minutes
+const STREAM_DURATION = 20000; // Slightly less than 2 minutes
+const RECONNECT_INTERVAL = 40000; // 2 minutes
 let reconnectTimeout;
 
 
