@@ -762,6 +762,7 @@ async function initializePersistentStream() {
   }
 }
 
+
 async function initializeBackgroundConnection() {
   if (isBackgroundInitializing) {
     logger.warn('Background connection initialization already in progress. Skipping initialize.');
@@ -848,6 +849,7 @@ async function initializeBackgroundConnection() {
 }
 
 
+
 function startKeepAlive() {
   if (keepAliveInterval) {
     clearInterval(keepAliveInterval);
@@ -863,8 +865,6 @@ function startKeepAlive() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ session_id: persistentSessionId }),
-          mode: 'cors',
-          credentials: 'include'
         });
 
         if (!response.ok) {
@@ -873,14 +873,10 @@ function startKeepAlive() {
         logger.debug('Keepalive sent successfully');
       } catch (error) {
         logger.error('Error sending keepalive:', error);
-        keepAliveFailureCount++;
-        if (keepAliveFailureCount >= MAX_KEEPALIVE_FAILURES) {
-          logger.warn('Max keepalive failures reached. Attempting to reinitialize connection.');
-          await reinitializeConnection();
-        }
+        await reinitializePersistentStream();
       }
     }
-  }, KEEPALIVE_INTERVAL);
+  }, 30000); // Send keepalive every 30 seconds
 }
 
 async function destroyPersistentStream() {
@@ -2250,11 +2246,9 @@ async function reinitializeConnection() {
 
 function updateVideoElement() {
   const streamVideoElement = document.getElementById('stream-video-element');
-  if (streamVideoElement && peerConnection && peerConnection.getReceivers) {
+  if (streamVideoElement && peerConnection) {
     const stream = new MediaStream(peerConnection.getReceivers().map(receiver => receiver.track));
     streamVideoElement.srcObject = stream;
-  } else {
-    logger.warn('Unable to update video element: peerConnection or getReceivers not available');
   }
 }
 
