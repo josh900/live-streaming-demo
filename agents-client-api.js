@@ -1655,6 +1655,7 @@ export {
   initializePersistentStream,
   destroyPersistentStream,
   toggleSimpleMode,
+  setLogLevel,
 };
 
 // Additional utility functions
