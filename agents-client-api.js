@@ -1336,6 +1336,10 @@ function onStreamEvent(message) {
         break;
       case 'stream/done':
         status = 'done';
+        // Consider swapping connections here if it's close to the 2-minute mark
+        if (Date.now() - lastReconnectTime > STREAM_DURATION - 10000) { // 10 seconds before 2-minute mark
+          swapConnections();
+        }
         break;
       case 'stream/ready':
         status = 'ready';
