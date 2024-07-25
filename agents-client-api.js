@@ -65,8 +65,8 @@ let backgroundStreamId = null;
 let backgroundSessionId = null;
 let lastReconnectTime = 0;
 const RECONNECT_COOLDOWN = 60000; // 1 minute cooldown between reconnects
-const STREAM_DURATION = 110000; // Slightly less than 2 minutes
-const RECONNECT_INTERVAL = 120000; // 2 minutes
+const STREAM_DURATION = 20000; // Slightly less than 2 minutes
+const RECONNECT_INTERVAL = 30000; // 2 minutes
 let reconnectTimeout;
 
 
@@ -869,6 +869,8 @@ async function initialize() {
   showLoadingSymbol();
   try {
     await initializePersistentStream();
+    scheduleNextReconnect();
+    initializeBackgroundConnection();
     hideLoadingSymbol();
   } catch (error) {
     logger.error('Error during initialization:', error);
@@ -1245,8 +1247,6 @@ function onConnectionStateChange() {
     scheduleNextReconnect();
   }
 }
-
-
 
 function onSignalingStateChange() {
   const { signaling: signalingStatusLabel } = getStatusLabels();
@@ -2286,7 +2286,6 @@ async function createBackgroundPeerConnection(offer, iceServers) {
 }
 
 
-
 function updateVideoElement() {
   const streamVideoElement = document.getElementById('stream-video-element');
   if (streamVideoElement && peerConnection) {
@@ -2294,6 +2293,7 @@ function updateVideoElement() {
     streamVideoElement.srcObject = stream;
   }
 }
+
 
 
 
