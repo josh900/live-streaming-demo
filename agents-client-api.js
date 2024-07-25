@@ -1654,7 +1654,6 @@ export {
   toggleAutoSpeak,
   initializePersistentStream,
   destroyPersistentStream,
-  toggleSimpleMode,
 };
 
 // Additional utility functions
