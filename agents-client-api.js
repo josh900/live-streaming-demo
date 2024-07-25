@@ -68,9 +68,6 @@ const RECONNECT_COOLDOWN = 60000; // 1 minute cooldown between reconnects
 let reconnectTimeout;
 const STREAM_DURATION = 110000; // Slightly less than 2 minutes
 const RECONNECT_INTERVAL = 120000; // 2 minutes
-const MAX_KEEPALIVE_FAILURES = 3;
-const KEEPALIVE_INTERVAL = 30000; // 30 seconds
-let keepAliveFailureCount = 0;
 
 
 
