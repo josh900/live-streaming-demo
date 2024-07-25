@@ -52,7 +52,7 @@ const API_RATE_LIMIT = 30; // Maximum number of calls per minute
 const API_CALL_INTERVAL = 60000 / API_RATE_LIMIT; // Minimum time between API calls in milliseconds
 let lastApiCallTime = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
-const INITIAL_RECONNECT_DELAY = 5000;
+const INITIAL_RECONNECT_DELAY = 6000;
 const MAX_RECONNECT_DELAY = 30000;
 let keepAliveTimeout;
 const MAX_KEEPALIVE_FAILURES = 20;
@@ -859,7 +859,6 @@ async function initialize() {
   showLoadingSymbol();
   try {
     await initializePersistentStream();
-    setupStreamRefresh();
     hideLoadingSymbol();
   } catch (error) {
     logger.error('Error during initialization:', error);
@@ -1229,28 +1228,13 @@ function onConnectionStateChange() {
 
   if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
     logger.warn('Peer connection failed or disconnected. Attempting to reconnect...');
-    reinitializeConnection();
+    scheduleReconnect();
   } else if (peerConnection.connectionState === 'connected') {
     logger.debug('Peer connection established successfully');
     reconnectAttempts = 0;
   }
 }
 
-
-function setupStreamRefresh() {
-  const STREAM_REFRESH_INTERVAL = 110000; // Refresh every 110 seconds (just under 2 minutes)
-  
-  setInterval(async () => {
-    if (isPersistentStreamActive) {
-      logger.debug('Performing periodic stream refresh');
-      try {
-        await reinitializeConnection();
-      } catch (error) {
-        logger.error('Error during periodic stream refresh:', error);
-      }
-    }
-  }, STREAM_REFRESH_INTERVAL);
-}
 
 function onSignalingStateChange() {
   const { signaling: signalingStatusLabel } = getStatusLabels();
@@ -2125,10 +2109,27 @@ async function reinitializeConnection() {
   logger.debug('Reinitializing connection...');
 
   try {
-    await destroyPersistentStream();
-    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 2 seconds before reinitializing
+    stopAllStreams();
+    closePC();
 
-    await initializePersistentStream();
+    clearInterval(statsIntervalId);
+    clearTimeout(inactivityTimeout);
+    clearInterval(keepAliveInterval);
+
+    streamId = null;
+    sessionId = null;
+    peerConnection = null;
+
+    currentUtterance = '';
+
+    // Add a delay before initializing to avoid rapid successive calls
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    await initializeConnection();
+
+    if (!streamId || !sessionId) {
+      throw new Error('Stream ID or Session ID is missing after initialization');
+    }
 
     if (isRecording) {
       await stopRecording();
@@ -2138,23 +2139,16 @@ async function reinitializeConnection() {
     await prepareForStreaming();
 
     logger.info('Connection reinitialized successfully');
+    logger.debug(`New Stream ID: ${streamId}, New Session ID: ${sessionId}`);
     reconnectAttempts = 0; // Reset reconnect attempts on successful connection
   } catch (error) {
     logger.error('Error during reinitialization:', error);
-    reconnectAttempts++;
-    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-      const delay = Math.min(INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
-      logger.debug(`Scheduling next reconnection attempt in ${delay}ms`);
-      setTimeout(reinitializeConnection, delay);
-    } else {
-      logger.error('Max reconnection attempts reached. Please refresh the page.');
-      showErrorMessage('Failed to reconnect after multiple attempts. Please refresh the page.');
-    }
+    throw error;
   } finally {
+    isInitializing = false;
     isReconnecting = false;
   }
 }
-
 
 const connectButton = document.getElementById('connect-button');
 connectButton.onclick = initializeConnection;
