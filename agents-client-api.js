@@ -2160,12 +2160,11 @@ function handleReconnectFailure() {
 }
 
 
+
 function scheduleConnectionSwap() {
   const timeUntilSwap = STREAM_DURATION - (Date.now() - lastReconnectTime);
   setTimeout(swapConnections, Math.max(0, timeUntilSwap));
 }
-
-
 
 async function swapConnections() {
   if (!backgroundPeerConnection || !backgroundStreamId || !backgroundSessionId) {
@@ -2200,37 +2199,8 @@ async function swapConnections() {
   }
 
   // Schedule the next background initialization
-  setTimeout(initializeBackgroundConnection, STREAM_DURATION / 2);
+  setTimeout(reinitializeConnection, STREAM_DURATION / 2);
 }
-
-
-async function initializeBackgroundConnection() {
-  if (isBackgroundInitializing) {
-    logger.warn('Background connection initialization already in progress. Skipping initialization.');
-    return;
-  }
-
-  isBackgroundInitializing = true;
-  logger.info('Initializing background connection...');
-
-  try {
-    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await createNewStream();
-
-    backgroundPeerConnection = await createBackgroundPeerConnection(offer, iceServers);
-
-    backgroundStreamId = newStreamId;
-    backgroundSessionId = newSessionId;
-
-    logger.info('Background connection initialized successfully');
-  } catch (error) {
-    logger.error('Failed to initialize background connection:', error);
-    throw error;
-  } finally {
-    isBackgroundInitializing = false;
-  }
-}
-
-
 
 async function createNewStream() {
   const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
@@ -2267,7 +2237,6 @@ async function createNewStream() {
   return sessionResponse.json();
 }
 
-
 async function createBackgroundPeerConnection(offer, iceServers) {
   const pc = new RTCPeerConnection({ iceServers });
   pc.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
@@ -2285,7 +2254,6 @@ async function createBackgroundPeerConnection(offer, iceServers) {
 }
 
 
-
 function updateVideoElement() {
   const streamVideoElement = document.getElementById('stream-video-element');
   if (streamVideoElement && peerConnection) {
@@ -2293,7 +2261,6 @@ function updateVideoElement() {
     streamVideoElement.srcObject = stream;
   }
 }
-
 
 
 
