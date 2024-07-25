@@ -68,8 +68,7 @@ const RECONNECT_COOLDOWN = 60000; // 1 minute cooldown between reconnects
 const STREAM_DURATION = 110000; // Slightly less than 2 minutes
 const RECONNECT_INTERVAL = 120000; // 2 minutes
 let reconnectTimeout;
-
-
+let sessionStartTime;
 
 
 
@@ -826,7 +825,7 @@ async function reinitializePersistentStream() {
   await initializePersistentStream();
 }
 
-async function initialize() {
+export async function initialize() {
   setLogLevel('DEBUG');
 
   const { idle, stream } = getVideoElements();
@@ -870,12 +869,15 @@ async function initialize() {
   try {
     await initializePersistentStream();
     hideLoadingSymbol();
+    sessionStartTime = Date.now();
+    scheduleNextReconnect();
   } catch (error) {
     logger.error('Error during initialization:', error);
     hideLoadingSymbol();
     showErrorMessage('Failed to connect. Please try again.');
   }
 }
+
 
 async function handleAvatarChange() {
   currentAvatar = avatarSelect.value;
@@ -2144,7 +2146,25 @@ async function reinitializeConnection() {
 
 function scheduleNextReconnect() {
   clearTimeout(reconnectTimeout);
-  reconnectTimeout = setTimeout(reinitializeConnection, RECONNECT_INTERVAL);
+  const timeUntilReconnect = STREAM_DURATION - (Date.now() - sessionStartTime);
+  reconnectTimeout = setTimeout(async () => {
+    if (isCurrentlyStreaming) {
+      logger.debug('Avatar is currently streaming. Waiting for idle state before reconnecting.');
+      await waitForIdleState();
+    }
+    await swapConnections();
+  }, Math.max(0, timeUntilReconnect));
+}
+
+async function waitForIdleState() {
+  return new Promise((resolve) => {
+    const checkIdleState = setInterval(() => {
+      if (!isCurrentlyStreaming) {
+        clearInterval(checkIdleState);
+        resolve();
+      }
+    }, 1000); // Check every second
+  });
 }
 
 function handleReconnectFailure() {
@@ -2158,6 +2178,7 @@ function handleReconnectFailure() {
     showErrorMessage('Failed to reconnect after multiple attempts. Please refresh the page.');
   }
 }
+
 
 
 
@@ -2254,6 +2275,132 @@ async function createBackgroundPeerConnection(offer, iceServers) {
 }
 
 
+
+async function initializeBackgroundConnection() {
+  if (isBackgroundInitializing) {
+    logger.warn('Background connection initialization already in progress. Skipping initialize.');
+    return;
+  }
+
+  isBackgroundInitializing = true;
+  logger.info('Initializing background connection...');
+
+  try {
+    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        source_url: avatars[currentAvatar].imageUrl,
+        driver_url: "bank://lively/driver-06",
+        stream_warmup: true,
+        config: {
+          stitch: true,
+          fluent: true,
+          auto_match: true,
+          pad_audio: 0.0,
+          normalization_factor: 0.1,
+          align_driver: true,
+          align_expand_factor: 0.3,
+          driver_expressions: {
+            expressions: [
+              {
+                start_frame: 0,
+                expression: "neutral",
+                intensity: 1
+              }
+            ]
+          }
+        }
+      }),
+    });
+
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+
+    if (!newStreamId || !newSessionId) {
+      throw new Error('Failed to get valid stream ID or session ID from API');
+    }
+
+    backgroundStreamId = newStreamId;
+    backgroundSessionId = newSessionId;
+    logger.info('Background stream created:', { backgroundStreamId, backgroundSessionId });
+
+    try {
+      backgroundPeerConnection = await createPeerConnection(offer, iceServers);
+    } catch (e) {
+      logger.error('Error during background streaming setup:', e);
+      throw e;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 6000));
+
+    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${backgroundStreamId}/sdp`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        answer: backgroundPeerConnection.localDescription,
+        session_id: backgroundSessionId,
+      }),
+    });
+
+    if (!sdpResponse.ok) {
+      throw new Error(`Failed to set SDP for background connection: ${sdpResponse.status} ${sdpResponse.statusText}`);
+    }
+
+    logger.info('Background connection initialized successfully');
+  } catch (error) {
+    logger.error('Failed to initialize background connection:', error);
+    throw error;
+  } finally {
+    isBackgroundInitializing = false;
+  }
+}
+
+
+async function swapConnections() {
+  if (!backgroundPeerConnection || !backgroundStreamId || !backgroundSessionId) {
+    logger.warn('Background connection not ready. Skipping swap.');
+    return;
+  }
+
+  isReconnecting = true;
+  logger.debug('Swapping connections...');
+
+  try {
+    await destroyPersistentStream();
+
+    peerConnection = backgroundPeerConnection;
+    persistentStreamId = backgroundStreamId;
+    persistentSessionId = backgroundSessionId;
+
+    backgroundPeerConnection = null;
+    backgroundStreamId = null;
+    backgroundSessionId = null;
+
+    updateVideoElement();
+    startKeepAlive();
+
+    logger.info('Connection swapped successfully');
+    lastReconnectTime = Date.now();
+    sessionStartTime = Date.now();
+  } catch (error) {
+    logger.error('Error during connection swap:', error);
+  } finally {
+    isReconnecting = false;
+    isBackgroundInitializing = false;
+  }
+
+  // Schedule the next background initialization
+  setTimeout(initializeBackgroundConnection, STREAM_DURATION / 2);
+}
+
+
+
 function updateVideoElement() {
   const streamVideoElement = document.getElementById('stream-video-element');
   if (streamVideoElement && peerConnection) {
@@ -2321,7 +2468,6 @@ avatarImageInput.onchange = (event) => {
 
 // Export functions and variables that need to be accessed from other modules
 export {
-  initialize,
   handleAvatarChange,
   openAvatarModal,
   closeAvatarModal,
