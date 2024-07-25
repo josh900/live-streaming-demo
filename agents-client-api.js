@@ -2187,6 +2187,41 @@ function scheduleConnectionSwap() {
   setTimeout(swapConnections, Math.max(0, timeUntilSwap));
 }
 
+async function swapConnections() {
+  if (!backgroundPeerConnection || !backgroundStreamId || !backgroundSessionId) {
+    logger.warn('Background connection not ready. Skipping swap.');
+    return;
+  }
+
+  isReconnecting = true;
+  logger.debug('Swapping connections...');
+
+  try {
+    await destroyPersistentStream();
+
+    peerConnection = backgroundPeerConnection;
+    persistentStreamId = backgroundStreamId;
+    persistentSessionId = backgroundSessionId;
+
+    backgroundPeerConnection = null;
+    backgroundStreamId = null;
+    backgroundSessionId = null;
+
+    updateVideoElement();
+    startKeepAlive();
+
+    logger.info('Connection swapped successfully');
+    lastReconnectTime = Date.now();
+  } catch (error) {
+    logger.error('Error during connection swap:', error);
+  } finally {
+    isReconnecting = false;
+    isBackgroundInitializing = false;
+  }
+
+  // Schedule the next background initialization
+  setTimeout(reinitializeConnection, STREAM_DURATION / 2);
+}
 
 async function createNewStream() {
   const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
