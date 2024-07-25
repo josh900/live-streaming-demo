@@ -70,6 +70,21 @@ const RECONNECT_INTERVAL = 120000; // 2 minutes
 let reconnectTimeout;
 
 
+
+
+
+export function setLogLevel(level) {
+  logger.setLogLevel(level);
+  isDebugMode = level === 'DEBUG';
+  logger.debug(`Log level set to ${level}. Debug mode is ${isDebugMode ? 'enabled' : 'disabled'}.`);
+}
+
+let avatars = {};
+let currentAvatar = '';
+
+const avatarSelect = document.getElementById('avatar-select');
+avatarSelect.addEventListener('change', handleAvatarChange);
+
 let context = `
 
 
@@ -405,67 +420,260 @@ Keep responses natural and focused solely on answering the customer's question.
 Don't be too formal. For example, instead of saying "Hello! How can I assist you today?", say something like "Hey! how's it going. What can I help you with?"
 `;
 
-export function setLogLevel(level) {
-  logger.setLogLevel(level);
-  isDebugMode = level === 'DEBUG';
-  logger.debug(`Log level set to ${level}. Debug mode is ${isDebugMode ? 'enabled' : 'disabled'}.`);
+async function prepareForStreaming() {
+  if (!streamId || !sessionId) {
+    throw new Error('Stream ID or Session ID is missing. Cannot prepare for streaming.');
+  }
+
+  const streamVideoElement = document.getElementById('stream-video-element');
+  const idleVideoElement = document.getElementById('idle-video-element');
+
+  if (!streamVideoElement || !idleVideoElement) {
+    throw new Error('Video elements not found');
+  }
+
+  // Reset video elements
+  streamVideoElement.srcObject = null;
+  streamVideoElement.src = '';
+  streamVideoElement.style.display = 'none';
+
+  idleVideoElement.style.display = 'block';
+  idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e));
+
+  logger.debug('Prepared for streaming');
 }
 
-let avatars = {};
-let currentAvatar = '';
+function initializeTransitionCanvas() {
+  const videoWrapper = document.querySelector('#video-wrapper');
+  const rect = videoWrapper.getBoundingClientRect();
+  const size = Math.min(rect.width, rect.height, 550);
 
-const avatarSelect = document.getElementById('avatar-select');
-avatarSelect.addEventListener('change', handleAvatarChange);
+  transitionCanvas = document.createElement('canvas');
+  transitionCanvas.width = size;
+  transitionCanvas.height = size;
+  transitionCtx = transitionCanvas.getContext('2d');
 
-async function initialize() {
-  setLogLevel('DEBUG');
-
-  const { idle, stream } = getVideoElements();
-  idleVideoElement = idle;
-  streamVideoElement = stream;
-
-  if (idleVideoElement) idleVideoElement.setAttribute('playsinline', '');
-  if (streamVideoElement) streamVideoElement.setAttribute('playsinline', '');
-
-  initializeTransitionCanvas();
-
-  await loadAvatars();
-  populateAvatarSelect();
-
-  const contextInput = document.getElementById('context-input');
-  contextInput.value = context.trim();
-  contextInput.addEventListener('input', () => {
-    if (!contextInput.value.includes('Original Context:')) {
-      context = contextInput.value.trim();
-    }
+  Object.assign(transitionCanvas.style, {
+    position: 'absolute',
+    top: '0',
+    left: '0',
+    width: '100%',
+    height: '100%',
+    maxWidth: '550px',
+    maxHeight: '550px',
+    zIndex: '3',
+    borderRadius: '13%',
+    objectFit: 'cover'
   });
 
-  const sendTextButton = document.getElementById('send-text-button');
-  const textInput = document.getElementById('text-input');
-  const replaceContextButton = document.getElementById('replace-context-button');
-  const autoSpeakToggle = document.getElementById('auto-speak-toggle');
-  const editAvatarButton = document.getElementById('edit-avatar-button');
+  videoWrapper.appendChild(transitionCanvas);
 
-  sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
-  textInput.addEventListener('keypress', (event) => {
-    if (event.key === 'Enter') handleTextInput(textInput.value);
+  window.addEventListener('resize', () => {
+    const videoWrapper = document.querySelector('#video-wrapper');
+    const rect = videoWrapper.getBoundingClientRect();
+    const size = Math.min(rect.width, rect.height, 550);
+
+    transitionCanvas.width = size;
+    transitionCanvas.height = size;
   });
-  replaceContextButton.addEventListener('click', () => updateContext('replace'));
-  autoSpeakToggle.addEventListener('click', toggleAutoSpeak);
-  editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatar));
 
-  initializeWebSocket();
-  playIdleVideo();
 
-  showLoadingSymbol();
-  try {
-    await initializePersistentStream();
-    hideLoadingSymbol();
-  } catch (error) {
-    logger.error('Error during initialization:', error);
-    hideLoadingSymbol();
-    showErrorMessage('Failed to connect. Please try again.');
+}
+
+
+
+
+function smoothTransition(toStreaming, duration = 250) {
+  const idleVideoElement = document.getElementById('idle-video-element');
+  const streamVideoElement = document.getElementById('stream-video-element');
+
+  if (!idleVideoElement || !streamVideoElement) {
+    logger.warn('Video elements not found for transition');
+    return;
   }
+
+  if (isTransitioning) {
+    logger.debug('Transition already in progress, skipping');
+    return;
+  }
+
+  // Don't transition if we're already in the desired state
+  if ((toStreaming && isCurrentlyStreaming) || (!toStreaming && !isCurrentlyStreaming)) {
+    logger.debug('Already in desired state, skipping transition');
+    return;
+  }
+
+  isTransitioning = true;
+  logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
+
+  let startTime = null;
+
+  function animate(currentTime) {
+    if (!startTime) startTime = currentTime;
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+
+    if (!transitionCtx) {
+      logger.error('Transition context not found');
+      isTransitioning = false;
+      return;
+    }
+
+    transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
+
+    try {
+      if (toStreaming) {
+        transitionCtx.globalAlpha = 1;
+        transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+
+        transitionCtx.globalAlpha = progress;
+        transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+      } else {
+        transitionCtx.globalAlpha = 1;
+        transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+
+        transitionCtx.globalAlpha = progress;
+        transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+      }
+
+      // Update the opacity of the video elements
+      streamVideoElement.style.opacity = toStreaming ? progress.toString() : (1 - progress).toString();
+      idleVideoElement.style.opacity = toStreaming ? (1 - progress).toString() : progress.toString();
+
+    } catch (error) {
+      logger.error('Error during transition animation:', error);
+      isTransitioning = false;
+      return;
+    }
+
+    if (progress < 1) {
+      transitionAnimationFrame = requestAnimationFrame(animate);
+    } else {
+      cancelAnimationFrame(transitionAnimationFrame);
+      transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
+      logger.debug('Smooth transition completed');
+      isTransitioning = false;
+      isCurrentlyStreaming = toStreaming;
+
+      // Ensure final state is set correctly
+      if (toStreaming) {
+        streamVideoElement.style.opacity = '1';
+        streamVideoElement.style.display = 'block';
+        idleVideoElement.style.opacity = '0';
+        idleVideoElement.style.display = 'none';
+      } else {
+        streamVideoElement.style.opacity = '0';
+        streamVideoElement.style.display = 'none';
+        idleVideoElement.style.opacity = '1';
+        idleVideoElement.style.display = 'block';
+      }
+    }
+  }
+
+  cancelAnimationFrame(transitionAnimationFrame);
+  transitionAnimationFrame = requestAnimationFrame(animate);
+}
+
+function getVideoElements() {
+  const idle = document.getElementById('idle-video-element');
+  const stream = document.getElementById('stream-video-element');
+
+  if (!idle || !stream) {
+    logger.warn('Video elements not found in the DOM');
+  }
+
+  return { idle, stream };
+}
+
+function getStatusLabels() {
+  return {
+    peer: document.getElementById('peer-status-label'),
+    ice: document.getElementById('ice-status-label'),
+    iceGathering: document.getElementById('ice-gathering-status-label'),
+    signaling: document.getElementById('signaling-status-label'),
+    streaming: document.getElementById('streaming-status-label')
+  };
+}
+
+function initializeWebSocket() {
+  socket = new WebSocket(`wss://${window.location.host}`);
+
+  socket.onopen = () => {
+    logger.info('WebSocket connection established');
+  };
+
+  socket.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    logger.debug('Received WebSocket message:', data);
+
+    switch (data.type) {
+      case 'transcription':
+        updateTranscription(data.text);
+        break;
+      case 'assistantReply':
+        updateAssistantReply(data.text);
+        break;
+      default:
+        logger.warn('Unknown WebSocket message type:', data.type);
+    }
+  };
+
+  socket.onerror = (error) => {
+    logger.error('WebSocket error:', error);
+  };
+
+  socket.onclose = () => {
+    logger.info('WebSocket connection closed');
+    setTimeout(initializeWebSocket, 10000);
+  };
+}
+
+
+
+
+
+function updateTranscript(text, isFinal) {
+  const msgHistory = document.getElementById('msgHistory');
+  let interimSpan = msgHistory.querySelector('span[data-interim]');
+
+  if (isFinal) {
+    if (interimSpan) {
+      interimSpan.remove();
+    }
+    msgHistory.innerHTML += `<span><u>User:</u> ${text}</span><br>`;
+    logger.debug('Final transcript added to chat history:', text);
+    interimMessageAdded = false;
+  } else {
+    if (text.trim()) {
+      if (!interimMessageAdded) {
+        msgHistory.innerHTML += `<span data-interim style='opacity:0.5'><u>User (interim):</u> ${text}</span><br>`;
+        interimMessageAdded = true;
+      } else if (interimSpan) {
+        interimSpan.innerHTML = `<u>User (interim):</u> ${text}`;
+      }
+    }
+  }
+  msgHistory.scrollTop = msgHistory.scrollHeight;
+}
+
+function handleTextInput(text) {
+  if (text.trim() === '') return;
+
+  const textInput = document.getElementById('text-input');
+  textInput.value = '';
+
+  updateTranscript(text, true);
+
+  chatHistory.push({
+    role: 'user',
+    content: text,
+  });
+
+  sendChatToGroq();
+}
+
+function updateAssistantReply(text) {
+  document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
 }
 
 async function initializePersistentStream() {
@@ -618,173 +826,308 @@ async function reinitializePersistentStream() {
   await initializePersistentStream();
 }
 
-async function initializeBackgroundConnection() {
-  if (isBackgroundInitializing) {
-    logger.warn('Background connection initialization already in progress. Skipping initialization.');
-    return;
-  }
+async function initialize() {
+  setLogLevel('DEBUG');
 
-  isBackgroundInitializing = true;
-  logger.info('Initializing background connection...');
+  const { idle, stream } = getVideoElements();
+  idleVideoElement = idle;
+  streamVideoElement = stream;
 
-  try {
-    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await createNewStream();
+  if (idleVideoElement) idleVideoElement.setAttribute('playsinline', '');
+  if (streamVideoElement) streamVideoElement.setAttribute('playsinline', '');
 
-    backgroundPeerConnection = await createBackgroundPeerConnection(offer, iceServers);
+  initializeTransitionCanvas();
 
-    backgroundStreamId = newStreamId;
-    backgroundSessionId = newSessionId;
+  await loadAvatars();
+  populateAvatarSelect();
 
-    logger.info('Background connection initialized successfully');
-  } catch (error) {
-    logger.error('Failed to initialize background connection:', error);
-    throw error;
-  } finally {
-    isBackgroundInitializing = false;
-  }
-}
-
-async function createNewStream() {
-  const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      source_url: avatars[currentAvatar].imageUrl,
-      driver_url: "bank://lively/driver-06",
-      stream_warmup: true,
-      config: {
-        stitch: true,
-        fluent: true,
-        auto_match: true,
-        pad_audio: 0.0,
-        normalization_factor: 0.1,
-        align_driver: true,
-        align_expand_factor: 0.3,
-        driver_expressions: {
-          expressions: [
-            {
-              start_frame: 0,
-              expression: "neutral",
-              intensity: 1
-            }
-          ]
-        }
-      }
-    }),
+  const contextInput = document.getElementById('context-input');
+  contextInput.value = context.trim();
+  contextInput.addEventListener('input', () => {
+    if (!contextInput.value.includes('Original Context:')) {
+      context = contextInput.value.trim();
+    }
   });
 
-  return sessionResponse.json();
-}
+  const sendTextButton = document.getElementById('send-text-button');
+  const textInput = document.getElementById('text-input');
+  const replaceContextButton = document.getElementById('replace-context-button');
+  const autoSpeakToggle = document.getElementById('auto-speak-toggle');
+  const editAvatarButton = document.getElementById('edit-avatar-button');
 
-async function createBackgroundPeerConnection(offer, iceServers) {
-  const pc = new RTCPeerConnection({ iceServers });
-  pc.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
-  pc.addEventListener('icecandidate', onIceCandidate, true);
-  pc.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
-  pc.addEventListener('connectionstatechange', onConnectionStateChange, true);
-  pc.addEventListener('signalingstatechange', onSignalingStateChange, true);
-  pc.addEventListener('track', onTrack, true);
+  sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
+  textInput.addEventListener('keypress', (event) => {
+    if (event.key === 'Enter') handleTextInput(textInput.value);
+  });
+  replaceContextButton.addEventListener('click', () => updateContext('replace'));
+  autoSpeakToggle.addEventListener('click', toggleAutoSpeak);
+  editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatar));
 
-  await pc.setRemoteDescription(offer);
-  const answer = await pc.createAnswer();
-  await pc.setLocalDescription(answer);
+  initializeWebSocket();
+  playIdleVideo();
 
-  return pc;
-}
-
-async function swapConnections() {
-  if (!backgroundPeerConnection || !backgroundStreamId || !backgroundSessionId) {
-    logger.warn('Background connection not ready. Skipping swap.');
-    return;
-  }
-
-  isReconnecting = true;
-  logger.debug('Swapping connections...');
-
+  showLoadingSymbol();
   try {
-    await destroyPersistentStream();
-
-    peerConnection = backgroundPeerConnection;
-    persistentStreamId = backgroundStreamId;
-    persistentSessionId = backgroundSessionId;
-
-    backgroundPeerConnection = null;
-    backgroundStreamId = null;
-    backgroundSessionId = null;
-
-    updateVideoElement();
-    startKeepAlive();
-
-    logger.info('Connection swapped successfully');
-    lastReconnectTime = Date.now();
-  } catch (error) {
-    logger.error('Error during connection swap:', error);
-  } finally {
-    isReconnecting = false;
-    isBackgroundInitializing = false;
-  }
-
-  // Schedule the next background initialization 
-  setTimeout(initializeBackgroundConnection, STREAM_DURATION / 2);
-}
-
-function updateVideoElement() {
-  const streamVideoElement = document.getElementById('stream-video-element');
-  if (streamVideoElement && peerConnection) {
-    const stream = new MediaStream(peerConnection.getReceivers().map(receiver => receiver.track));
-    streamVideoElement.srcObject = stream;
-  }
-}
-
-function scheduleNextReconnect() {
-  clearTimeout(reconnectTimeout);
-  reconnectTimeout = setTimeout(reinitializeConnection, RECONNECT_INTERVAL);
-}
-
-async function reinitializeConnection() {
-  if (isInitializing || isReconnecting) {
-    logger.warn('Connection initialization or reconnection already in progress. Skipping reinitialize.');
-    return;
-  }
-
-  isReconnecting = true;
-  logger.debug('Reinitializing connection...');
-
-  try {
-    await destroyPersistentStream();
-    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 2 seconds before reinitializing
-    
     await initializePersistentStream();
-
-    if (isRecording) {
-      await stopRecording();
-      await startRecording();
-    }
-
-    logger.info('Connection reinitialized successfully');
-    reconnectAttempts = 0;
-    scheduleNextReconnect();
+    hideLoadingSymbol();
   } catch (error) {
-    logger.error('Error during reinitialization:', error);
-    handleReconnectFailure();
-  } finally {
-    isReconnecting = false;
+    logger.error('Error during initialization:', error);
+    hideLoadingSymbol();
+    showErrorMessage('Failed to connect. Please try again.');
   }
 }
 
-function handleReconnectFailure() {
-  reconnectAttempts++;
-  if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-    const delay = Math.min(30000, 5000 * Math.pow(2, reconnectAttempts));
-    logger.debug(`Scheduling next reconnection attempt in ${delay}ms`);
-    setTimeout(reinitializeConnection, delay);
-  } else {
-    logger.error('Max reconnection attempts reached. Please refresh the page.');
-    showErrorMessage('Failed to reconnect after multiple attempts. Please refresh the page.');
+async function handleAvatarChange() {
+  currentAvatar = avatarSelect.value;
+  if (currentAvatar === 'create-new') {
+    openAvatarModal();
+    return;
   }
+
+  const idleVideoElement = document.getElementById('idle-video-element');
+  if (idleVideoElement) {
+    idleVideoElement.src = avatars[currentAvatar].silentVideoUrl;
+    try {
+      await idleVideoElement.load();
+      logger.debug(`Idle video loaded for ${currentAvatar}`);
+    } catch (error) {
+      logger.error(`Error loading idle video for ${currentAvatar}:`, error);
+    }
+  }
+
+  const streamVideoElement = document.getElementById('stream-video-element');
+  if (streamVideoElement) {
+    streamVideoElement.srcObject = null;
+  }
+
+  await stopRecording();
+  currentUtterance = '';
+  interimMessageAdded = false;
+  const msgHistory = document.getElementById('msgHistory');
+  msgHistory.innerHTML = '';
+  chatHistory = [];
+
+  await destroyPersistentStream();
+  await initializePersistentStream();
+}
+
+async function loadAvatars() {
+  try {
+    const response = await fetch('/avatars');
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    avatars = await response.json();
+    logger.debug('Avatars loaded:', avatars);
+  } catch (error) {
+    logger.error('Error loading avatars:', error);
+    showErrorMessage('Failed to load avatars. Please try again.');
+  }
+}
+
+function populateAvatarSelect() {
+  const avatarSelect = document.getElementById('avatar-select');
+  avatarSelect.innerHTML = '';
+
+  const createNewOption = document.createElement('option');
+  createNewOption.value = 'create-new';
+  createNewOption.textContent = 'Create New Avatar';
+  avatarSelect.appendChild(createNewOption);
+
+  for (const [key, value] of Object.entries(avatars)) {
+    const option = document.createElement('option');
+    option.value = key;
+    option.textContent = value.name;
+    avatarSelect.appendChild(option);
+  }
+
+  if (Object.keys(avatars).length > 0) {
+    currentAvatar = Object.keys(avatars)[0];
+    avatarSelect.value = currentAvatar;
+  }
+}
+
+function openAvatarModal(avatarName = null) {
+  const modal = document.getElementById('avatar-modal');
+  const nameInput = document.getElementById('avatar-name');
+  const voiceInput = document.getElementById('avatar-voice');
+  const imagePreview = document.getElementById('avatar-image-preview');
+  const saveButton = document.getElementById('save-avatar-button');
+
+  if (avatarName && avatars[avatarName]) {
+    nameInput.value = avatars[avatarName].name;
+    voiceInput.value = avatars[avatarName].voiceId;
+    imagePreview.src = avatars[avatarName].imageUrl;
+    saveButton.textContent = 'Update Avatar';
+  } else {
+    nameInput.value = '';
+    voiceInput.value = 'en-US-GuyNeural';
+    imagePreview.src = '';
+    saveButton.textContent = 'Create Avatar';
+  }
+
+  modal.style.display = 'block';
+}
+
+function closeAvatarModal() {
+  const modal = document.getElementById('avatar-modal');
+  modal.style.display = 'none';
+}
+
+async function saveAvatar() {
+  const name = document.getElementById('avatar-name').value;
+  const voiceId = document.getElementById('avatar-voice').value || 'en-US-GuyNeural';
+  const imageFile = document.getElementById('avatar-image').files[0];
+
+  if (!name) {
+    showErrorMessage('Please fill in the avatar name.');
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('name', name);
+  formData.append('voiceId', voiceId);
+  if (imageFile) {
+    formData.append('image', imageFile);
+  }
+
+  showToast('Saving avatar...', 0);
+
+  try {
+    const response = await fetch('/avatar', {
+      method: 'POST',
+      body: formData
+    });
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value);
+      const events = chunk.split('\n\n');
+
+      for (const event of events) {
+        if (event.startsWith('data: ')) {
+          const data = JSON.parse(event.slice(6));
+          if (data.status === 'processing') {
+            showToast('Processing avatar...', 0);
+          } else if (data.status === 'completed') {
+            avatars[name] = data.avatar;
+            populateAvatarSelect();
+            closeAvatarModal();
+            showToast('Avatar created successfully!', 3000);
+          } else if (data.status === 'error') {
+            showErrorMessage(data.message);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error saving avatar:', error);
+    showErrorMessage('Failed to save avatar. Please try again.');
+  }
+}
+
+function updateContext(action) {
+  const contextInput = document.getElementById('context-input');
+  const newContext = contextInput.value.trim();
+
+  if (newContext) {
+    const originalContext = context;
+    if (action === 'append') {
+      context += '\n' + newContext;
+    } else if (action === 'replace') {
+      context = newContext;
+    }
+    logger.debug('Context updated:', context);
+    showToast('Context saved successfully');
+
+    displayBothContexts(originalContext, context);
+  } else {
+    showToast('Please enter some text before updating the context');
+  }
+}
+
+function displayBothContexts(original, updated) {
+  const contextInput = document.getElementById('context-input');
+  contextInput.value = `Original Context:\n${original}\n\nNew Context:\n${updated}`;
+
+  setTimeout(() => {
+    contextInput.value = updated;
+  }, 3000);
+}
+
+function showToast(message) {
+  const toast = document.createElement('div');
+  toast.textContent = message;
+  toast.style.position = 'fixed';
+  toast.style.bottom = '20px';
+  toast.style.left = '50%';
+  toast.style.transform = 'translateX(-50%)';
+  toast.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+  toast.style.color = 'white';
+  toast.style.padding = '10px 20px';
+  toast.style.borderRadius = '5px';
+  toast.style.zIndex = '1000';
+
+  document.body.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity 0.5s ease-out';
+    setTimeout(() => {
+      document.body.removeChild(toast);
+    }, 500);
+  }, 3000);
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initialize);
+} else {
+  initialize();
+}
+
+function showLoadingSymbol() {
+  const loadingSymbol = document.createElement('div');
+  loadingSymbol.id = 'loading-symbol';
+  loadingSymbol.innerHTML = 'Connecting...';
+  loadingSymbol.style.position = 'absolute';
+  loadingSymbol.style.top = '50%';
+  loadingSymbol.style.left = '50%';
+  loadingSymbol.style.transform = 'translate(-50%, -50%)';
+  loadingSymbol.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+  loadingSymbol.style.color = 'white';
+  loadingSymbol.style.padding = '10px';
+  loadingSymbol.style.borderRadius = '5px';
+  loadingSymbol.style.zIndex = '9999';
+  document.body.appendChild(loadingSymbol);
+}
+
+function hideLoadingSymbol() {
+  const loadingSymbol = document.getElementById('loading-symbol');
+  if (loadingSymbol) {
+    document.body.removeChild(loadingSymbol);
+  }
+}
+
+function showErrorMessage(message) {
+  const errorMessage = document.createElement('div');
+  errorMessage.innerHTML = message;
+  errorMessage.style.color = 'red';
+  errorMessage.style.marginBottom = '10px';
+  document.body.appendChild(errorMessage);
+
+  const destroyButton = document.getElementById('destroy-button');
+  const connectButton = document.getElementById('connect-button');
+  connectButton.onclick = initializePersistentStream;
+
+  if (destroyButton) destroyButton.style.display = 'inline-block';
+  destroyButton.onclick = destroyPersistentStream;
+
+  if (connectButton) connectButton.style.display = 'inline-block';
 }
 
 async function createPeerConnection(offer, iceServers) {
@@ -844,6 +1187,7 @@ function onIceCandidate(event) {
   }
 }
 
+
 function onIceConnectionStateChange() {
   const { ice: iceStatusLabel } = getStatusLabels();
   if (iceStatusLabel) {
@@ -856,6 +1200,31 @@ function onIceConnectionStateChange() {
     stopAllStreams();
     closePC();
     showErrorMessage('Connection lost. Please try again.');
+  }
+}
+
+function scheduleReconnect() {
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    logger.error('Max reconnection attempts reached. Please refresh the page.');
+    showErrorMessage('Failed to reconnect after multiple attempts. Please refresh the page.');
+    return;
+  }
+
+  const delay = Math.min(INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
+  logger.debug(`Scheduling reconnection attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
+  setTimeout(attemptReconnect, delay);
+  reconnectAttempts++;
+}
+
+async function attemptReconnect() {
+  logger.debug('Attempting to reconnect...');
+  try {
+    await reinitializeConnection();
+    logger.debug('Reconnection successful');
+    reconnectAttempts = 0;
+  } catch (error) {
+    logger.error('Reconnection attempt failed:', error);
+    scheduleReconnect();
   }
 }
 
@@ -876,6 +1245,8 @@ function onConnectionStateChange() {
     scheduleNextReconnect();
   }
 }
+
+
 
 function onSignalingStateChange() {
   const { signaling: signalingStatusLabel } = getStatusLabels();
@@ -1155,6 +1526,102 @@ async function fetchWithRetries(url, options, retries = 0, delayMs = 1000) {
   }
 }
 
+async function initializeConnection() {
+  if (isInitializing) {
+    logger.warn('Connection initialization already in progress. Skipping initialize.');
+    return;
+  }
+
+  isInitializing = true;
+  logger.info('Initializing connection...');
+
+  try {
+    stopAllStreams();
+    closePC();
+
+    if (!currentAvatar || !avatars[currentAvatar]) {
+      throw new Error('No avatar selected or avatar not found');
+    }
+
+    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        source_url: avatars[currentAvatar].imageUrl,
+        driver_url: "bank://lively/driver-06",
+        stream_warmup: true,
+        output_resolution: 512,
+        config: {
+          stitch: true,
+          fluent: true,
+          auto_match: true,
+          pad_audio: 0.0,
+          normalization_factor: 0.1,
+          align_driver: true,
+          align_expand_factor: 0.3,
+          driver_expressions: {
+            expressions: [
+              {
+                start_frame: 0,
+                expression: "neutral",
+                intensity: 1
+              }
+            ]
+          }
+        }
+      }),
+    });
+
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+
+    if (!newStreamId || !newSessionId) {
+      throw new Error('Failed to get valid stream ID or session ID from API');
+    }
+
+    streamId = newStreamId;
+    sessionId = newSessionId;
+    logger.info('Stream created:', { streamId, sessionId });
+
+    try {
+      sessionClientAnswer = await createPeerConnection(offer, iceServers);
+    } catch (e) {
+      logger.error('Error during streaming setup:', e);
+      stopAllStreams();
+      closePC();
+      throw e;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 6000));
+
+    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        answer: sessionClientAnswer,
+        session_id: sessionId,
+      }),
+    });
+
+    if (!sdpResponse.ok) {
+      throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
+    }
+
+    logger.info('Connection initialized successfully');
+  } catch (error) {
+    logger.error('Failed to initialize connection:', error);
+    throw error;
+  } finally {
+    isInitializing = false;
+  }
+}
+
+
 async function startStreaming(assistantReply) {
   try {
     logger.debug('Starting streaming with reply:', assistantReply);
@@ -1254,6 +1721,7 @@ async function startStreaming(assistantReply) {
   }
 }
 
+
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
   const videoWrapper = document.getElementById('video-wrapper');
@@ -1310,6 +1778,7 @@ export function toggleSimpleMode() {
     }
   }
 }
+
 
 function startSendingAudioData() {
   logger.debug('Starting to send audio data...');
@@ -1642,6 +2111,248 @@ function toggleAutoSpeak() {
   }
 }
 
+async function reinitializeConnection() {
+  if (isInitializing || isReconnecting) {
+    logger.warn('Connection initialization or reconnection already in progress. Skipping reinitialize.');
+    return;
+  }
+
+  isReconnecting = true;
+  logger.debug('Reinitializing connection...');
+
+  try {
+    await destroyPersistentStream();
+    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 2 seconds before reinitializing
+    
+    await initializePersistentStream();
+
+    if (isRecording) {
+      await stopRecording();
+      await startRecording();
+    }
+
+    logger.info('Connection reinitialized successfully');
+    reconnectAttempts = 0;
+    scheduleNextReconnect();
+  } catch (error) {
+    logger.error('Error during reinitialization:', error);
+    handleReconnectFailure();
+  } finally {
+    isReconnecting = false;
+  }
+}
+
+function scheduleNextReconnect() {
+  clearTimeout(reconnectTimeout);
+  reconnectTimeout = setTimeout(reinitializeConnection, RECONNECT_INTERVAL);
+}
+
+
+function handleReconnectFailure() {
+  reconnectAttempts++;
+  if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+    const delay = Math.min(30000, 5000 * Math.pow(2, reconnectAttempts));
+    logger.debug(`Scheduling next reconnection attempt in ${delay}ms`);
+    setTimeout(reinitializeConnection, delay);
+  } else {
+    logger.error('Max reconnection attempts reached. Please refresh the page.');
+    showErrorMessage('Failed to reconnect after multiple attempts. Please refresh the page.');
+  }
+}
+
+
+function scheduleConnectionSwap() {
+  const timeUntilSwap = STREAM_DURATION - (Date.now() - lastReconnectTime);
+  setTimeout(swapConnections, Math.max(0, timeUntilSwap));
+}
+
+
+
+async function swapConnections() {
+  if (!backgroundPeerConnection || !backgroundStreamId || !backgroundSessionId) {
+    logger.warn('Background connection not ready. Skipping swap.');
+    return;
+  }
+
+  isReconnecting = true;
+  logger.debug('Swapping connections...');
+
+  try {
+    await destroyPersistentStream();
+
+    peerConnection = backgroundPeerConnection;
+    persistentStreamId = backgroundStreamId;
+    persistentSessionId = backgroundSessionId;
+
+    backgroundPeerConnection = null;
+    backgroundStreamId = null;
+    backgroundSessionId = null;
+
+    updateVideoElement();
+    startKeepAlive();
+
+    logger.info('Connection swapped successfully');
+    lastReconnectTime = Date.now();
+  } catch (error) {
+    logger.error('Error during connection swap:', error);
+  } finally {
+    isReconnecting = false;
+    isBackgroundInitializing = false;
+  }
+
+  // Schedule the next background initialization 
+  setTimeout(initializeBackgroundConnection, STREAM_DURATION / 2);
+}
+
+
+async function initializeBackgroundConnection() {
+  if (isBackgroundInitializing) {
+    logger.warn('Background connection initialization already in progress. Skipping initialization.');
+    return;
+  }
+
+  isBackgroundInitializing = true;
+  logger.info('Initializing background connection...');
+
+  try {
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await createNewStream();
+
+    backgroundPeerConnection = await createBackgroundPeerConnection(offer, iceServers);
+
+    backgroundStreamId = newStreamId;
+    backgroundSessionId = newSessionId;
+
+    logger.info('Background connection initialized successfully');
+  } catch (error) {
+    logger.error('Failed to initialize background connection:', error);
+    throw error;
+  } finally {
+    isBackgroundInitializing = false;
+  }
+}
+
+
+
+async function createNewStream() {
+  const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      source_url: avatars[currentAvatar].imageUrl,
+      driver_url: "bank://lively/driver-06",
+      stream_warmup: true,
+      config: {
+        stitch: true,
+        fluent: true,
+        auto_match: true,
+        pad_audio: 0.0,
+        normalization_factor: 0.1,
+        align_driver: true,
+        align_expand_factor: 0.3,
+        driver_expressions: {
+          expressions: [
+            {
+              start_frame: 0,
+              expression: "neutral",
+              intensity: 1
+            }
+          ]
+        }
+      }
+    }),
+  });
+
+  return sessionResponse.json();
+}
+
+
+async function createBackgroundPeerConnection(offer, iceServers) {
+  const pc = new RTCPeerConnection({ iceServers });
+  pc.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
+  pc.addEventListener('icecandidate', onIceCandidate, true);
+  pc.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
+  pc.addEventListener('connectionstatechange', onConnectionStateChange, true);
+  pc.addEventListener('signalingstatechange', onSignalingStateChange, true);
+  pc.addEventListener('track', onTrack, true);
+
+  await pc.setRemoteDescription(offer);
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+
+  return pc;
+}
+
+
+
+function updateVideoElement() {
+  const streamVideoElement = document.getElementById('stream-video-element');
+  if (streamVideoElement && peerConnection) {
+    const stream = new MediaStream(peerConnection.getReceivers().map(receiver => receiver.track));
+    streamVideoElement.srcObject = stream;
+  }
+}
+
+
+
+
+const connectButton = document.getElementById('connect-button');
+connectButton.onclick = initializeConnection;
+
+const destroyButton = document.getElementById('destroy-button');
+destroyButton.onclick = async () => {
+  try {
+    await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+
+    logger.debug('Stream destroyed successfully');
+  } catch (error) {
+    logger.error('Error destroying stream:', error);
+  } finally {
+    stopAllStreams();
+    closePC();
+  }
+};
+
+const startButton = document.getElementById('start-button');
+
+startButton.onclick = async () => {
+  logger.info('Start button clicked. Current state:', isRecording ? 'Recording' : 'Not recording');
+  if (!isRecording) {
+    try {
+      await startRecording();
+    } catch (error) {
+      logger.error('Failed to start recording:', error);
+      showErrorMessage('Failed to start recording. Please try again.');
+    }
+  } else {
+    await stopRecording();
+  }
+};
+
+const saveAvatarButton = document.getElementById('save-avatar-button');
+saveAvatarButton.onclick = saveAvatar;
+
+const avatarImageInput = document.getElementById('avatar-image');
+avatarImageInput.onchange = (event) => {
+  const file = event.target.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      document.getElementById('avatar-image-preview').src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+};
+
 // Export functions and variables that need to be accessed from other modules
 export {
   initialize,
@@ -1654,328 +2365,4 @@ export {
   toggleAutoSpeak,
   initializePersistentStream,
   destroyPersistentStream,
-  toggleSimpleMode,
-  setLogLevel,
 };
-
-// Additional utility functions
-
-function getVideoElements() {
-  const idle = document.getElementById('idle-video-element');
-  const stream = document.getElementById('stream-video-element');
-
-  if (!idle || !stream) {
-    logger.warn('Video elements not found in the DOM');
-  }
-
-  return { idle, stream };
-}
-
-function getStatusLabels() {
-  return {
-    peer: document.getElementById('peer-status-label'),
-    ice: document.getElementById('ice-status-label'),
-    iceGathering: document.getElementById('ice-gathering-status-label'),
-    signaling: document.getElementById('signaling-status-label'),
-    streaming: document.getElementById('streaming-status-label')
-  };
-}
-
-function initializeWebSocket() {
-  socket = new WebSocket(`wss://${window.location.host}`);
-
-  socket.onopen = () => {
-    logger.info('WebSocket connection established');
-  };
-
-  socket.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    logger.debug('Received WebSocket message:', data);
-
-    switch (data.type) {
-      case 'transcription':
-        updateTranscription(data.text);
-        break;
-      case 'assistantReply':
-        updateAssistantReply(data.text);
-        break;
-      default:
-        logger.warn('Unknown WebSocket message type:', data.type);
-    }
-  };
-
-  socket.onerror = (error) => {
-    logger.error('WebSocket error:', error);
-  };
-
-  socket.onclose = () => {
-    logger.info('WebSocket connection closed');
-    setTimeout(initializeWebSocket, 10000);
-  };
-}
-
-function updateTranscript(text, isFinal) {
-  const msgHistory = document.getElementById('msgHistory');
-  let interimSpan = msgHistory.querySelector('span[data-interim]');
-
-  if (isFinal) {
-    if (interimSpan) {
-      interimSpan.remove();
-    }
-    msgHistory.innerHTML += `<span><u>User:</u> ${text}</span><br>`;
-    logger.debug('Final transcript added to chat history:', text);
-    interimMessageAdded = false;
-  } else {
-    if (text.trim()) {
-      if (!interimMessageAdded) {
-        msgHistory.innerHTML += `<span data-interim style='opacity:0.5'><u>User (interim):</u> ${text}</span><br>`;
-        interimMessageAdded = true;
-      } else if (interimSpan) {
-        interimSpan.innerHTML = `<u>User (interim):</u> ${text}`;
-      }
-    }
-  }
-  msgHistory.scrollTop = msgHistory.scrollHeight;
-}
-
-function handleTextInput(text) {
-  if (text.trim() === '') return;
-
-  const textInput = document.getElementById('text-input');
-  textInput.value = '';
-
-  updateTranscript(text, true);
-
-  chatHistory.push({
-    role: 'user',
-    content: text,
-  });
-
-  sendChatToGroq();
-}
-
-function updateAssistantReply(text) {
-  document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
-}
-
-async function loadAvatars() {
-  try {
-    const response = await fetch('/avatars');
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    avatars = await response.json();
-    logger.debug('Avatars loaded:', avatars);
-  } catch (error) {
-    logger.error('Error loading avatars:', error);
-    showErrorMessage('Failed to load avatars. Please try again.');
-  }
-}
-
-function populateAvatarSelect() {
-  const avatarSelect = document.getElementById('avatar-select');
-  avatarSelect.innerHTML = '';
-
-  const createNewOption = document.createElement('option');
-  createNewOption.value = 'create-new';
-  createNewOption.textContent = 'Create New Avatar';
-  avatarSelect.appendChild(createNewOption);
-
-  for (const [key, value] of Object.entries(avatars)) {
-    const option = document.createElement('option');
-    option.value = key;
-    option.textContent = value.name;
-    avatarSelect.appendChild(option);
-  }
-
-  if (Object.keys(avatars).length > 0) {
-    currentAvatar = Object.keys(avatars)[0];
-    avatarSelect.value = currentAvatar;
-  }
-}
-
-function openAvatarModal(avatarName = null) {
-  const modal = document.getElementById('avatar-modal');
-  const nameInput = document.getElementById('avatar-name');
-  const voiceInput = document.getElementById('avatar-voice');
-  const imagePreview = document.getElementById('avatar-image-preview');
-  const saveButton = document.getElementById('save-avatar-button');
-
-  if (avatarName && avatars[avatarName]) {
-    nameInput.value = avatars[avatarName].name;
-    voiceInput.value = avatars[avatarName].voiceId;
-    imagePreview.src = avatars[avatarName].imageUrl;
-    saveButton.textContent = 'Update Avatar';
-  } else {
-    nameInput.value = '';
-    voiceInput.value = 'en-US-GuyNeural';
-    imagePreview.src = '';
-    saveButton.textContent = 'Create Avatar';
-  }
-
-  modal.style.display = 'block';
-}
-
-function closeAvatarModal() {
-  const modal = document.getElementById('avatar-modal');
-  modal.style.display = 'none';
-}
-
-async function saveAvatar() {
-  const name = document.getElementById('avatar-name').value;
-  const voiceId = document.getElementById('avatar-voice').value || 'en-US-GuyNeural';
-  const imageFile = document.getElementById('avatar-image').files[0];
-
-  if (!name) {
-    showErrorMessage('Please fill in the avatar name.');
-    return;
-  }
-
-  const formData = new FormData();
-  formData.append('name', name);
-  formData.append('voiceId', voiceId);
-  if (imageFile) {
-    formData.append('image', imageFile);
-  }
-
-  showToast('Saving avatar...', 0);
-
-  try {
-    const response = await fetch('/avatar', {
-      method: 'POST',
-      body: formData
-    });
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      const chunk = decoder.decode(value);
-      const events = chunk.split('\n\n');
-
-      for (const event of events) {
-        if (event.startsWith('data: ')) {
-          const data = JSON.parse(event.slice(6));
-          if (data.status === 'processing') {
-            showToast('Processing avatar...', 0);
-          } else if (data.status === 'completed') {
-            avatars[name] = data.avatar;
-            populateAvatarSelect();
-            closeAvatarModal();
-            showToast('Avatar created successfully!', 3000);
-          } else if (data.status === 'error') {
-            showErrorMessage(data.message);
-          }
-        }
-      }
-    }
-  } catch (error) {
-    console.error('Error saving avatar:', error);
-    showErrorMessage('Failed to save avatar. Please try again.');
-  }
-}
-
-function updateContext(action) {
-  const contextInput = document.getElementById('context-input');
-  const newContext = contextInput.value.trim();
-
-  if (newContext) {
-    const originalContext = context;
-    if (action === 'append') {
-      context += '\n' + newContext;
-    } else if (action === 'replace') {
-      context = newContext;
-    }
-    logger.debug('Context updated:', context);
-    showToast('Context saved successfully');
-
-    displayBothContexts(originalContext, context);
-  } else {
-    showToast('Please enter some text before updating the context');
-  }
-}
-
-function displayBothContexts(original, updated) {
-  const contextInput = document.getElementById('context-input');
-  contextInput.value = `Original Context:\n${original}\n\nNew Context:\n${updated}`;
-
-  setTimeout(() => {
-    contextInput.value = updated;
-  }, 3000);
-}
-
-function showToast(message, duration = 3000) {
-  const toast = document.createElement('div');
-  toast.textContent = message;
-  toast.style.position = 'fixed';
-  toast.style.bottom = '20px';
-  toast.style.left = '50%';
-  toast.style.transform = 'translateX(-50%)';
-  toast.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-  toast.style.color = 'white';
-  toast.style.padding = '10px 20px';
-  toast.style.borderRadius = '5px';
-  toast.style.zIndex = '1000';
-
-  document.body.appendChild(toast);
-
-  if (duration > 0) {
-    setTimeout(() => {
-      toast.style.opacity = '0';
-      toast.style.transition = 'opacity 0.5s ease-out';
-      setTimeout(() => {
-        document.body.removeChild(toast);
-      }, 500);
-    }, duration);
-  }
-}
-
-function showLoadingSymbol() {
-  const loadingSymbol = document.createElement('div');
-  loadingSymbol.id = 'loading-symbol';
-  loadingSymbol.innerHTML = 'Connecting...';
-  loadingSymbol.style.position = 'absolute';
-  loadingSymbol.style.top = '50%';
-  loadingSymbol.style.left = '50%';
-  loadingSymbol.style.transform = 'translate(-50%, -50%)';
-  loadingSymbol.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
-  loadingSymbol.style.color = 'white';
-  loadingSymbol.style.padding = '10px';
-  loadingSymbol.style.borderRadius = '5px';
-  loadingSymbol.style.zIndex = '9999';
-  document.body.appendChild(loadingSymbol);
-}
-
-function hideLoadingSymbol() {
-  const loadingSymbol = document.getElementById('loading-symbol');
-  if (loadingSymbol) {
-    document.body.removeChild(loadingSymbol);
-  }
-}
-
-function showErrorMessage(message) {
-  const errorMessage = document.createElement('div');
-  errorMessage.innerHTML = message;
-  errorMessage.style.color = 'red';
-  errorMessage.style.marginBottom = '10px';
-  document.body.appendChild(errorMessage);
-
-  const destroyButton = document.getElementById('destroy-button');
-  const connectButton = document.getElementById('connect-button');
-  connectButton.onclick = initializePersistentStream;
-
-  if (destroyButton) destroyButton.style.display = 'inline-block';
-  destroyButton.onclick = destroyPersistentStream;
-
-  if (connectButton) connectButton.style.display = 'inline-block';
-}
-
-// Initialize the application when the DOM is ready
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initialize);
-} else {
-  initialize();
-}
