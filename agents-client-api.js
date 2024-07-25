@@ -753,9 +753,7 @@ async function initializePersistentStream() {
     isPersistentStreamActive = true;
     startKeepAlive();
     logger.info('Persistent stream initialized successfully');
-    
-    // Schedule the initial background connection initialization
-    setTimeout(initializeBackgroundConnection, STREAM_DURATION / 2);
+    scheduleNextReconnect();
   } catch (error) {
     logger.error('Failed to initialize persistent stream:', error);
     isPersistentStreamActive = false;
@@ -2218,8 +2216,8 @@ async function initializeBackgroundConnection() {
 
     logger.info('Background connection initialized successfully');
 
-    // Schedule the connection swap
-    scheduleConnectionSwap();
+    // Call swapConnections after a successful background connection initialization
+    await swapConnections();
   } catch (error) {
     logger.error('Failed to initialize background connection:', error);
     throw error;
@@ -2229,41 +2227,6 @@ async function initializeBackgroundConnection() {
 }
 
 
-async function swapConnections() {
-  if (!backgroundPeerConnection || !backgroundStreamId || !backgroundSessionId) {
-    logger.warn('Background connection not ready. Skipping swap.');
-    return;
-  }
-
-  isReconnecting = true;
-  logger.debug('Swapping connections...');
-
-  try {
-    await destroyPersistentStream();
-
-    peerConnection = backgroundPeerConnection;
-    persistentStreamId = backgroundStreamId;
-    persistentSessionId = backgroundSessionId;
-
-    backgroundPeerConnection = null;
-    backgroundStreamId = null;
-    backgroundSessionId = null;
-
-    updateVideoElement();
-    startKeepAlive();
-
-    logger.info('Connection swapped successfully');
-    lastReconnectTime = Date.now();
-  } catch (error) {
-    logger.error('Error during connection swap:', error);
-  } finally {
-    isReconnecting = false;
-    isBackgroundInitializing = false;
-  }
-
-  // Schedule the next background initialization
-  setTimeout(initializeBackgroundConnection, STREAM_DURATION / 2);
-}
 
 
 async function createNewStream() {
@@ -2317,12 +2280,6 @@ async function createBackgroundPeerConnection(offer, iceServers) {
 
   return pc;
 }
-
-function scheduleConnectionSwap() {
-  const timeUntilSwap = STREAM_DURATION - (Date.now() - lastReconnectTime);
-  setTimeout(swapConnections, Math.max(0, timeUntilSwap));
-}
-
 
 
 
