@@ -819,11 +819,6 @@ async function initializeBackgroundConnection() {
 
     await new Promise(resolve => setTimeout(resolve, 1000));
 
-    const answer = backgroundPeerConnection.localDescription;
-    if (!answer) {
-      throw new Error('Local description not set');
-    }
-
     const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${backgroundStreamId}/sdp`, {
       method: 'POST',
       headers: {
@@ -831,7 +826,7 @@ async function initializeBackgroundConnection() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        answer: answer,
+        answer: backgroundPeerConnection.localDescription,
         session_id: backgroundSessionId,
       }),
     });
@@ -868,13 +863,14 @@ function startKeepAlive() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ session_id: persistentSessionId }),
+          mode: 'cors',
+          credentials: 'include'
         });
 
         if (!response.ok) {
           throw new Error(`Keepalive failed: ${response.status} ${response.statusText}`);
         }
         logger.debug('Keepalive sent successfully');
-        keepAliveFailureCount = 0;
       } catch (error) {
         logger.error('Error sending keepalive:', error);
         keepAliveFailureCount++;
@@ -1231,29 +1227,26 @@ function showErrorMessage(message) {
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
     peerConnection = new RTCPeerConnection({ iceServers });
+    pcDataChannel = peerConnection.createDataChannel('JanusDataChannel');
     peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
     peerConnection.addEventListener('icecandidate', onIceCandidate, true);
     peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
     peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
     peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
     peerConnection.addEventListener('track', onTrack, true);
+    pcDataChannel.addEventListener('message', onStreamEvent, true);
   }
 
-  try {
-    await peerConnection.setRemoteDescription(offer);
-    logger.debug('Set remote SDP');
+  await peerConnection.setRemoteDescription(offer);
+  logger.debug('Set remote SDP');
 
-    const answer = await peerConnection.createAnswer();
-    logger.debug('Created local SDP');
+  const sessionClientAnswer = await peerConnection.createAnswer();
+  logger.debug('Created local SDP');
 
-    await peerConnection.setLocalDescription(answer);
-    logger.debug('Set local SDP');
+  await peerConnection.setLocalDescription(sessionClientAnswer);
+  logger.debug('Set local SDP');
 
-    return answer;
-  } catch (error) {
-    logger.error('Error in createPeerConnection:', error);
-    throw error;
-  }
+  return sessionClientAnswer;
 }
 
 function onIceGatheringStateChange() {
@@ -1603,14 +1596,10 @@ async function fetchWithRetries(url, options, retries = 0, delayMs = 1000) {
 
     lastApiCallTime = Date.now();
 
-    const response = await fetch(url, {
-      ...options,
-      mode: 'cors',
-      credentials: 'include'
-    });
-
+    const response = await fetch(url, options);
     if (!response.ok) {
       if (response.status === 429) {
+        // If rate limited, wait for a longer time before retrying
         const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
         logger.warn(`Rate limited. Retrying after ${retryAfter} seconds.`);
         await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
@@ -2230,24 +2219,23 @@ async function reinitializeConnection() {
     await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 2 seconds before reinitializing
 
     if (!backgroundPeerConnection || !backgroundStreamId || !backgroundSessionId) {
-      logger.warn('Background connection not ready. Initializing a new connection.');
-      await initializePersistentStream();
-    } else {
-      // Swap the connections
-      peerConnection = backgroundPeerConnection;
-      persistentStreamId = backgroundStreamId;
-      persistentSessionId = backgroundSessionId;
-
-      backgroundPeerConnection = null;
-      backgroundStreamId = null;
-      backgroundSessionId = null;
-
-      // Update video element with new connection
-      updateVideoElement();
-
-      isPersistentStreamActive = true;
-      startKeepAlive();
+      await initializeBackgroundConnection();
     }
+
+    // Swap the connections
+    peerConnection = backgroundPeerConnection;
+    persistentStreamId = backgroundStreamId;
+    persistentSessionId = backgroundSessionId;
+
+    backgroundPeerConnection = null;
+    backgroundStreamId = null;
+    backgroundSessionId = null;
+
+    // Update video element with new connection
+    updateVideoElement();
+
+    isPersistentStreamActive = true;
+    startKeepAlive();
 
     logger.info('Connection reinitialized successfully');
     reconnectAttempts = 0;
