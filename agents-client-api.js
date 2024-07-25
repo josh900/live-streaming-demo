@@ -66,7 +66,7 @@ let backgroundSessionId = null;
 let lastReconnectTime = 0;
 const RECONNECT_COOLDOWN = 60000; // 1 minute cooldown between reconnects
 const STREAM_DURATION = 10000; // 110000 - Slightly less than 2 minutes
-const RECONNECT_INTERVAL = 20000; // 120000 - 2 minutes
+const RECONNECT_INTERVAL = 320000; // 120000 - 2 minutes
 let reconnectTimeout;
 
 
