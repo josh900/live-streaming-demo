@@ -68,10 +68,6 @@ const RECONNECT_COOLDOWN = 60000; // 1 minute cooldown between reconnects
 let reconnectTimeout;
 const STREAM_DURATION = 110000; // Slightly less than 2 minutes
 const RECONNECT_INTERVAL = 120000; // 2 minutes
-const MAX_KEEPALIVE_FAILURES = 3;
-const KEEPALIVE_INTERVAL = 30000; // 30 seconds
-let keepAliveFailureCount = 0;
-
 
 
 
@@ -788,20 +784,13 @@ function startKeepAlive() {
           throw new Error(`Keepalive failed: ${response.status} ${response.statusText}`);
         }
         logger.debug('Keepalive sent successfully');
-        keepAliveFailureCount = 0;
       } catch (error) {
         logger.error('Error sending keepalive:', error);
-        keepAliveFailureCount++;
-        if (keepAliveFailureCount >= MAX_KEEPALIVE_FAILURES) {
-          logger.warn('Max keepalive failures reached. Reinitializing connection.');
-          await reinitializeConnection();
-        }
+        await reinitializePersistentStream();
       }
     }
-  }, KEEPALIVE_INTERVAL);
+  }, 30000); // Send keepalive every 30 seconds
 }
-
-
 
 async function destroyPersistentStream() {
   if (persistentStreamId) {
@@ -1260,8 +1249,6 @@ function onConnectionStateChange() {
 
 
 
-
-
 function onSignalingStateChange() {
   const { signaling: signalingStatusLabel } = getStatusLabels();
   if (signalingStatusLabel) {
@@ -1506,10 +1493,16 @@ function closePC(pc = peerConnection) {
 }
 
 async function fetchWithRetries(url, options, retries = 0, delayMs = 1000) {
-  const maxRetryCount = 5;
-  const maxDelaySec = 30;
-
   try {
+    const now = Date.now();
+    const timeSinceLastCall = now - lastApiCallTime;
+
+    if (timeSinceLastCall < API_CALL_INTERVAL) {
+      await new Promise(resolve => setTimeout(resolve, API_CALL_INTERVAL - timeSinceLastCall));
+    }
+
+    lastApiCallTime = Date.now();
+
     const response = await fetch(url, options);
     if (!response.ok) {
       if (response.status === 429) {
@@ -2134,24 +2127,27 @@ function toggleAutoSpeak() {
 }
 
 async function reinitializeConnection() {
+  const now = Date.now();
+  if (now - lastReconnectTime < RECONNECT_COOLDOWN) {
+    logger.debug('Reconnection attempt too soon. Skipping.');
+    return;
+  }
+
+
   if (isInitializing || isReconnecting) {
     logger.warn('Connection initialization or reconnection already in progress. Skipping reinitialize.');
     return;
   }
 
   isReconnecting = true;
-  logger.debug('Reinitializing connection...');
+  lastReconnectTime = now;
 
   try {
-    await destroyPersistentStream();
-    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 2 seconds before reinitializing
-
-    await initializePersistentStream();
-
-    if (isRecording) {
-      await stopRecording();
-      await startRecording();
+    if (!backgroundPeerConnection || !backgroundStreamId || !backgroundSessionId) {
+      await initializeBackgroundConnection();
     }
+
+    await swapConnections();
 
     logger.info('Connection reinitialized successfully');
     reconnectAttempts = 0;
@@ -2164,13 +2160,29 @@ async function reinitializeConnection() {
   }
 }
 
+function scheduleNextReconnect() {
+  clearTimeout(reconnectTimeout);
+  reconnectTimeout = setTimeout(async () => {
+    await initializeBackgroundConnection();
+    setTimeout(swapConnections, STREAM_DURATION - 10000); // Swap 10 seconds before expiration
+  }, RECONNECT_INTERVAL);
+}
+
+function waitForIdleToReconnect() {
+  if (!isCurrentlyStreaming) {
+    reinitializeConnection();
+  } else {
+    setTimeout(waitForIdleToReconnect, 1000);
+  }
+}
+
 
 
 
 function handleReconnectFailure() {
   reconnectAttempts++;
   if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-    const delay = Math.min(MAX_RECONNECT_DELAY, INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempts));
+    const delay = Math.min(30000, 5000 * Math.pow(2, reconnectAttempts));
     logger.debug(`Scheduling next reconnection attempt in ${delay}ms`);
     setTimeout(reinitializeConnection, delay);
   } else {
@@ -2178,8 +2190,6 @@ function handleReconnectFailure() {
     showErrorMessage('Failed to reconnect after multiple attempts. Please refresh the page.');
   }
 }
-
-
 
 
 
