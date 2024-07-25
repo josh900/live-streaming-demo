@@ -1642,6 +1642,43 @@ function toggleAutoSpeak() {
   }
 }
 
+
+async function handleAvatarChange() {
+  currentAvatar = avatarSelect.value;
+  if (currentAvatar === 'create-new') {
+    openAvatarModal();
+    return;
+  }
+
+  const idleVideoElement = document.getElementById('idle-video-element');
+  if (idleVideoElement) {
+    idleVideoElement.src = avatars[currentAvatar].silentVideoUrl;
+    try {
+      await idleVideoElement.load();
+      logger.debug(`Idle video loaded for ${currentAvatar}`);
+    } catch (error) {
+      logger.error(`Error loading idle video for ${currentAvatar}:`, error);
+    }
+  }
+
+  const streamVideoElement = document.getElementById('stream-video-element');
+  if (streamVideoElement) {
+    streamVideoElement.srcObject = null;
+  }
+
+  await stopRecording();
+  currentUtterance = '';
+  interimMessageAdded = false;
+  const msgHistory = document.getElementById('msgHistory');
+  msgHistory.innerHTML = '';
+  chatHistory = [];
+
+  await destroyPersistentStream();
+  await initializePersistentStream();
+}
+
+
+
 // Export functions and variables that need to be accessed from other modules
 export {
   initialize,
