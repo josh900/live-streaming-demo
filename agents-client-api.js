@@ -70,6 +70,7 @@ const RECONNECT_INTERVAL = 120000; // 2 minutes
 let reconnectTimeout;
 
 
+
 let context = `
 
 
@@ -416,6 +417,43 @@ let currentAvatar = '';
 
 const avatarSelect = document.getElementById('avatar-select');
 avatarSelect.addEventListener('change', handleAvatarChange);
+
+
+function initializeTransitionCanvas() {
+  const videoWrapper = document.querySelector('#video-wrapper');
+  const rect = videoWrapper.getBoundingClientRect();
+  const size = Math.min(rect.width, rect.height, 550);
+
+  transitionCanvas = document.createElement('canvas');
+  transitionCanvas.width = size;
+  transitionCanvas.height = size;
+  transitionCtx = transitionCanvas.getContext('2d');
+
+  Object.assign(transitionCanvas.style, {
+    position: 'absolute',
+    top: '0',
+    left: '0',
+    width: '100%',
+    height: '100%',
+    maxWidth: '550px',
+    maxHeight: '550px',
+    zIndex: '3',
+    borderRadius: '13%',
+    objectFit: 'cover'
+  });
+
+  videoWrapper.appendChild(transitionCanvas);
+
+  window.addEventListener('resize', () => {
+    const videoWrapper = document.querySelector('#video-wrapper');
+    const rect = videoWrapper.getBoundingClientRect();
+    const size = Math.min(rect.width, rect.height, 550);
+
+    transitionCanvas.width = size;
+    transitionCanvas.height = size;
+  });
+}
+
 
 async function initialize() {
   setLogLevel('DEBUG');
