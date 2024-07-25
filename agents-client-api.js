@@ -2123,7 +2123,7 @@ async function reinitializeConnection() {
   try {
     await destroyPersistentStream();
     await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 2 seconds before reinitializing
-    
+
     await initializePersistentStream();
 
     if (isRecording) {
@@ -2146,7 +2146,6 @@ function scheduleNextReconnect() {
   clearTimeout(reconnectTimeout);
   reconnectTimeout = setTimeout(reinitializeConnection, RECONNECT_INTERVAL);
 }
-
 
 function handleReconnectFailure() {
   reconnectAttempts++;
@@ -2200,7 +2199,7 @@ async function swapConnections() {
     isBackgroundInitializing = false;
   }
 
-  // Schedule the next background initialization 
+  // Schedule the next background initialization
   setTimeout(initializeBackgroundConnection, STREAM_DURATION / 2);
 }
 
