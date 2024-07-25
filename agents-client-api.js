@@ -73,6 +73,7 @@ let reconnectTimeout;
 
 
 
+
 export function setLogLevel(level) {
   logger.setLogLevel(level);
   isDebugMode = level === 'DEBUG';
@@ -753,7 +754,9 @@ async function initializePersistentStream() {
     isPersistentStreamActive = true;
     startKeepAlive();
     logger.info('Persistent stream initialized successfully');
-    scheduleNextReconnect();
+    lastReconnectTime = Date.now();
+    scheduleConnectionSwap();
+    initializeBackgroundConnection();
   } catch (error) {
     logger.error('Failed to initialize persistent stream:', error);
     isPersistentStreamActive = false;
@@ -1336,10 +1339,7 @@ function onStreamEvent(message) {
         break;
       case 'stream/done':
         status = 'done';
-        // Consider swapping connections here if it's close to the 2-minute mark
-        if (Date.now() - lastReconnectTime > STREAM_DURATION - 10000) { // 10 seconds before 2-minute mark
-          swapConnections();
-        }
+        scheduleConnectionSwap();
         break;
       case 'stream/ready':
         status = 'ready';
@@ -1369,6 +1369,15 @@ function onStreamEvent(message) {
       if (streamEventLabel) {
         streamEventLabel.innerText = status === 'dont-care' ? event : status;
         streamEventLabel.className = 'streamEvent-' + status;
+      }
+    }
+
+    if (status === 'done') {
+      // Consider additional actions when the stream is done
+      // For example, you might want to check if it's time to swap connections
+      if (Date.now() - lastReconnectTime > STREAM_DURATION - 15000) { // 15 seconds before 2-minute mark
+        logger.debug('Stream done, close to reconnection time. Initiating connection swap.');
+        swapConnections();
       }
     }
   }
@@ -2173,9 +2182,14 @@ function scheduleConnectionSwap() {
 
 
 async function swapConnections() {
-  if (!backgroundPeerConnection || !backgroundStreamId || !backgroundSessionId) {
-    logger.warn('Background connection not ready. Skipping swap.');
+  if (Date.now() - lastReconnectTime < RECONNECT_COOLDOWN) {
+    logger.debug('Too soon to swap connections. Skipping.');
     return;
+  }
+
+  if (!backgroundPeerConnection || !backgroundStreamId || !backgroundSessionId) {
+    logger.warn('Background connection not ready. Initializing now.');
+    await initializeBackgroundConnection();
   }
 
   isReconnecting = true;
@@ -2197,16 +2211,18 @@ async function swapConnections() {
 
     logger.info('Connection swapped successfully');
     lastReconnectTime = Date.now();
+    scheduleConnectionSwap();
   } catch (error) {
     logger.error('Error during connection swap:', error);
+    setTimeout(reinitializeConnection, 5000);
   } finally {
     isReconnecting = false;
-    isBackgroundInitializing = false;
   }
 
-  // Schedule the next background initialization 
-  setTimeout(initializeBackgroundConnection, STREAM_DURATION / 2);
+  // Immediately start initializing the next background connection
+  initializeBackgroundConnection();
 }
+
 
 
 async function initializeBackgroundConnection() {
