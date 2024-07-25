@@ -2364,15 +2364,6 @@ async function createBackgroundPeerConnection(offer, iceServers) {
 }
 
 
-function updateVideoElement() {
-  const streamVideoElement = document.getElementById('stream-video-element');
-  if (streamVideoElement && peerConnection) {
-    const stream = new MediaStream(peerConnection.getReceivers().map(receiver => receiver.track));
-    streamVideoElement.srcObject = stream;
-  }
-}
-
-
 
 const connectButton = document.getElementById('connect-button');
 connectButton.onclick = initializeConnection;
