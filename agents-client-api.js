@@ -481,69 +481,47 @@ function initializeTransitionCanvas() {
 
 
 
-function smoothTransition(toStreaming, duration = 250) {
-  const idleVideoElement = document.getElementById('idle-video-element');
-  const streamVideoElement = document.getElementById('stream-video-element');
-
-  if (!idleVideoElement || !streamVideoElement) {
-    logger.warn('Video elements not found for transition');
-    return;
-  }
+async function smoothTransition(toStreaming, streamVideoElement, idleVideoElement, preloadVideoElement = null) {
+  logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
 
   if (isTransitioning) {
     logger.debug('Transition already in progress, skipping');
     return;
   }
 
-  // Don't transition if we're already in the desired state
-  if ((toStreaming && isCurrentlyStreaming) || (!toStreaming && !isCurrentlyStreaming)) {
-    logger.debug('Already in desired state, skipping transition');
-    return;
-  }
-
   isTransitioning = true;
-  logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
 
+  const duration = 250; // Transition duration in milliseconds
   let startTime = null;
 
-  function animate(currentTime) {
-    if (!startTime) startTime = currentTime;
-    const elapsed = currentTime - startTime;
-    const progress = Math.min(elapsed / duration, 1);
+  return new Promise((resolve) => {
+    function animate(currentTime) {
+      if (!startTime) startTime = currentTime;
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
 
-    transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
-    
-    // Draw the fading out video
-    transitionCtx.globalAlpha = 1 - progress;
-    transitionCtx.drawImage(toStreaming ? idleVideoElement : streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-    
-    // Draw the fading in video
-    transitionCtx.globalAlpha = progress;
-    transitionCtx.drawImage(toStreaming ? streamVideoElement : idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-
-    if (progress < 1) {
-      requestAnimationFrame(animate);
-    } else {
-      // Ensure final state is set correctly
-      if (toStreaming) {
-        streamVideoElement.style.display = 'block';
-        idleVideoElement.style.display = 'none';
-      } else {
-        streamVideoElement.style.display = 'none';
-        idleVideoElement.style.display = 'block';
+      if (toStreaming && preloadVideoElement) {
+        streamVideoElement.src = preloadVideoElement.src;
       }
-      isTransitioning = false;
-      isCurrentlyStreaming = toStreaming;
-      transitionCanvas.style.display = 'none';
-      logger.debug('Smooth transition completed');
-    }
-  }
 
-  // Show the transition canvas
-  transitionCanvas.style.display = 'block';
-  
-  // Start the animation
-  requestAnimationFrame(animate);
+      streamVideoElement.style.opacity = toStreaming ? progress : 1 - progress;
+      idleVideoElement.style.opacity = toStreaming ? 1 - progress : progress;
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        // Ensure final state is set correctly
+        streamVideoElement.style.display = toStreaming ? 'block' : 'none';
+        idleVideoElement.style.display = toStreaming ? 'none' : 'block';
+        isTransitioning = false;
+        isCurrentlyStreaming = toStreaming;
+        logger.debug('Smooth transition completed');
+        resolve();
+      }
+    }
+
+    requestAnimationFrame(animate);
+  });
 }
 
 function getVideoElements() {
@@ -641,8 +619,57 @@ function handleTextInput(text) {
     content: text,
   });
 
+  // Start preparing the stream early
+  prepareStreamEarly();
+
+  // Send chat to Groq immediately
   sendChatToGroq();
 }
+
+
+
+async function sendSilentSSML(ssml) {
+  if (!persistentStreamId || !persistentSessionId) {
+    logger.error('Persistent stream not initialized. Cannot send silent SSML.');
+    return;
+  }
+
+  try {
+    const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'ssml',
+          input: ssml,
+          provider: {
+            type: 'microsoft',
+            voice_id: avatars[currentAvatar].voiceId,
+          },
+        },
+        session_id: persistentSessionId,
+        config: {
+          fluent: true,
+          stitch: true,
+          ssml: true,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    logger.debug('Silent SSML response:', data);
+  } catch (error) {
+    logger.error('Error sending silent SSML:', error);
+  }
+}
+
 
 function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
@@ -1895,8 +1922,6 @@ async function startStreaming(assistantReply) {
           },
           session_id: persistentSessionId,
           driver_url: "bank://lively/driver-06",
-          output_resolution: 512,
-          stream_warmup: true,
           config: {
             fluent: true,
             stitch: true,
@@ -1907,6 +1932,7 @@ async function startStreaming(assistantReply) {
             align_expand_factor: 0.3,
             motion_factor: 0.55,
             result_format: "mp4",
+            ssml: true,
             driver_expressions: {
               expressions: [
                 {
@@ -1919,7 +1945,6 @@ async function startStreaming(assistantReply) {
           },
         }),
       });
-      
 
       if (!playResponse.ok) {
         throw new Error(`HTTP error! status: ${playResponse.status}`);
@@ -1932,15 +1957,22 @@ async function startStreaming(assistantReply) {
         logger.debug('Stream chunk started successfully');
 
         if (playResponseData.result_url) {
-          // Wait for the video to be ready before transitioning
+          // Preload the video
+          const preloadVideoElement = document.getElementById('preload-video-element');
+          preloadVideoElement.src = playResponseData.result_url;
+          
           await new Promise((resolve) => {
-            streamVideoElement.src = playResponseData.result_url;
-            streamVideoElement.oncanplay = resolve;
+            preloadVideoElement.oncanplay = resolve;
+            preloadVideoElement.onerror = () => {
+              logger.error('Error preloading video');
+              resolve();
+            };
           });
 
           // Perform the transition
-          smoothTransition(true);
+          await smoothTransition(true, streamVideoElement, idleVideoElement, preloadVideoElement);
 
+          // Wait for the video to finish playing
           await new Promise(resolve => {
             streamVideoElement.onended = resolve;
           });
@@ -1953,10 +1985,10 @@ async function startStreaming(assistantReply) {
     }
 
     isAvatarSpeaking = false;
-    smoothTransition(false);
+    await smoothTransition(false, streamVideoElement, idleVideoElement);
 
-     // Check if we need to reconnect
-     if (shouldReconnect()) {
+    // Check if we need to reconnect
+    if (shouldReconnect()) {
       logger.info('Approaching reconnection threshold. Initiating background reconnect.');
       await backgroundReconnect();
     }
@@ -2097,6 +2129,9 @@ async function startRecording() {
   currentUtterance = '';
   interimMessageAdded = false;
 
+  // Start preparing the stream early
+  prepareStreamEarly();
+
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     logger.info('Microphone stream obtained');
@@ -2123,7 +2158,6 @@ async function startRecording() {
       interim_results: true,
       utterance_end_ms: 2500,
       punctuate: true,
-      // endpointing: 300,
       vad_events: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate
