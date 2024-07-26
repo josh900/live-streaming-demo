@@ -1,3 +1,4 @@
+
 'use strict';
 import DID_API from './api.js';
 import logger from './logger.js';
@@ -70,10 +71,6 @@ const ConnectionState = {
 };
 
 let lastConnectionTime = Date.now();
-
-let responseQueue = [];
-const ESTIMATED_RESPONSE_TIME = 20000; // Estimate 20 seconds for response generation and streaming
-const TIME_BUFFER = 10000; // 10 seconds buffer
 
 
 
@@ -483,6 +480,18 @@ function initializeTransitionCanvas() {
     transitionCanvas.width = size;
     transitionCanvas.height = size;
   });
+}
+
+  videoWrapper.appendChild(transitionCanvas);
+
+  window.addEventListener('resize', () => {
+    const videoWrapper = document.querySelector('#video-wrapper');
+    const rect = videoWrapper.getBoundingClientRect();
+    const size = Math.min(rect.width, rect.height, 550);
+
+    transitionCanvas.width = size;
+    transitionCanvas.height = size;
+  });
 
 
 }
@@ -520,39 +529,39 @@ function smoothTransition(toStreaming, duration = 250) {
     const elapsed = currentTime - startTime;
     const progress = Math.min(elapsed / duration, 1);
 
-    if (toStreaming) {
-      streamVideoElement.style.opacity = progress.toString();
-      idleVideoElement.style.opacity = (1 - progress).toString();
-    } else {
-      streamVideoElement.style.opacity = (1 - progress).toString();
-      idleVideoElement.style.opacity = progress.toString();
-    }
+    transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
+    
+    // Draw the fading out video
+    transitionCtx.globalAlpha = 1 - progress;
+    transitionCtx.drawImage(toStreaming ? idleVideoElement : streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+    
+    // Draw the fading in video
+    transitionCtx.globalAlpha = progress;
+    transitionCtx.drawImage(toStreaming ? streamVideoElement : idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
 
     if (progress < 1) {
-      transitionAnimationFrame = requestAnimationFrame(animate);
+      requestAnimationFrame(animate);
     } else {
-      cancelAnimationFrame(transitionAnimationFrame);
-      logger.debug('Smooth transition completed');
-      isTransitioning = false;
-      isCurrentlyStreaming = toStreaming;
-
       // Ensure final state is set correctly
       if (toStreaming) {
-        streamVideoElement.style.opacity = '1';
         streamVideoElement.style.display = 'block';
-        idleVideoElement.style.opacity = '0';
         idleVideoElement.style.display = 'none';
       } else {
-        streamVideoElement.style.opacity = '0';
         streamVideoElement.style.display = 'none';
-        idleVideoElement.style.opacity = '1';
         idleVideoElement.style.display = 'block';
       }
+      isTransitioning = false;
+      isCurrentlyStreaming = toStreaming;
+      transitionCanvas.style.display = 'none';
+      logger.debug('Smooth transition completed');
     }
   }
 
-  cancelAnimationFrame(transitionAnimationFrame);
-  transitionAnimationFrame = requestAnimationFrame(animate);
+  // Show the transition canvas
+  transitionCanvas.style.display = 'block';
+  
+  // Start the animation
+  requestAnimationFrame(animate);
 }
 
 function getVideoElements() {
@@ -741,10 +750,6 @@ async function initializePersistentStream() {
   }
 }
 
-function shouldReconnect() {
-  const timeSinceLastConnection = Date.now() - lastConnectionTime;
-  return timeSinceLastConnection > RECONNECTION_INTERVAL * 0.9; // Reconnect when we're at 90% of the interval
-}
 
 
 
@@ -761,6 +766,7 @@ function scheduleReconnect() {
   setTimeout(backgroundReconnect, delay);
   reconnectAttempts++;
 }
+
 
 
 function startKeepAlive() {
@@ -788,8 +794,6 @@ function startKeepAlive() {
     }
   }, 30000); // Send keepalive every 30 seconds
 }
-
-
 
 async function destroyPersistentStream() {
   if (persistentStreamId) {
@@ -819,6 +823,7 @@ async function destroyPersistentStream() {
     }
   }
 }
+
 
 async function reinitializePersistentStream() {
   logger.info('Reinitializing persistent stream...');
@@ -1382,6 +1387,7 @@ async function createPeerConnection(offer, iceServers) {
   return sessionClientAnswer;
 }
 
+
 function onIceGatheringStateChange() {
   const { iceGathering: iceGatheringStatusLabel } = getStatusLabels();
   if (iceGatheringStatusLabel) {
@@ -1461,6 +1467,7 @@ function onConnectionStateChange() {
   }
 }
 
+
 function startConnectionHealthCheck() {
   setInterval(() => {
     if (peerConnection) {
@@ -1510,7 +1517,6 @@ function onVideoStatusChange(videoIsPlaying, stream) {
 
   if (status === 'streaming') {
     setStreamVideoElement(stream);
-    smoothTransition(true);
   } else {
     smoothTransition(false);
   }
@@ -1540,12 +1546,12 @@ function setStreamVideoElement(stream) {
     logger.warn('Invalid stream provided to setStreamVideoElement');
     return;
   }
-  streamVideoElement.style.opacity = '0';
 
   streamVideoElement.onloadedmetadata = () => {
     logger.debug('Stream video metadata loaded');
     streamVideoElement.play().then(() => {
       logger.debug('Stream video playback started');
+      smoothTransition(true);
     }).catch(e => logger.error('Error playing stream video:', e));
   };
 
@@ -1948,8 +1954,8 @@ async function startStreaming(assistantReply) {
     isAvatarSpeaking = false;
     smoothTransition(false);
 
-    // Check if we need to reconnect
-    if (shouldReconnect()) {
+     // Check if we need to reconnect
+     if (shouldReconnect()) {
       logger.info('Approaching reconnection threshold. Initiating background reconnect.');
       await backgroundReconnect();
     }
@@ -2255,18 +2261,76 @@ async function sendChatToGroq() {
     };
     logger.debug('Request body:', JSON.stringify(requestBody));
 
-    const timeUntilReconnect = RECONNECTION_INTERVAL - (Date.now() - lastConnectionTime);
-    const estimatedCompletionTime = Date.now() + ESTIMATED_RESPONSE_TIME;
+    const response = await fetch('/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
 
-    if (timeUntilReconnect < ESTIMATED_RESPONSE_TIME + TIME_BUFFER || connectionState === ConnectionState.RECONNECTING) {
-      logger.info('Not enough time before reconnect or already reconnecting. Queueing response.');
-      const queuedResponse = await fetchGroqResponse(requestBody);
-      responseQueue.push(queuedResponse);
-      return;
+    logger.debug('Groq response status:', response.status);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error ${response.status}`);
     }
 
-    const response = await fetchGroqResponse(requestBody);
-    await handleGroqResponse(response);
+    const reader = response.body.getReader();
+    let assistantReply = '';
+    let done = false;
+
+    const msgHistory = document.getElementById('msgHistory');
+    const assistantSpan = document.createElement('span');
+    assistantSpan.innerHTML = '<u>Assistant:</u> ';
+    msgHistory.appendChild(assistantSpan);
+    msgHistory.appendChild(document.createElement('br'));
+
+    while (!done) {
+      const { value, done: readerDone } = await reader.read();
+      done = readerDone;
+
+      if (value) {
+        const chunk = new TextDecoder().decode(value);
+        logger.debug('Received chunk:', chunk);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data:')) {
+            const data = line.substring(5).trim();
+            if (data === '[DONE]') {
+              done = true;
+              break;
+            }
+
+            try {
+              const parsed = JSON.parse(data);
+              const content = parsed.choices[0]?.delta?.content || '';
+              assistantReply += content;
+              assistantSpan.innerHTML += content;
+              logger.debug('Parsed content:', content);
+            } catch (error) {
+              logger.error('Error parsing JSON:', error);
+            }
+          }
+        }
+
+        msgHistory.scrollTop = msgHistory.scrollHeight;
+      }
+    }
+
+    const endTime = Date.now();
+    const processingTime = endTime - startTime;
+    logger.debug(`Groq processing completed in ${processingTime}ms`);
+
+    chatHistory.push({
+      role: 'assistant',
+      content: assistantReply,
+    });
+
+    logger.debug('Assistant reply:', assistantReply);
+
+    // Start streaming the entire response
+    await startStreaming(assistantReply);
 
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
@@ -2275,80 +2339,6 @@ async function sendChatToGroq() {
     msgHistory.scrollTop = msgHistory.scrollHeight;
   }
 }
-
-
-async function fetchGroqResponse(requestBody) {
-  const response = await fetch('/chat', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(requestBody),
-  });
-
-  if (!response.ok) {
-    throw new Error(`HTTP error ${response.status}`);
-  }
-
-  return response;
-}
-
-
-async function handleGroqResponse(response) {
-  const reader = response.body.getReader();
-  let assistantReply = '';
-  let done = false;
-
-  const msgHistory = document.getElementById('msgHistory');
-  const assistantSpan = document.createElement('span');
-  assistantSpan.innerHTML = '<u>Assistant:</u> ';
-  msgHistory.appendChild(assistantSpan);
-  msgHistory.appendChild(document.createElement('br'));
-
-  while (!done) {
-    const { value, done: readerDone } = await reader.read();
-    done = readerDone;
-
-    if (value) {
-      const chunk = new TextDecoder().decode(value);
-      logger.debug('Received chunk:', chunk);
-      const lines = chunk.split('\n');
-
-      for (const line of lines) {
-        if (line.startsWith('data:')) {
-          const data = line.substring(5).trim();
-          if (data === '[DONE]') {
-            done = true;
-            break;
-          }
-
-          try {
-            const parsed = JSON.parse(data);
-            const content = parsed.choices[0]?.delta?.content || '';
-            assistantReply += content;
-            assistantSpan.innerHTML += content;
-            logger.debug('Parsed content:', content);
-          } catch (error) {
-            logger.error('Error parsing JSON:', error);
-          }
-        }
-      }
-
-      msgHistory.scrollTop = msgHistory.scrollHeight;
-    }
-  }
-
-  chatHistory.push({
-    role: 'assistant',
-    content: assistantReply,
-  });
-
-  logger.debug('Assistant reply:', assistantReply);
-
-  // Start streaming the entire response
-  await startStreaming(assistantReply);
-}
-
 
 function toggleAutoSpeak() {
   autoSpeakMode = !autoSpeakMode;
@@ -2525,3 +2515,7 @@ export {
   initializePersistentStream,
   destroyPersistentStream,
 };
+
+
+
+
