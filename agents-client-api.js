@@ -490,7 +490,6 @@ async function smoothTransition(toStreaming, duration = 250) {
 
   const streamVideoElement = document.getElementById('stream-video-element');
   const idleVideoElement = document.getElementById('idle-video-element');
-  const preloadVideoElement = document.getElementById('preload-video-element');
 
   if (!streamVideoElement || !idleVideoElement) {
     logger.error('Video elements not found. Cannot perform transition.');
@@ -506,10 +505,6 @@ async function smoothTransition(toStreaming, duration = 250) {
       if (!startTime) startTime = currentTime;
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
-
-      if (toStreaming && preloadVideoElement && preloadVideoElement.src) {
-        streamVideoElement.src = preloadVideoElement.src;
-      }
 
       streamVideoElement.style.opacity = toStreaming ? progress.toString() : (1 - progress).toString();
       idleVideoElement.style.opacity = toStreaming ? (1 - progress).toString() : progress.toString();
@@ -2342,6 +2337,9 @@ async function sendChatToGroq() {
     };
     logger.debug('Request body:', JSON.stringify(requestBody));
 
+    // Start streaming with silent SSML before sending request to Groq
+    startStreamingWithSilence();
+
     const response = await fetch('/chat', {
       method: 'POST',
       headers: {
@@ -2389,6 +2387,9 @@ async function sendChatToGroq() {
               assistantReply += content;
               assistantSpan.innerHTML += content;
               logger.debug('Parsed content:', content);
+
+              // Send the content chunk to the streaming function
+              await sendStreamingChunk(content);
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
@@ -2410,14 +2411,130 @@ async function sendChatToGroq() {
 
     logger.debug('Assistant reply:', assistantReply);
 
-    // Start streaming the entire response
-    await startStreaming(assistantReply);
+    // End the streaming session
+    await endStreaming();
 
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
     const msgHistory = document.getElementById('msgHistory');
     msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
     msgHistory.scrollTop = msgHistory.scrollHeight;
+  }
+}
+
+async function startStreamingWithSilence() {
+  logger.debug('Starting streaming with silence...');
+  if (!persistentStreamId || !persistentSessionId) {
+    logger.error('Persistent stream not initialized. Cannot start streaming.');
+    await initializePersistentStream();
+  }
+
+  if (!currentAvatar || !avatars[currentAvatar]) {
+    logger.error('No avatar selected or avatar not found. Cannot start streaming.');
+    return;
+  }
+
+  const silentSSML = '<speak><break time="5000ms"/></speak>';
+  
+  try {
+    const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'ssml',
+          input: silentSSML,
+          provider: {
+            type: 'microsoft',
+            voice_id: avatars[currentAvatar].voiceId,
+          },
+        },
+        session_id: persistentSessionId,
+        driver_url: "bank://lively/driver-06",
+        config: {
+          fluent: true,
+          stitch: true,
+          ssml: true,
+          pad_audio: 0.5,
+          auto_match: true,
+          align_driver: true,
+          normalization_factor: 0.1,
+          align_expand_factor: 0.3,
+          motion_factor: 0.55,
+          result_format: "mp4",
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    logger.debug('Silent streaming started:', data);
+
+    // Transition to the streaming video
+    await smoothTransition(true);
+  } catch (error) {
+    logger.error('Error starting silent streaming:', error);
+  }
+}
+
+async function sendStreamingChunk(content) {
+  logger.debug('Sending streaming chunk:', content);
+  try {
+    const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: content,
+          provider: {
+            type: 'microsoft',
+            voice_id: avatars[currentAvatar].voiceId,
+          },
+        },
+        session_id: persistentSessionId,
+        driver_url: "bank://lively/driver-06",
+        config: {
+          fluent: true,
+          stitch: true,
+          pad_audio: 0.5,
+          auto_match: true,
+          align_driver: true,
+          normalization_factor: 0.1,
+          align_expand_factor: 0.3,
+          motion_factor: 0.55,
+          result_format: "mp4",
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    logger.debug('Chunk streaming response:', data);
+  } catch (error) {
+    logger.error('Error sending streaming chunk:', error);
+  }
+}
+
+async function endStreaming() {
+  logger.debug('Ending streaming session...');
+  try {
+    await smoothTransition(false);
+    logger.debug('Streaming session ended');
+  } catch (error) {
+    logger.error('Error ending streaming session:', error);
   }
 }
 
