@@ -51,9 +51,6 @@ let keepAliveFailureCount = 0;
 const API_RATE_LIMIT = 30; // Maximum number of calls per minute
 const API_CALL_INTERVAL = 40000 / API_RATE_LIMIT; // Minimum time between API calls in milliseconds
 let lastApiCallTime = 0;
-const MAX_RECONNECT_ATTEMPTS = 3;
-const INITIAL_RECONNECT_DELAY = 6000;
-const MAX_RECONNECT_DELAY = 60000;
 let keepAliveTimeout;
 const MAX_KEEPALIVE_FAILURES = 3;
 const KEEPALIVE_INTERVAL = 30000; // 30 seconds
@@ -61,7 +58,9 @@ const maxRetryCount = 3;
 const maxDelaySec = 90;
 const RECONNECTION_INTERVAL = 25000; // 25 seconds for testing, adjust as needed
 let isAvatarSpeaking = false;
-
+const MAX_RECONNECT_ATTEMPTS = 5;
+const INITIAL_RECONNECT_DELAY = 4000; // 1 second
+const MAX_RECONNECT_DELAY = 30000; // 30 seconds
 
 
 
@@ -669,11 +668,6 @@ function updateAssistantReply(text) {
 }
 
 async function initializePersistentStream() {
-  if (persistentStreamId) {
-    logger.warn('Persistent stream already exists. Destroying existing stream before creating a new one.');
-    await destroyPersistentStream();
-  }
-
   logger.info('Initializing persistent stream...');
 
   try {
@@ -753,6 +747,20 @@ async function initializePersistentStream() {
     throw error;
   }
 }
+
+function scheduleReconnect() {
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    logger.error('Max reconnection attempts reached. Please refresh the page.');
+    showErrorMessage('Failed to reconnect after multiple attempts. Please refresh the page.');
+    return;
+  }
+
+  const delay = Math.min(INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
+  logger.debug(`Scheduling reconnection attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
+  setTimeout(backgroundReconnect, delay);
+  reconnectAttempts++;
+}
+
 
 function startKeepAlive() {
   if (keepAliveInterval) {
@@ -887,38 +895,33 @@ async function createNewPersistentStream() {
 
 
 async function backgroundReconnect() {
-  if (isReconnecting) {
+  if (connectionState === ConnectionState.RECONNECTING) {
     logger.debug('Background reconnection already in progress. Skipping.');
     return;
   }
 
-  isReconnecting = true;
+  connectionState = ConnectionState.RECONNECTING;
   logger.debug('Starting background reconnection process...');
 
   try {
-    const newStreamData = await createNewPersistentStream();
+    // Destroy the current stream before creating a new one
+    await destroyPersistentStream();
     
-    if (!newStreamData) {
-      throw new Error('Failed to create new persistent stream');
-    }
+    // Wait a moment before creating a new stream
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
-    logger.debug('New persistent stream created:', newStreamData);
-
-    // Wait for an appropriate moment to switch
-    await waitForIdleState();
-
-    await switchToNewStream(newStreamData);
+    // Create a new stream using the same process as the initial connection
+    await initializePersistentStream();
 
     logger.info('Background reconnection completed successfully');
+    connectionState = ConnectionState.CONNECTED;
   } catch (error) {
     logger.error('Error during background reconnection:', error);
-    // If background reconnection fails, fall back to full reinitialization
-    await reinitializeConnection();
-  } finally {
-    isReconnecting = false;
+    connectionState = ConnectionState.DISCONNECTED;
+    // If background reconnection fails, schedule another attempt
+    scheduleReconnect();
   }
 }
-
 
 function waitForIdleState() {
   return new Promise((resolve) => {
@@ -1425,7 +1428,7 @@ function onConnectionStateChange() {
 
   if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
     logger.warn('Peer connection failed or disconnected. Attempting to reconnect...');
-    reinitializeConnection();
+    backgroundReconnect();
   } else if (peerConnection.connectionState === 'connected') {
     logger.debug('Peer connection established successfully');
     reconnectAttempts = 0;
