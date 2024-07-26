@@ -42,7 +42,7 @@ let isDebugMode = false;
 let isTransitioning = false;
 let lastVideoStatus = null;
 let isCurrentlyStreaming = false;
-let reconnectAttempts = 3;
+let reconnectAttempts = 10;
 let isReconnecting = false;
 let persistentStreamId = null;
 let persistentSessionId = null;
@@ -52,15 +52,15 @@ const API_RATE_LIMIT = 30; // Maximum number of calls per minute
 const API_CALL_INTERVAL = 40000 / API_RATE_LIMIT; // Minimum time between API calls in milliseconds
 let lastApiCallTime = 0;
 let keepAliveTimeout;
-const MAX_KEEPALIVE_FAILURES = 3;
+const MAX_KEEPALIVE_FAILURES = 10;
 const KEEPALIVE_INTERVAL = 30000; // 30 seconds
-const maxRetryCount = 3;
+const maxRetryCount = 10;
 const maxDelaySec = 90;
 const RECONNECTION_INTERVAL = 90000; // 25 seconds for testing, adjust as needed
 let isAvatarSpeaking = false;
-const MAX_RECONNECT_ATTEMPTS = 5;
+const MAX_RECONNECT_ATTEMPTS = 10;
 const INITIAL_RECONNECT_DELAY = 4000; // 1 second
-const MAX_RECONNECT_DELAY = 30000; // 30 seconds
+const MAX_RECONNECT_DELAY = 90000; // 30 seconds
 
 const ConnectionState = {
   DISCONNECTED: 'disconnected',
