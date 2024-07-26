@@ -1960,23 +1960,6 @@ async function startStreaming(assistantReply) {
 }
 
 
-    isAvatarSpeaking = false;
-    smoothTransition(false);
-
-    if (shouldReconnect()) {
-      logger.info('Approaching reconnection threshold. Initiating background reconnect.');
-      await backgroundReconnect();
-    }
-
-  } catch (error) {
-    logger.error('Error during streaming:', error);
-    if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
-      logger.warn('Stream not found or invalid session. Attempting to reinitialize persistent stream.');
-      await reinitializePersistentStream();
-    }
-  }
-}
-
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
