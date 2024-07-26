@@ -2064,6 +2064,7 @@ async function prepareStream() {
         body: JSON.stringify({
           script: {
             type: 'text',
+            ssml: true,
             input: '<break time="5000ms"/>',  // Silent audio
             provider: {
               type: 'microsoft',
