@@ -480,7 +480,7 @@ function initializeTransitionCanvas() {
 
 
 
-async function smoothTransition(toStreaming, streamVideoElement, idleVideoElement, preloadVideoElement = null) {
+async function smoothTransition(toStreaming, duration = 250) {
   logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
 
   if (isTransitioning) {
@@ -488,9 +488,17 @@ async function smoothTransition(toStreaming, streamVideoElement, idleVideoElemen
     return;
   }
 
+  const streamVideoElement = document.getElementById('stream-video-element');
+  const idleVideoElement = document.getElementById('idle-video-element');
+  const preloadVideoElement = document.getElementById('preload-video-element');
+
+  if (!streamVideoElement || !idleVideoElement) {
+    logger.error('Video elements not found. Cannot perform transition.');
+    return;
+  }
+
   isTransitioning = true;
 
-  const duration = 250; // Transition duration in milliseconds
   let startTime = null;
 
   return new Promise((resolve) => {
@@ -499,12 +507,12 @@ async function smoothTransition(toStreaming, streamVideoElement, idleVideoElemen
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
 
-      if (toStreaming && preloadVideoElement) {
+      if (toStreaming && preloadVideoElement && preloadVideoElement.src) {
         streamVideoElement.src = preloadVideoElement.src;
       }
 
-      streamVideoElement.style.opacity = toStreaming ? progress : 1 - progress;
-      idleVideoElement.style.opacity = toStreaming ? 1 - progress : progress;
+      streamVideoElement.style.opacity = toStreaming ? progress.toString() : (1 - progress).toString();
+      idleVideoElement.style.opacity = toStreaming ? (1 - progress).toString() : progress.toString();
 
       if (progress < 1) {
         requestAnimationFrame(animate);
