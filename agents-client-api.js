@@ -676,7 +676,7 @@ async function initializePersistentStream() {
               {
                 start_frame: 0,
                 expression: "neutral",
-                intensity: 0.5
+                intensity: 1
               }
             ]
           }
