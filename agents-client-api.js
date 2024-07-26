@@ -1623,6 +1623,7 @@ function onTrack(event) {
             //  videoStatusChanged
             // });
 
+            
             if (videoStatusChanged) {
               videoIsPlaying = report.bytesReceived > lastBytesReceived;
               logger.debug('Video status changed:', videoIsPlaying);
