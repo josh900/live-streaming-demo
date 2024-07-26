@@ -483,8 +483,9 @@ function initializeTransitionCanvas() {
     transitionCanvas.width = size;
     transitionCanvas.height = size;
   });
-}
 
+
+}
 
 
 
@@ -503,6 +504,7 @@ function smoothTransition(toStreaming, duration = 250) {
     return;
   }
 
+  // Don't transition if we're already in the desired state
   if ((toStreaming && isCurrentlyStreaming) || (!toStreaming && !isCurrentlyStreaming)) {
     logger.debug('Already in desired state, skipping transition');
     return;
@@ -518,33 +520,39 @@ function smoothTransition(toStreaming, duration = 250) {
     const elapsed = currentTime - startTime;
     const progress = Math.min(elapsed / duration, 1);
 
-    transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
-    
-    transitionCtx.globalAlpha = 1 - progress;
-    transitionCtx.drawImage(toStreaming ? idleVideoElement : streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-    
-    transitionCtx.globalAlpha = progress;
-    transitionCtx.drawImage(toStreaming ? streamVideoElement : idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+    if (toStreaming) {
+      streamVideoElement.style.opacity = progress.toString();
+      idleVideoElement.style.opacity = (1 - progress).toString();
+    } else {
+      streamVideoElement.style.opacity = (1 - progress).toString();
+      idleVideoElement.style.opacity = progress.toString();
+    }
 
     if (progress < 1) {
-      requestAnimationFrame(animate);
+      transitionAnimationFrame = requestAnimationFrame(animate);
     } else {
-      if (toStreaming) {
-        streamVideoElement.style.display = 'block';
-        idleVideoElement.style.display = 'none';
-      } else {
-        streamVideoElement.style.display = 'none';
-        idleVideoElement.style.display = 'block';
-      }
+      cancelAnimationFrame(transitionAnimationFrame);
+      logger.debug('Smooth transition completed');
       isTransitioning = false;
       isCurrentlyStreaming = toStreaming;
-      transitionCanvas.style.display = 'none';
-      logger.debug('Smooth transition completed');
+
+      // Ensure final state is set correctly
+      if (toStreaming) {
+        streamVideoElement.style.opacity = '1';
+        streamVideoElement.style.display = 'block';
+        idleVideoElement.style.opacity = '0';
+        idleVideoElement.style.display = 'none';
+      } else {
+        streamVideoElement.style.opacity = '0';
+        streamVideoElement.style.display = 'none';
+        idleVideoElement.style.opacity = '1';
+        idleVideoElement.style.display = 'block';
+      }
     }
   }
 
-  transitionCanvas.style.display = 'block';
-  requestAnimationFrame(animate);
+  cancelAnimationFrame(transitionAnimationFrame);
+  transitionAnimationFrame = requestAnimationFrame(animate);
 }
 
 function getVideoElements() {
@@ -735,7 +743,7 @@ async function initializePersistentStream() {
 
 function shouldReconnect() {
   const timeSinceLastConnection = Date.now() - lastConnectionTime;
-  return timeSinceLastConnection > RECONNECTION_INTERVAL * 0.9;
+  return timeSinceLastConnection > RECONNECTION_INTERVAL * 0.9; // Reconnect when we're at 90% of the interval
 }
 
 
@@ -900,19 +908,16 @@ async function backgroundReconnect() {
     await destroyPersistentStream();
     await new Promise(resolve => setTimeout(resolve, 1000));
     await initializePersistentStream();
-    lastConnectionTime = Date.now();
+    lastConnectionTime = Date.now(); // Update the last connection time
     logger.info('Background reconnection completed successfully');
     connectionState = ConnectionState.CONNECTED;
     reconnectAttempts = 0;
-
-    await processQueuedResponses();
   } catch (error) {
     logger.error('Error during background reconnection:', error);
     connectionState = ConnectionState.DISCONNECTED;
     scheduleReconnect();
   }
 }
-
 
 
 function waitForIdleState() {
@@ -1010,393 +1015,6 @@ async function sendSDPAnswer(streamId, sessionId, answer) {
   });
 }
 
-let responseQueue = [];
-const ESTIMATED_RESPONSE_TIME = 20000; // Estimate 20 seconds for response generation and streaming
-const TIME_BUFFER = 10000; // 10 seconds buffer
-const RECONNECTION_INTERVAL = 90000; // 90 seconds
-let lastConnectionTime = Date.now();
-let isTransitioning = false;
-let isCurrentlyStreaming = false;
-let transitionCanvas, transitionCtx;
-
-function initializeTransitionCanvas() {
-  const videoWrapper = document.querySelector('#video-wrapper');
-  const rect = videoWrapper.getBoundingClientRect();
-  const size = Math.min(rect.width, rect.height, 550);
-
-  transitionCanvas = document.createElement('canvas');
-  transitionCanvas.width = size;
-  transitionCanvas.height = size;
-  transitionCtx = transitionCanvas.getContext('2d');
-
-  Object.assign(transitionCanvas.style, {
-    position: 'absolute',
-    top: '0',
-    left: '0',
-    width: '100%',
-    height: '100%',
-    maxWidth: '550px',
-    maxHeight: '550px',
-    zIndex: '3',
-    borderRadius: '13%',
-    objectFit: 'cover'
-  });
-
-  videoWrapper.appendChild(transitionCanvas);
-
-  window.addEventListener('resize', () => {
-    const videoWrapper = document.querySelector('#video-wrapper');
-    const rect = videoWrapper.getBoundingClientRect();
-    const size = Math.min(rect.width, rect.height, 550);
-
-    transitionCanvas.width = size;
-    transitionCanvas.height = size;
-  });
-}
-
-function smoothTransition(toStreaming, duration = 250) {
-  const idleVideoElement = document.getElementById('idle-video-element');
-  const streamVideoElement = document.getElementById('stream-video-element');
-
-  if (!idleVideoElement || !streamVideoElement) {
-    logger.warn('Video elements not found for transition');
-    return;
-  }
-
-  if (isTransitioning) {
-    logger.debug('Transition already in progress, skipping');
-    return;
-  }
-
-  if ((toStreaming && isCurrentlyStreaming) || (!toStreaming && !isCurrentlyStreaming)) {
-    logger.debug('Already in desired state, skipping transition');
-    return;
-  }
-
-  isTransitioning = true;
-  logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
-
-  let startTime = null;
-
-  function animate(currentTime) {
-    if (!startTime) startTime = currentTime;
-    const elapsed = currentTime - startTime;
-    const progress = Math.min(elapsed / duration, 1);
-
-    transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
-    
-    transitionCtx.globalAlpha = 1 - progress;
-    transitionCtx.drawImage(toStreaming ? idleVideoElement : streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-    
-    transitionCtx.globalAlpha = progress;
-    transitionCtx.drawImage(toStreaming ? streamVideoElement : idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-
-    if (progress < 1) {
-      requestAnimationFrame(animate);
-    } else {
-      if (toStreaming) {
-        streamVideoElement.style.display = 'block';
-        idleVideoElement.style.display = 'none';
-      } else {
-        streamVideoElement.style.display = 'none';
-        idleVideoElement.style.display = 'block';
-      }
-      isTransitioning = false;
-      isCurrentlyStreaming = toStreaming;
-      transitionCanvas.style.display = 'none';
-      logger.debug('Smooth transition completed');
-    }
-  }
-
-  transitionCanvas.style.display = 'block';
-  requestAnimationFrame(animate);
-}
-
-async function sendChatToGroq() {
-  if (chatHistory.length === 0 || chatHistory[chatHistory.length - 1].content.trim() === '') {
-    logger.debug('No new content to send to Groq. Skipping request.');
-    return;
-  }
-
-  logger.debug('Sending chat to Groq...');
-  try {
-    const currentContext = document.getElementById('context-input').value.trim();
-    const requestBody = {
-      messages: [
-        {
-          role: 'system',
-          content: currentContext || context,
-        },
-        ...chatHistory,
-      ],
-      model: 'llama3-8b-8192',
-    };
-    logger.debug('Request body:', JSON.stringify(requestBody));
-
-    const timeUntilReconnect = RECONNECTION_INTERVAL - (Date.now() - lastConnectionTime);
-    const estimatedCompletionTime = Date.now() + ESTIMATED_RESPONSE_TIME;
-
-    if (timeUntilReconnect < ESTIMATED_RESPONSE_TIME + TIME_BUFFER || connectionState === ConnectionState.RECONNECTING) {
-      logger.info('Not enough time before reconnect or already reconnecting. Queueing response.');
-      const queuedResponse = await fetchGroqResponse(requestBody);
-      responseQueue.push(queuedResponse);
-      return;
-    }
-
-    const response = await fetchGroqResponse(requestBody);
-    await handleGroqResponse(response);
-
-  } catch (error) {
-    logger.error('Error in sendChatToGroq:', error);
-    const msgHistory = document.getElementById('msgHistory');
-    msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
-    msgHistory.scrollTop = msgHistory.scrollHeight;
-  }
-}
-
-async function fetchGroqResponse(requestBody) {
-  const response = await fetch('/chat', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(requestBody),
-  });
-
-  if (!response.ok) {
-    throw new Error(`HTTP error ${response.status}`);
-  }
-
-  return response;
-}
-
-async function handleGroqResponse(response) {
-  const reader = response.body.getReader();
-  let assistantReply = '';
-  let done = false;
-
-  const msgHistory = document.getElementById('msgHistory');
-  const assistantSpan = document.createElement('span');
-  assistantSpan.innerHTML = '<u>Assistant:</u> ';
-  msgHistory.appendChild(assistantSpan);
-  msgHistory.appendChild(document.createElement('br'));
-
-  while (!done) {
-    const { value, done: readerDone } = await reader.read();
-    done = readerDone;
-
-    if (value) {
-      const chunk = new TextDecoder().decode(value);
-      logger.debug('Received chunk:', chunk);
-      const lines = chunk.split('\n');
-
-      for (const line of lines) {
-        if (line.startsWith('data:')) {
-          const data = line.substring(5).trim();
-          if (data === '[DONE]') {
-            done = true;
-            break;
-          }
-
-          try {
-            const parsed = JSON.parse(data);
-            const content = parsed.choices[0]?.delta?.content || '';
-            assistantReply += content;
-            assistantSpan.innerHTML += content;
-            logger.debug('Parsed content:', content);
-          } catch (error) {
-            logger.error('Error parsing JSON:', error);
-          }
-        }
-      }
-
-      msgHistory.scrollTop = msgHistory.scrollHeight;
-    }
-  }
-
-  chatHistory.push({
-    role: 'assistant',
-    content: assistantReply,
-  });
-
-  logger.debug('Assistant reply:', assistantReply);
-
-  await startStreaming(assistantReply);
-}
-
-async function processQueuedResponses() {
-  logger.debug('Processing queued responses...');
-  while (responseQueue.length > 0) {
-    const queuedResponse = responseQueue.shift();
-    await handleGroqResponse(queuedResponse);
-  }
-  logger.debug('Finished processing queued responses');
-}
-
-async function backgroundReconnect() {
-  if (connectionState === ConnectionState.RECONNECTING) {
-    logger.debug('Background reconnection already in progress. Skipping.');
-    return;
-  }
-
-  connectionState = ConnectionState.RECONNECTING;
-  logger.debug('Starting background reconnection process...');
-
-  try {
-    await destroyPersistentStream();
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    await initializePersistentStream();
-    lastConnectionTime = Date.now();
-    logger.info('Background reconnection completed successfully');
-    connectionState = ConnectionState.CONNECTED;
-    reconnectAttempts = 0;
-
-    await processQueuedResponses();
-  } catch (error) {
-    logger.error('Error during background reconnection:', error);
-    connectionState = ConnectionState.DISCONNECTED;
-    scheduleReconnect();
-  }
-}
-
-async function startStreaming(assistantReply) {
-  try {
-    logger.debug('Starting streaming with reply:', assistantReply);
-    if (!persistentStreamId || !persistentSessionId) {
-      logger.error('Persistent stream not initialized. Cannot start streaming.');
-      await initializePersistentStream();
-    }
-
-    if (!currentAvatar || !avatars[currentAvatar]) {
-      logger.error('No avatar selected or avatar not found. Cannot start streaming.');
-      return;
-    }
-
-    const streamVideoElement = document.getElementById('stream-video-element');
-    const idleVideoElement = document.getElementById('idle-video-element');
-
-    if (!streamVideoElement || !idleVideoElement) {
-      logger.error('Video elements not found');
-      return;
-    }
-
-    const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
-
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i].trim();
-      if (chunk.length === 0) continue;
-
-      isAvatarSpeaking = true;
-      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${DID_API.key}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          script: {
-            type: 'text',
-            input: chunk,
-            provider: {
-              type: 'microsoft',
-              voice_id: avatars[currentAvatar].voiceId,
-            },
-          },
-          config: {
-            fluent: true,
-            stitch: true,
-            pad_audio: 0.0,
-            align_driver: true,
-            align_expand_factor: 0.3,
-            motion_factor: 0.7,
-            result_format: "mp4",
-          },
-          session_id: persistentSessionId,
-          driver_url: "bank://lively/driver-06",
-          stream_warmup: true,
-        }),
-      });
-
-      if (!playResponse.ok) {
-        throw new Error(`HTTP error! status: ${playResponse.status}`);
-      }
-
-      const playResponseData = await playResponse.json();
-      logger.debug('Streaming response:', playResponseData);
-
-      if (playResponseData.status === 'started') {
-        logger.debug('Stream chunk started successfully');
-
-        if (playResponseData.result_url) {
-          await new Promise((resolve) => {
-            streamVideoElement.src = playResponseData.result_url;
-            streamVideoElement.oncanplay = resolve;
-          });
-
-          smoothTransition(true);
-
-          await new Promise(resolve => {
-            streamVideoElement.onended = resolve;
-          });
-        } else {
-          logger.debug('No result_url in playResponseData. Waiting for next chunk.');
-        }
-      } else {
-        logger.warn('Unexpected response status:', playResponseData.status);
-      }
-    }
-
-    isAvatarSpeaking = false;
-    smoothTransition(false);
-
-    if (shouldReconnect()) {
-      logger.info('Approaching reconnection threshold. Initiating background reconnect.');
-      await backgroundReconnect();
-    }
-
-  } catch (error) {
-    logger.error('Error during streaming:', error);
-    if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
-      logger.warn('Stream not found or invalid session. Attempting to reinitialize persistent stream.');
-      await reinitializePersistentStream();
-    }
-  }
-}
-
-function shouldReconnect() {
-  const timeSinceLastConnection = Date.now() - lastConnectionTime;
-  return timeSinceLastConnection > RECONNECTION_INTERVAL * 0.9;
-}
-
-function startConnectionHealthCheck() {
-  setInterval(() => {
-    if (peerConnection && (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected')) {
-      logger.warn('Connection health check detected disconnected state. Attempting to reconnect...');
-      connectionState = ConnectionState.DISCONNECTED;
-      backgroundReconnect();
-    }
-  }, 30000); // Check every 30 seconds
-}
-
-function onConnectionStateChange() {
-  const { peer: peerStatusLabel } = getStatusLabels();
-  if (peerStatusLabel) {
-    peerStatusLabel.innerText = peerConnection.connectionState;
-    peerStatusLabel.className = 'peerConnectionState-' + peerConnection.connectionState;
-  }
-  logger.debug('Peer connection state changed:', peerConnection.connectionState);
-
-  if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
-    logger.warn('Peer connection failed or disconnected. Attempting to reconnect...');
-    connectionState = ConnectionState.DISCONNECTED;
-    backgroundReconnect();
-  } else if (peerConnection.connectionState === 'connected') {
-    logger.debug('Peer connection established successfully');
-    connectionState = ConnectionState.CONNECTED;
-    reconnectAttempts = 0;
-  }
-}
-
 async function initialize() {
   setLogLevel('DEBUG');
   connectionState = ConnectionState.DISCONNECTED;
@@ -1474,6 +1092,7 @@ async function initialize() {
 
   logger.info('Initialization complete');
 }
+
 
 async function handleAvatarChange() {
   currentAvatar = avatarSelect.value;
@@ -1823,17 +1442,6 @@ async function attemptReconnect() {
   }
 }
 
-function startConnectionHealthCheck() {
-  setInterval(() => {
-    if (peerConnection && (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected')) {
-      logger.warn('Connection health check detected disconnected state. Attempting to reconnect...');
-      connectionState = ConnectionState.DISCONNECTED;
-      backgroundReconnect();
-    }
-  }, 30000); // Check every 30 seconds
-}
-
-
 function onConnectionStateChange() {
   const { peer: peerStatusLabel } = getStatusLabels();
   if (peerStatusLabel) {
@@ -1851,6 +1459,24 @@ function onConnectionStateChange() {
     connectionState = ConnectionState.CONNECTED;
     reconnectAttempts = 0;
   }
+}
+
+function startConnectionHealthCheck() {
+  setInterval(() => {
+    if (peerConnection) {
+      if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
+        logger.warn('Connection health check detected disconnected state. Attempting to reconnect...');
+        connectionState = ConnectionState.DISCONNECTED;
+        backgroundReconnect();
+      } else if (peerConnection.connectionState === 'connected') {
+        const timeSinceLastConnection = Date.now() - lastConnectionTime;
+        if (timeSinceLastConnection > RECONNECTION_INTERVAL * 0.9) {
+          logger.info('Approaching reconnection threshold. Initiating background reconnect.');
+          backgroundReconnect();
+        }
+      }
+    }
+  }, 30000); // Check every 30 seconds
 }
 
 
@@ -2250,6 +1876,7 @@ async function startStreaming(assistantReply) {
       return;
     }
 
+    // Split the reply into chunks of about 250 characters, breaking at spaces
     const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
 
     for (let i = 0; i < chunks.length; i++) {
@@ -2298,11 +1925,13 @@ async function startStreaming(assistantReply) {
         logger.debug('Stream chunk started successfully');
 
         if (playResponseData.result_url) {
+          // Wait for the video to be ready before transitioning
           await new Promise((resolve) => {
             streamVideoElement.src = playResponseData.result_url;
             streamVideoElement.oncanplay = resolve;
           });
 
+          // Perform the transition
           smoothTransition(true);
 
           await new Promise(resolve => {
@@ -2319,6 +1948,7 @@ async function startStreaming(assistantReply) {
     isAvatarSpeaking = false;
     smoothTransition(false);
 
+    // Check if we need to reconnect
     if (shouldReconnect()) {
       logger.info('Approaching reconnection threshold. Initiating background reconnect.');
       await backgroundReconnect();
@@ -2332,7 +1962,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
@@ -2612,6 +2241,7 @@ async function sendChatToGroq() {
 
   logger.debug('Sending chat to Groq...');
   try {
+    const startTime = Date.now();
     const currentContext = document.getElementById('context-input').value.trim();
     const requestBody = {
       messages: [
@@ -2662,6 +2292,7 @@ async function fetchGroqResponse(requestBody) {
 
   return response;
 }
+
 
 async function handleGroqResponse(response) {
   const reader = response.body.getReader();
@@ -2714,18 +2345,9 @@ async function handleGroqResponse(response) {
 
   logger.debug('Assistant reply:', assistantReply);
 
+  // Start streaming the entire response
   await startStreaming(assistantReply);
 }
-
-async function processQueuedResponses() {
-  logger.debug('Processing queued responses...');
-  while (responseQueue.length > 0) {
-    const queuedResponse = responseQueue.shift();
-    await handleGroqResponse(queuedResponse);
-  }
-  logger.debug('Finished processing queued responses');
-}
-
 
 
 function toggleAutoSpeak() {
@@ -2806,7 +2428,6 @@ async function reinitializeConnection() {
     connectionState = ConnectionState.DISCONNECTED;
   }
 }
-
 
 async function cleanupOldStream() {
   logger.debug('Cleaning up old stream...');
@@ -2903,8 +2524,4 @@ export {
   toggleAutoSpeak,
   initializePersistentStream,
   destroyPersistentStream,
-  smoothTransition,
-  startStreaming,
 };
-
-
