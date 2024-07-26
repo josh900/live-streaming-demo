@@ -38,30 +38,25 @@ let interimMessageAdded = false;
 let autoSpeakMode = true;
 let transitionCanvas;
 let transitionCtx;
-let transitionAnimationFrame;
 let isDebugMode = false;
 let isTransitioning = false;
 let lastVideoStatus = null;
 let isCurrentlyStreaming = false;
-let reconnectAttempts = 10;
-let isReconnecting = false;
 let persistentStreamId = null;
 let persistentSessionId = null;
 let isPersistentStreamActive = false;
-let keepAliveFailureCount = 0;
-const API_RATE_LIMIT = 30; // Maximum number of calls per minute
-const API_CALL_INTERVAL = 40000 / API_RATE_LIMIT; // Minimum time between API calls in milliseconds
+const API_RATE_LIMIT = 40; // Maximum number of calls per minute
+const API_CALL_INTERVAL = 30000 / API_RATE_LIMIT; // Minimum time between API calls in milliseconds
 let lastApiCallTime = 0;
-let keepAliveTimeout;
-const MAX_KEEPALIVE_FAILURES = 10;
-const KEEPALIVE_INTERVAL = 30000; // 30 seconds
 const maxRetryCount = 10;
-const maxDelaySec = 90;
-const RECONNECTION_INTERVAL = 90000; // 25 seconds for testing, adjust as needed
+const maxDelaySec = 100;
+const RECONNECTION_INTERVAL = 100000; // 25 seconds for testing, adjust as needed
 let isAvatarSpeaking = false;
 const MAX_RECONNECT_ATTEMPTS = 10;
-const INITIAL_RECONNECT_DELAY = 4000; // 1 second
+const INITIAL_RECONNECT_DELAY = 2000; // 1 second
 const MAX_RECONNECT_DELAY = 90000; // 30 seconds
+let reconnectAttempts = 10;
+
 
 const ConnectionState = {
   DISCONNECTED: 'disconnected',
@@ -642,7 +637,7 @@ function handleTextInput(text) {
 
   chatHistory.push({
     role: 'user',
-    content: text,
+    content: text,WA
   });
 
   sendChatToGroq();
@@ -667,20 +662,22 @@ async function initializePersistentStream() {
         source_url: avatars[currentAvatar].imageUrl,
         driver_url: "bank://lively/driver-06",
         stream_warmup: true,
+        output_resolution: 512,
         config: {
           stitch: true,
           fluent: true,
           auto_match: true,
-          pad_audio: 0.0,
+          pad_audio: 0.5,
           normalization_factor: 0.1,
           align_driver: true,
+          motion_factor: 0.55,
           align_expand_factor: 0.3,
           driver_expressions: {
             expressions: [
               {
                 start_frame: 0,
                 expression: "neutral",
-                intensity: 1
+                intensity: 0.5
               }
             ]
           }
@@ -832,20 +829,22 @@ async function createNewPersistentStream() {
         source_url: avatars[currentAvatar].imageUrl,
         driver_url: "bank://lively/driver-06",
         stream_warmup: true,
+        output_resolution: 512,
         config: {
           stitch: true,
           fluent: true,
           auto_match: true,
-          pad_audio: 0.0,
+          pad_audio: 0.5,
           normalization_factor: 0.1,
           align_driver: true,
+          motion_factor: 0.55,
           align_expand_factor: 0.3,
           driver_expressions: {
             expressions: [
               {
                 start_frame: 0,
                 expression: "neutral",
-                intensity: 1
+                intensity: 0.5
               }
             ]
           }
@@ -1783,16 +1782,17 @@ async function initializeConnection() {
           stitch: true,
           fluent: true,
           auto_match: true,
-          pad_audio: 0.0,
+          pad_audio: 0.5,
           normalization_factor: 0.1,
           align_driver: true,
+          motion_factor: 0.55,
           align_expand_factor: 0.3,
           driver_expressions: {
             expressions: [
               {
                 start_frame: 0,
                 expression: "neutral",
-                intensity: 1
+                intensity: 0.5
               }
             ]
           }
