@@ -613,6 +613,47 @@ function updateTranscript(text, isFinal) {
   msgHistory.scrollTop = msgHistory.scrollHeight;
 }
 
+async function prepareStreamEarly() {
+  logger.debug('Preparing stream early...');
+  
+  if (isPersistentStreamActive) {
+    logger.debug('Persistent stream is already active. Skipping early preparation.');
+    return;
+  }
+
+  try {
+    await initializePersistentStream();
+    logger.debug('Persistent stream initialized successfully');
+
+    // Prepare video elements
+    const streamVideoElement = document.getElementById('stream-video-element');
+    const idleVideoElement = document.getElementById('idle-video-element');
+
+    if (!streamVideoElement || !idleVideoElement) {
+      throw new Error('Video elements not found');
+    }
+
+    // Reset video elements
+    streamVideoElement.srcObject = null;
+    streamVideoElement.src = '';
+    streamVideoElement.style.display = 'none';
+
+    idleVideoElement.style.display = 'block';
+    idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e));
+
+    logger.debug('Video elements prepared for early streaming');
+
+    // Send a silent SSML message to warm up the stream
+    const silentSSML = '<speak><break time="500ms"/></speak>';
+    await sendSilentSSML(silentSSML);
+
+    logger.debug('Silent SSML sent to warm up the stream');
+  } catch (error) {
+    logger.error('Error in prepareStreamEarly:', error);
+    // Don't throw the error, as this is a preparatory step and shouldn't block the main flow
+  }
+}
+
 function handleTextInput(text) {
   if (text.trim() === '') return;
 
@@ -632,7 +673,6 @@ function handleTextInput(text) {
   // Send chat to Groq immediately
   sendChatToGroq();
 }
-
 
 
 async function sendSilentSSML(ssml) {
