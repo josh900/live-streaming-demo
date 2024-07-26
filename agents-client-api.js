@@ -641,105 +641,8 @@ function handleTextInput(text) {
     content: text,
   });
 
-  // Prepare the stream early
-  prepareStreamEarly().then(() => {
-    sendChatToGroq();
-  }).catch(error => {
-    logger.error('Error preparing stream early:', error);
-    sendChatToGroq();
-  });
+  sendChatToGroq();
 }
-
-
-async function prepareStreamEarly() {
-  logger.debug('Preparing stream early...');
-
-  if (!currentAvatar || !avatars[currentAvatar]) {
-    logger.error('No avatar selected or avatar not found. Cannot prepare stream.');
-    return;
-  }
-
-  try {
-    if (!persistentStreamId || !persistentSessionId) {
-      logger.debug('Persistent stream not initialized. Initializing now...');
-      await initializePersistentStream();
-    }
-
-    logger.debug('Sending silent audio to warm up the stream...');
-    const silentAudioResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: '<break time="500ms"/>',
-          ssml: true,
-          provider: {
-            type: 'microsoft',
-            voice_id: avatars[currentAvatar].voiceId,
-          },
-        },
-        session_id: persistentSessionId,
-        driver_url: "bank://lively/driver-06",
-        output_resolution: 512,
-        config: {
-          fluent: true,
-          stitch: true,
-          pad_audio: 0,
-          auto_match: true,
-          align_driver: true,
-          normalization_factor: 0.1,
-          align_expand_factor: 0.3,
-          motion_factor: 0.55,
-          result_format: "mp4",
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: "neutral",
-                intensity: 0.5
-              }
-            ]
-          }
-        },
-      }),
-    });
-
-    if (!silentAudioResponse.ok) {
-      throw new Error(`HTTP error! status: ${silentAudioResponse.status}`);
-    }
-
-    const silentAudioData = await silentAudioResponse.json();
-    logger.debug('Silent audio response:', silentAudioData);
-
-    if (silentAudioData.status === 'started') {
-      logger.debug('Stream warmed up successfully');
-    } else {
-      logger.warn('Unexpected response status for silent audio:', silentAudioData.status);
-    }
-
-    // Prepare video elements
-    const streamVideoElement = document.getElementById('stream-video-element');
-    const idleVideoElement = document.getElementById('idle-video-element');
-
-    if (!streamVideoElement || !idleVideoElement) {
-      throw new Error('Video elements not found');
-    }
-
-    streamVideoElement.src = '';
-    streamVideoElement.style.display = 'none';
-    idleVideoElement.style.display = 'block';
-
-    logger.debug('Video elements prepared for transition');
-  } catch (error) {
-    logger.error('Error during early stream preparation:', error);
-    throw error;
-  }
-}
-
 
 function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
@@ -1984,8 +1887,7 @@ async function startStreaming(assistantReply) {
         body: JSON.stringify({
           script: {
             type: 'text',
-            input: i === 0 ? `<break time="100ms"/>${chunk}` : chunk,
-            ssml: true,
+            input: chunk,
             provider: {
               type: 'microsoft',
               voice_id: avatars[currentAvatar].voiceId,
@@ -1994,6 +1896,7 @@ async function startStreaming(assistantReply) {
           session_id: persistentSessionId,
           driver_url: "bank://lively/driver-06",
           output_resolution: 512,
+          stream_warmup: true,
           config: {
             fluent: true,
             stitch: true,
@@ -2016,6 +1919,7 @@ async function startStreaming(assistantReply) {
           },
         }),
       });
+      
 
       if (!playResponse.ok) {
         throw new Error(`HTTP error! status: ${playResponse.status}`);
@@ -2028,16 +1932,14 @@ async function startStreaming(assistantReply) {
         logger.debug('Stream chunk started successfully');
 
         if (playResponseData.result_url) {
-          // Preload the video
-          const preloadVideo = document.createElement('video');
-          preloadVideo.src = playResponseData.result_url;
-          preloadVideo.load();
-
-          preloadVideo.oncanplay = () => {
-            logger.debug('Video preloaded and ready to play');
+          // Wait for the video to be ready before transitioning
+          await new Promise((resolve) => {
             streamVideoElement.src = playResponseData.result_url;
-            smoothTransition(true);
-          };
+            streamVideoElement.oncanplay = resolve;
+          });
+
+          // Perform the transition
+          smoothTransition(true);
 
           await new Promise(resolve => {
             streamVideoElement.onended = resolve;
@@ -2053,7 +1955,8 @@ async function startStreaming(assistantReply) {
     isAvatarSpeaking = false;
     smoothTransition(false);
 
-    if (shouldReconnect()) {
+     // Check if we need to reconnect
+     if (shouldReconnect()) {
       logger.info('Approaching reconnection threshold. Initiating background reconnect.');
       await backgroundReconnect();
     }
@@ -2066,7 +1969,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
@@ -2196,9 +2098,6 @@ async function startRecording() {
   interimMessageAdded = false;
 
   try {
-    // Prepare the stream early
-    await prepareStreamEarly();
-
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     logger.info('Microphone stream obtained');
 
@@ -2224,6 +2123,7 @@ async function startRecording() {
       interim_results: true,
       utterance_end_ms: 2500,
       punctuate: true,
+      // endpointing: 300,
       vad_events: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate
