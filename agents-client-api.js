@@ -59,7 +59,8 @@ const MAX_KEEPALIVE_FAILURES = 3;
 const KEEPALIVE_INTERVAL = 30000; // 30 seconds
 const maxRetryCount = 3;
 const maxDelaySec = 90;
-
+const RECONNECTION_INTERVAL = 25000; // 25 seconds for testing, adjust as needed
+let isAvatarSpeaking = false;
 
 
 
@@ -816,6 +817,63 @@ async function reinitializePersistentStream() {
   await initializePersistentStream();
 }
 
+async function backgroundReconnect() {
+  if (isReconnecting) {
+    logger.debug('Background reconnection already in progress. Skipping.');
+    return;
+  }
+
+  isReconnecting = true;
+  logger.debug('Starting background reconnection process...');
+
+  try {
+    const newStreamData = await createNewPersistentStream();
+    
+    if (!newStreamData) {
+      throw new Error('Failed to create new persistent stream');
+    }
+
+    logger.debug('New persistent stream created:', newStreamData);
+
+    // Wait for an appropriate moment to switch
+    await waitForIdleState();
+
+    await switchToNewStream(newStreamData);
+
+    logger.info('Background reconnection completed successfully');
+  } catch (error) {
+    logger.error('Error during background reconnection:', error);
+    // If background reconnection fails, fall back to full reinitialization
+    await reinitializeConnection();
+  } finally {
+    isReconnecting = false;
+  }
+}
+
+async function switchToNewStream(newStreamData) {
+  logger.debug('Switching to new stream...');
+
+  try {
+    // Quickly switch the video source to the new stream
+    if (streamVideoElement) {
+      streamVideoElement.src = newStreamData.playbackUrl;
+      await streamVideoElement.play();
+    }
+
+    // Update global variables
+    persistentStreamId = newStreamData.streamId;
+    persistentSessionId = newStreamData.sessionId;
+
+    // Clean up the old stream
+    await cleanupOldStream();
+
+    logger.debug('Successfully switched to new stream');
+  } catch (error) {
+    logger.error('Error switching to new stream:', error);
+    throw error;
+  }
+}
+
 async function initialize() {
   setLogLevel('DEBUG');
 
@@ -859,7 +917,8 @@ async function initialize() {
   showLoadingSymbol();
   try {
     await initializePersistentStream();
-    startConnectionHealthCheck(); // Add this line
+    startConnectionHealthCheck();
+    setInterval(backgroundReconnect, RECONNECTION_INTERVAL);
     hideLoadingSymbol();
   } catch (error) {
     logger.error('Error during initialization:', error);
@@ -867,7 +926,6 @@ async function initialize() {
     showErrorMessage('Failed to connect. Please try again.');
   }
 }
-
 
 async function handleAvatarChange() {
   currentAvatar = avatarSelect.value;
@@ -1649,6 +1707,7 @@ async function startStreaming(assistantReply) {
       const chunk = chunks[i].trim();
       if (chunk.length === 0) continue;
 
+      isAvatarSpeaking = true;
       const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
         method: 'POST',
         headers: {
@@ -1709,6 +1768,7 @@ async function startStreaming(assistantReply) {
       }
     }
 
+    isAvatarSpeaking = false;
     smoothTransition(false);
 
   } catch (error) {
@@ -1719,7 +1779,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
@@ -2168,6 +2227,34 @@ async function reinitializeConnection() {
     showErrorMessage('Failed to reconnect. Please refresh the page.');
   } finally {
     isReconnecting = false;
+  }
+}
+
+async function cleanupOldStream() {
+  logger.debug('Cleaning up old stream...');
+
+  try {
+    if (peerConnection) {
+      peerConnection.close();
+    }
+
+    if (pcDataChannel) {
+      pcDataChannel.close();
+    }
+
+    // Stop all tracks in the streamVideoElement
+    if (streamVideoElement && streamVideoElement.srcObject) {
+      streamVideoElement.srcObject.getTracks().forEach(track => track.stop());
+    }
+
+    // Clear any ongoing intervals or timeouts
+    clearInterval(statsIntervalId);
+    clearTimeout(inactivityTimeout);
+    clearInterval(keepAliveInterval);
+
+    logger.debug('Old stream cleaned up successfully');
+  } catch (error) {
+    logger.error('Error cleaning up old stream:', error);
   }
 }
 
