@@ -42,22 +42,22 @@ let isDebugMode = false;
 let isTransitioning = false;
 let lastVideoStatus = null;
 let isCurrentlyStreaming = false;
-let reconnectAttempts = 0;
+let reconnectAttempts = 3;
 let isReconnecting = false;
 let persistentStreamId = null;
 let persistentSessionId = null;
 let isPersistentStreamActive = false;
 let keepAliveFailureCount = 0;
 const API_RATE_LIMIT = 30; // Maximum number of calls per minute
-const API_CALL_INTERVAL = 60000 / API_RATE_LIMIT; // Minimum time between API calls in milliseconds
+const API_CALL_INTERVAL = 40000 / API_RATE_LIMIT; // Minimum time between API calls in milliseconds
 let lastApiCallTime = 0;
-const MAX_RECONNECT_ATTEMPTS = 5;
+const MAX_RECONNECT_ATTEMPTS = 3;
 const INITIAL_RECONNECT_DELAY = 6000;
-const MAX_RECONNECT_DELAY = 30000;
+const MAX_RECONNECT_DELAY = 60000;
 let keepAliveTimeout;
-const MAX_KEEPALIVE_FAILURES = 20;
+const MAX_KEEPALIVE_FAILURES = 3;
 const KEEPALIVE_INTERVAL = 30000; // 30 seconds
-const maxRetryCount = 50;
+const maxRetryCount = 3;
 const maxDelaySec = 90;
 
 
