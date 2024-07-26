@@ -687,63 +687,9 @@ async function prepareStreamEarly() {
       await initializePersistentStream();
     }
 
-    logger.debug('Sending silent audio to warm up the stream...');
-    const silentAudioResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: '<break time="500ms"/>',
-          ssml: true,
-          provider: {
-            type: 'microsoft',
-            voice_id: avatars[currentAvatar].voiceId,
-          },
-        },
-        session_id: persistentSessionId,
-        driver_url: "bank://lively/driver-06",
-        output_resolution: 512,
-        config: {
-          fluent: true,
-          stitch: true,
-          pad_audio: 0,
-          auto_match: true,
-          align_driver: true,
-          normalization_factor: 0.1,
-          align_expand_factor: 0.3,
-          motion_factor: 0.55,
-          result_format: "mp4",
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: "neutral",
-                intensity: 0.5
-              }
-            ]
-          }
-        },
-      }),
-    });
+    logger.debug('Stream prepared for immediate use');
 
-    if (!silentAudioResponse.ok) {
-      throw new Error(`HTTP error! status: ${silentAudioResponse.status}`);
-    }
-
-    const silentAudioData = await silentAudioResponse.json();
-    logger.debug('Silent audio response:', silentAudioData);
-
-    if (silentAudioData.status === 'started') {
-      logger.debug('Stream warmed up successfully');
-    } else {
-      logger.warn('Unexpected response status for silent audio:', silentAudioData.status);
-    }
-
-    // Prepare video elements
+    // Ensure video elements are ready
     const streamVideoElement = document.getElementById('stream-video-element');
     const idleVideoElement = document.getElementById('idle-video-element');
 
@@ -761,7 +707,6 @@ async function prepareStreamEarly() {
     throw error;
   }
 }
-
 
 function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
@@ -1989,15 +1934,68 @@ async function startStreaming(assistantReply) {
       return;
     }
 
-    // Split the reply into chunks of about 250 characters, breaking at spaces
-    const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
+    // Start the stream with an initial empty message
+    const initialResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: '<break time="100ms"/>',
+          ssml: true,
+          provider: {
+            type: 'microsoft',
+            voice_id: avatars[currentAvatar].voiceId,
+          },
+        },
+        session_id: persistentSessionId,
+        driver_url: "bank://lively/driver-06",
+        config: {
+          fluent: true,
+          stitch: true,
+          pad_audio: 0.5,
+          auto_match: true,
+          align_driver: true,
+          normalization_factor: 0.1,
+          align_expand_factor: 0.3,
+          motion_factor: 0.55,
+          result_format: "mp4",
+        },
+      }),
+    });
 
+    if (!initialResponse.ok) {
+      throw new Error(`HTTP error! status: ${initialResponse.status}`);
+    }
+
+    const initialData = await initialResponse.json();
+    logger.debug('Initial streaming response:', initialData);
+
+    if (initialData.status !== 'started') {
+      throw new Error('Failed to start the stream');
+    }
+
+    // Set up the video element with the initial stream
+    streamVideoElement.src = initialData.result_url;
+    await new Promise((resolve) => {
+      streamVideoElement.oncanplay = () => {
+        smoothTransition(true);
+        resolve();
+      };
+    });
+
+    isAvatarSpeaking = true;
+
+    // Split the reply into chunks and stream them
+    const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i].trim();
       if (chunk.length === 0) continue;
 
-      isAvatarSpeaking = true;
-      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      const updateResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
         method: 'POST',
         headers: {
           Authorization: `Basic ${DID_API.key}`,
@@ -2006,7 +2004,7 @@ async function startStreaming(assistantReply) {
         body: JSON.stringify({
           script: {
             type: 'text',
-            input: i === 0 ? `<break time="100ms"/>${chunk}` : chunk,
+            input: chunk,
             ssml: true,
             provider: {
               type: 'microsoft',
@@ -2014,55 +2012,31 @@ async function startStreaming(assistantReply) {
             },
           },
           session_id: persistentSessionId,
-          driver_url: "bank://lively/driver-06",
-          output_resolution: 512,
-          config: {
-            fluent: true,
-            stitch: true,
-            pad_audio: 0.5,
-            auto_match: true,
-            align_driver: true,
-            normalization_factor: 0.1,
-            align_expand_factor: 0.3,
-            motion_factor: 0.55,
-            result_format: "mp4",
-            driver_expressions: {
-              expressions: [
-                {
-                  start_frame: 0,
-                  expression: "neutral",
-                  intensity: 0.5
-                }
-              ]
-            }
-          },
         }),
       });
 
-      if (!playResponse.ok) {
-        throw new Error(`HTTP error! status: ${playResponse.status}`);
+      if (!updateResponse.ok) {
+        throw new Error(`HTTP error! status: ${updateResponse.status}`);
       }
 
-      const playResponseData = await playResponse.json();
-      logger.debug('Streaming response:', playResponseData);
+      const updateData = await updateResponse.json();
+      logger.debug(`Chunk ${i + 1} streaming response:`, updateData);
 
-      if (playResponseData.status === 'started' && playResponseData.result_url) {
-        logger.debug('Stream chunk started successfully');
-        await new Promise((resolve) => {
-          streamVideoElement.src = playResponseData.result_url;
-          streamVideoElement.oncanplay = () => {
-            smoothTransition(true);
-            resolve();
-          };
-        });
-
-        await new Promise(resolve => {
-          streamVideoElement.onended = resolve;
-        });
-      } else {
-        logger.warn('Unexpected response status or missing result_url:', playResponseData.status);
-      }
+      // Wait for a short time to allow the chunk to be processed
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
+
+    // Wait for the final chunk to finish playing
+    await new Promise(resolve => {
+      const checkEnded = () => {
+        if (streamVideoElement.ended) {
+          resolve();
+        } else {
+          setTimeout(checkEnded, 100);
+        }
+      };
+      checkEnded();
+    });
 
     isAvatarSpeaking = false;
     await smoothTransition(false);
