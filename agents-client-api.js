@@ -2082,63 +2082,6 @@ function handleTranscription(data) {
   }
 }
 
-async function prepareStream() {
-  if (!persistentStreamId || !persistentSessionId) {
-    await initializePersistentStream();
-  }
-  
-  try {
-    const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: '<break time="5000ms"/>',  // Silent audio
-          provider: {
-            type: 'microsoft',
-            voice_id: avatars[currentAvatar].voiceId,
-          },
-        },
-        session_id: persistentSessionId,
-        driver_url: "bank://lively/driver-06",
-        output_resolution: 512,
-        config: {
-          stitch: true,
-          fluent: true,
-          auto_match: true,
-          pad_audio: 0.5,
-          normalization_factor: 0.1,
-          align_driver: true,
-          motion_factor: 0.55,
-          align_expand_factor: 0.3,
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: "neutral",
-                intensity: 0.5
-              }
-            ]
-          }
-        },
-      }),
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      if (data.status === 'started') {
-        smoothTransition(true);
-      }
-    }
-  } catch (error) {
-    logger.error('Error preparing stream:', error);
-  }
-}
-
 async function startRecording() {
   if (isRecording) {
     logger.warn('Recording is already in progress. Stopping current recording.');
