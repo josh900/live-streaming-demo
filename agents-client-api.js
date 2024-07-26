@@ -817,6 +817,75 @@ async function reinitializePersistentStream() {
   await initializePersistentStream();
 }
 
+
+async function createNewPersistentStream() {
+  logger.debug('Creating new persistent stream...');
+
+  try {
+    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        source_url: avatars[currentAvatar].imageUrl,
+        driver_url: "bank://lively/driver-06",
+        stream_warmup: true,
+        config: {
+          stitch: true,
+          fluent: true,
+          auto_match: true,
+          pad_audio: 0.0,
+          normalization_factor: 0.1,
+          align_driver: true,
+          align_expand_factor: 0.3,
+          driver_expressions: {
+            expressions: [
+              {
+                start_frame: 0,
+                expression: "neutral",
+                intensity: 1
+              }
+            ]
+          }
+        }
+      }),
+    });
+
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+
+    logger.debug('New stream created:', { newStreamId, newSessionId });
+
+    const newSessionClientAnswer = await createPeerConnection(offer, iceServers);
+
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${newStreamId}/sdp`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        answer: newSessionClientAnswer,
+        session_id: newSessionId,
+      }),
+    });
+
+    if (!sdpResponse.ok) {
+      throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
+    }
+
+    return { streamId: newStreamId, sessionId: newSessionId };
+  } catch (error) {
+    logger.error('Error creating new persistent stream:', error);
+    return null;
+  }
+}
+
+
+
 async function backgroundReconnect() {
   if (isReconnecting) {
     logger.debug('Background reconnection already in progress. Skipping.');
@@ -850,14 +919,28 @@ async function backgroundReconnect() {
   }
 }
 
+
+function waitForIdleState() {
+  return new Promise((resolve) => {
+    const checkIdleState = () => {
+      if (!isAvatarSpeaking) {
+        resolve();
+      } else {
+        setTimeout(checkIdleState, 500); // Check every 500ms
+      }
+    };
+    checkIdleState();
+  });
+}
+
 async function switchToNewStream(newStreamData) {
   logger.debug('Switching to new stream...');
 
   try {
     // Quickly switch the video source to the new stream
     if (streamVideoElement) {
-      streamVideoElement.src = newStreamData.playbackUrl;
-      await streamVideoElement.play();
+      // Instead of directly setting src, we need to update the WebRTC connection
+      await updateWebRTCConnection(newStreamData);
     }
 
     // Update global variables
@@ -872,6 +955,60 @@ async function switchToNewStream(newStreamData) {
     logger.error('Error switching to new stream:', error);
     throw error;
   }
+}
+
+async function updateWebRTCConnection(newStreamData) {
+  logger.debug('Updating WebRTC connection...');
+
+  try {
+    const offer = await fetchStreamOffer(newStreamData.streamId);
+    const iceServers = await fetchIceServers();
+
+    const newSessionClientAnswer = await createPeerConnection(offer, iceServers);
+
+    await sendSDPAnswer(newStreamData.streamId, newStreamData.sessionId, newSessionClientAnswer);
+
+    logger.debug('WebRTC connection updated successfully');
+  } catch (error) {
+    logger.error('Error updating WebRTC connection:', error);
+    throw error;
+  }
+}
+
+async function fetchStreamOffer(streamId) {
+  const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/offer`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+    },
+  });
+  const data = await response.json();
+  return data.offer;
+}
+
+async function fetchIceServers() {
+  const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/ice_servers`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+    },
+  });
+  const data = await response.json();
+  return data.ice_servers;
+}
+
+async function sendSDPAnswer(streamId, sessionId, answer) {
+  await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      answer,
+      session_id: sessionId,
+    }),
+  });
 }
 
 async function initialize() {
@@ -1448,11 +1585,11 @@ function onTrack(event) {
             videoStatsFound = true;
             const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
 
-            logger.debug('Video stats:', {
-              bytesReceived: report.bytesReceived,
-              lastBytesReceived,
-              videoIsPlaying,
-              videoStatusChanged
+            // logger.debug('Video stats:', {
+            //  bytesReceived: report.bytesReceived,
+            //  lastBytesReceived,
+            //  videoIsPlaying,
+            //  videoStatusChanged
             });
 
             if (videoStatusChanged) {
@@ -1472,7 +1609,7 @@ function onTrack(event) {
     } else {
       logger.debug('Peer connection not ready for stats.');
     }
-  }, 500);  // Check every 500ms
+  }, 250);  // Check every 500ms
 
   if (event.streams && event.streams.length > 0) {
     const stream = event.streams[0];
