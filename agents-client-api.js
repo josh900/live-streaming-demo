@@ -669,7 +669,7 @@ async function initializePersistentStream() {
           pad_audio: 0.5,
           normalization_factor: 0.1,
           align_driver: true,
-          motion_factor: 0.25,
+          motion_factor: 0.45,
           align_expand_factor: 0.3,
           driver_expressions: {
             expressions: [
@@ -836,7 +836,7 @@ async function createNewPersistentStream() {
           pad_audio: 0.5,
           normalization_factor: 0.1,
           align_driver: true,
-          motion_factor: 0.25,
+          motion_factor: 0.45,
           align_expand_factor: 0.3,
           driver_expressions: {
             expressions: [
@@ -1784,7 +1784,7 @@ async function initializeConnection() {
           pad_audio: 0.5,
           normalization_factor: 0.1,
           align_driver: true,
-          motion_factor: 0.25,
+          motion_factor: 0.45,
           align_expand_factor: 0.3,
           driver_expressions: {
             expressions: [
@@ -1902,7 +1902,7 @@ async function startStreaming(assistantReply) {
             align_driver: true,
             normalization_factor: 0.1,
             align_expand_factor: 0.3,
-            motion_factor: 0.25,
+            motion_factor: 0.45,
             result_format: "mp4",
             driver_expressions: {
               expressions: [
