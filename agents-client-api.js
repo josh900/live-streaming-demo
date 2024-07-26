@@ -764,29 +764,20 @@ function startKeepAlive() {
     clearInterval(keepAliveInterval);
   }
 
-  keepAliveInterval = setInterval(async () => {
-    if (isPersistentStreamActive) {
+  keepAliveInterval = setInterval(() => {
+    if (isPersistentStreamActive && peerConnection && peerConnection.connectionState === 'connected') {
       try {
-        const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/keepalive`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Basic ${DID_API.key}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ session_id: persistentSessionId }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`Keepalive failed: ${response.status} ${response.statusText}`);
-        }
-        logger.debug('Keepalive sent successfully');
+        const keepAliveMessage = JSON.stringify({ type: 'KeepAlive' });
+        peerConnection.send(keepAliveMessage);
+        logger.debug('Keepalive message sent successfully');
       } catch (error) {
-        logger.error('Error sending keepalive:', error);
-        await reinitializePersistentStream();
+        logger.warn('Error sending keepalive message:', error);
       }
     }
   }, 30000); // Send keepalive every 30 seconds
 }
+
+
 
 async function destroyPersistentStream() {
   if (persistentStreamId) {
@@ -908,12 +899,14 @@ async function backgroundReconnect() {
     lastConnectionTime = Date.now(); // Update the last connection time
     logger.info('Background reconnection completed successfully');
     connectionState = ConnectionState.CONNECTED;
+    reconnectAttempts = 0;
   } catch (error) {
     logger.error('Error during background reconnection:', error);
     connectionState = ConnectionState.DISCONNECTED;
     scheduleReconnect();
   }
 }
+
 
 function waitForIdleState() {
   return new Promise((resolve) => {
@@ -1068,7 +1061,7 @@ async function initialize() {
     if (connectionState === ConnectionState.DISCONNECTED) {
       logger.info('Network connection restored. Attempting to reconnect...');
       try {
-        await reinitializeConnection();
+        await backgroundReconnect();
       } catch (error) {
         logger.error('Failed to reconnect after network restoration:', error);
       }
@@ -1080,13 +1073,14 @@ async function initialize() {
     if (!document.hidden && connectionState === ConnectionState.DISCONNECTED) {
       logger.info('Page became visible. Checking connection...');
       if (navigator.onLine) {
-        reinitializeConnection();
+        backgroundReconnect();
       }
     }
   });
 
   logger.info('Initialization complete');
 }
+
 
 async function handleAvatarChange() {
   currentAvatar = avatarSelect.value;
@@ -1447,13 +1441,22 @@ function onConnectionStateChange() {
 
 function startConnectionHealthCheck() {
   setInterval(() => {
-    if (peerConnection && (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected')) {
-      logger.warn('Connection health check detected disconnected state. Attempting to reconnect...');
-      connectionState = ConnectionState.DISCONNECTED;
-      reinitializeConnection();
+    if (peerConnection) {
+      if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
+        logger.warn('Connection health check detected disconnected state. Attempting to reconnect...');
+        connectionState = ConnectionState.DISCONNECTED;
+        backgroundReconnect();
+      } else if (peerConnection.connectionState === 'connected') {
+        const timeSinceLastConnection = Date.now() - lastConnectionTime;
+        if (timeSinceLastConnection > RECONNECTION_INTERVAL * 0.9) {
+          logger.info('Approaching reconnection threshold. Initiating background reconnect.');
+          backgroundReconnect();
+        }
+      }
     }
   }, 30000); // Check every 30 seconds
 }
+
 
 
 function onSignalingStateChange() {
