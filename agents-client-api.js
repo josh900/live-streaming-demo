@@ -669,14 +669,13 @@ async function initializePersistentStream() {
           pad_audio: 0.5,
           normalization_factor: 0.1,
           align_driver: true,
-          motion_factor: 0.5,
           align_expand_factor: 0.3,
           driver_expressions: {
             expressions: [
               {
                 start_frame: 0,
                 expression: "neutral",
-                intensity: 1
+                intensity: 0.5
               }
             ]
           }
