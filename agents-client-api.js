@@ -999,12 +999,45 @@ async function initialize() {
   setLogLevel('DEBUG');
   connectionState = ConnectionState.DISCONNECTED;
 
-  const { idle, stream } = getVideoElements();
-  idleVideoElement = idle;
-  streamVideoElement = stream;
+  // Initialize video elements
+  const videoWrapper = document.getElementById('video-wrapper');
+  if (!videoWrapper) {
+    throw new Error('Video wrapper element not found');
+  }
 
-  if (idleVideoElement) idleVideoElement.setAttribute('playsinline', '');
-  if (streamVideoElement) streamVideoElement.setAttribute('playsinline', '');
+  let idleVideoElement = document.getElementById('idle-video-element');
+  let streamVideoElement = document.getElementById('stream-video-element');
+
+  if (!idleVideoElement) {
+    idleVideoElement = document.createElement('video');
+    idleVideoElement.id = 'idle-video-element';
+    idleVideoElement.width = 400;
+    idleVideoElement.height = 400;
+    idleVideoElement.autoplay = true;
+    idleVideoElement.loop = true;
+    idleVideoElement.muted = true;
+    idleVideoElement.setAttribute('playsinline', '');
+    videoWrapper.appendChild(idleVideoElement);
+  }
+
+  if (!streamVideoElement) {
+    streamVideoElement = document.createElement('video');
+    streamVideoElement.id = 'stream-video-element';
+    streamVideoElement.width = 400;
+    streamVideoElement.height = 400;
+    streamVideoElement.autoplay = true;
+    streamVideoElement.setAttribute('playsinline', '');
+    videoWrapper.appendChild(streamVideoElement);
+  }
+
+  // Set up event listeners for video elements
+  streamVideoElement.addEventListener('canplay', () => {
+    logger.debug('Stream video can play');
+  });
+
+  streamVideoElement.addEventListener('error', (e) => {
+    logger.error('Error with stream video:', e);
+  });
 
   initializeTransitionCanvas();
 
@@ -1012,26 +1045,40 @@ async function initialize() {
   populateAvatarSelect();
 
   const contextInput = document.getElementById('context-input');
-  contextInput.value = context.trim();
-  contextInput.addEventListener('input', () => {
-    if (!contextInput.value.includes('Original Context:')) {
-      context = contextInput.value.trim();
-    }
-  });
+  if (contextInput) {
+    contextInput.value = context.trim();
+    contextInput.addEventListener('input', () => {
+      if (!contextInput.value.includes('Original Context:')) {
+        context = contextInput.value.trim();
+      }
+    });
+  }
 
+  // Set up other UI event listeners
   const sendTextButton = document.getElementById('send-text-button');
   const textInput = document.getElementById('text-input');
   const replaceContextButton = document.getElementById('replace-context-button');
   const autoSpeakToggle = document.getElementById('auto-speak-toggle');
   const editAvatarButton = document.getElementById('edit-avatar-button');
 
-  sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
-  textInput.addEventListener('keypress', (event) => {
-    if (event.key === 'Enter') handleTextInput(textInput.value);
-  });
-  replaceContextButton.addEventListener('click', () => updateContext('replace'));
-  autoSpeakToggle.addEventListener('click', toggleAutoSpeak);
-  editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatar));
+  if (sendTextButton && textInput) {
+    sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
+    textInput.addEventListener('keypress', (event) => {
+      if (event.key === 'Enter') handleTextInput(textInput.value);
+    });
+  }
+
+  if (replaceContextButton) {
+    replaceContextButton.addEventListener('click', () => updateContext('replace'));
+  }
+
+  if (autoSpeakToggle) {
+    autoSpeakToggle.addEventListener('click', toggleAutoSpeak);
+  }
+
+  if (editAvatarButton) {
+    editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatar));
+  }
 
   initializeWebSocket();
   playIdleVideo();
@@ -1060,7 +1107,6 @@ async function initialize() {
     }
   });
 
-  // Handle visibility change
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && connectionState === ConnectionState.DISCONNECTED) {
       logger.info('Page became visible. Checking connection...');
@@ -1070,8 +1116,18 @@ async function initialize() {
     }
   });
 
+  // Initialize audio context and worklet for audio processing
+  try {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    await audioContext.audioWorklet.addModule('audio-processor.js');
+    logger.debug('Audio worklet added successfully');
+  } catch (error) {
+    logger.error('Failed to initialize audio context or add audio worklet:', error);
+  }
+
   logger.info('Initialization complete');
 }
+
 
 
 async function handleAvatarChange() {
@@ -1665,7 +1721,7 @@ function onTrack(event) {
 }
 
 function playIdleVideo() {
-  const { idle: idleVideoElement } = getVideoElements();
+  const idleVideoElement = document.getElementById('idle-video-element');
   if (!idleVideoElement) {
     logger.error('Idle video element not found');
     return;
@@ -1678,8 +1734,6 @@ function playIdleVideo() {
     idleVideoElement.src = avatars[currentAvatar].silentVideoUrl;
   }
 
-  idleVideoElement.loop = true;
-
   idleVideoElement.onloadeddata = () => {
     logger.debug(`Idle video loaded successfully for ${currentAvatar || 'default'}`);
   };
@@ -1690,6 +1744,7 @@ function playIdleVideo() {
 
   idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e));
 }
+
 
 function stopAllStreams() {
   if (streamVideoElement && streamVideoElement.srcObject) {
