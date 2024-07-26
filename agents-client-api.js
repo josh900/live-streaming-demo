@@ -62,6 +62,14 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 const INITIAL_RECONNECT_DELAY = 4000; // 1 second
 const MAX_RECONNECT_DELAY = 30000; // 30 seconds
 
+const ConnectionState = {
+  DISCONNECTED: 'disconnected',
+  CONNECTING: 'connecting',
+  CONNECTED: 'connected',
+  RECONNECTING: 'reconnecting'
+};
+
+let connectionState = ConnectionState.DISCONNECTED;
 
 
 export function setLogLevel(level) {
@@ -669,6 +677,7 @@ function updateAssistantReply(text) {
 
 async function initializePersistentStream() {
   logger.info('Initializing persistent stream...');
+  connectionState = ConnectionState.CONNECTING;
 
   try {
     const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
@@ -739,11 +748,13 @@ async function initializePersistentStream() {
     isPersistentStreamActive = true;
     startKeepAlive();
     logger.info('Persistent stream initialized successfully');
+    connectionState = ConnectionState.CONNECTED;
   } catch (error) {
     logger.error('Failed to initialize persistent stream:', error);
     isPersistentStreamActive = false;
     persistentStreamId = null;
     persistentSessionId = null;
+    connectionState = ConnectionState.DISCONNECTED;
     throw error;
   }
 }
@@ -815,6 +826,7 @@ async function destroyPersistentStream() {
       if (keepAliveInterval) {
         clearInterval(keepAliveInterval);
       }
+      connectionState = ConnectionState.DISCONNECTED;
     }
   }
 }
@@ -940,6 +952,8 @@ async function switchToNewStream(newStreamData) {
   logger.debug('Switching to new stream...');
 
   try {
+    connectionState = ConnectionState.RECONNECTING;
+
     // Quickly switch the video source to the new stream
     if (streamVideoElement) {
       // Instead of directly setting src, we need to update the WebRTC connection
@@ -953,9 +967,11 @@ async function switchToNewStream(newStreamData) {
     // Clean up the old stream
     await cleanupOldStream();
 
+    connectionState = ConnectionState.CONNECTED;
     logger.debug('Successfully switched to new stream');
   } catch (error) {
     logger.error('Error switching to new stream:', error);
+    connectionState = ConnectionState.DISCONNECTED;
     throw error;
   }
 }
@@ -1016,6 +1032,7 @@ async function sendSDPAnswer(streamId, sessionId, answer) {
 
 async function initialize() {
   setLogLevel('DEBUG');
+  connectionState = ConnectionState.DISCONNECTED;
 
   const { idle, stream } = getVideoElements();
   idleVideoElement = idle;
@@ -1064,7 +1081,35 @@ async function initialize() {
     logger.error('Error during initialization:', error);
     hideLoadingSymbol();
     showErrorMessage('Failed to connect. Please try again.');
+    connectionState = ConnectionState.DISCONNECTED;
   }
+
+  // Set up reconnection mechanism
+  window.addEventListener('online', async () => {
+    if (connectionState === ConnectionState.DISCONNECTED) {
+      logger.info('Network connection restored. Attempting to reconnect...');
+      try {
+        await reinitializeConnection();
+      } catch (error) {
+        logger.error('Failed to reconnect after network restoration:', error);
+      }
+    }
+  });
+
+  // Handle visibility change
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && connectionState === ConnectionState.DISCONNECTED) {
+      logger.info('Page became visible. Checking connection...');
+      if (navigator.onLine) {
+        reinitializeConnection();
+      }
+    }
+  });
+
+  // Initialize UI components
+  initializeUI();
+
+  logger.info('Initialization complete');
 }
 
 async function handleAvatarChange() {
@@ -1415,9 +1460,11 @@ function onConnectionStateChange() {
 
   if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
     logger.warn('Peer connection failed or disconnected. Attempting to reconnect...');
+    connectionState = ConnectionState.DISCONNECTED;
     backgroundReconnect();
   } else if (peerConnection.connectionState === 'connected') {
     logger.debug('Peer connection established successfully');
+    connectionState = ConnectionState.CONNECTED;
     reconnectAttempts = 0;
   }
 }
@@ -1426,6 +1473,7 @@ function startConnectionHealthCheck() {
   setInterval(() => {
     if (peerConnection && (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected')) {
       logger.warn('Connection health check detected disconnected state. Attempting to reconnect...');
+      connectionState = ConnectionState.DISCONNECTED;
       reinitializeConnection();
     }
   }, 30000); // Check every 30 seconds
@@ -2297,12 +2345,12 @@ function toggleAutoSpeak() {
 }
 
 async function reinitializeConnection() {
-  if (isInitializing || isReconnecting) {
-    logger.warn('Connection initialization or reconnection already in progress. Skipping reinitialize.');
+  if (connectionState === ConnectionState.RECONNECTING) {
+    logger.warn('Connection reinitialization already in progress. Skipping reinitialize.');
     return;
   }
 
-  isReconnecting = true;
+  connectionState = ConnectionState.RECONNECTING;
   logger.debug('Reinitializing connection...');
 
   try {
@@ -2349,11 +2397,11 @@ async function reinitializeConnection() {
     logger.info('Connection reinitialized successfully');
     logger.debug(`New Persistent Stream ID: ${persistentStreamId}, New Persistent Session ID: ${persistentSessionId}`);
     reconnectAttempts = 0; // Reset reconnect attempts on successful connection
+    connectionState = ConnectionState.CONNECTED;
   } catch (error) {
     logger.error('Error during reinitialization:', error);
     showErrorMessage('Failed to reconnect. Please refresh the page.');
-  } finally {
-    isReconnecting = false;
+    connectionState = ConnectionState.DISCONNECTED;
   }
 }
 
