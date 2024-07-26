@@ -59,7 +59,7 @@ const MAX_KEEPALIVE_FAILURES = 3;
 const KEEPALIVE_INTERVAL = 30000; // 30 seconds
 const maxRetryCount = 3;
 const maxDelaySec = 90;
-let newConnectionData = null;
+
 
 
 
@@ -859,8 +859,7 @@ async function initialize() {
   showLoadingSymbol();
   try {
     await initializePersistentStream();
-    startConnectionHealthCheck();
-    startReconnectionTimer(); // Start the background reconnection timer
+    startConnectionHealthCheck(); // Add this line
     hideLoadingSymbol();
   } catch (error) {
     logger.error('Error during initialization:', error);
@@ -868,6 +867,7 @@ async function initialize() {
     showErrorMessage('Failed to connect. Please try again.');
   }
 }
+
 
 async function handleAvatarChange() {
   currentAvatar = avatarSelect.value;
@@ -1621,100 +1621,6 @@ async function initializeConnection() {
 }
 
 
-async function backgroundReconnect() {
-  logger.debug('Starting background reconnection process');
-  try {
-    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        source_url: avatars[currentAvatar].imageUrl,
-        driver_url: "bank://lively/driver-06",
-        stream_warmup: true,
-        config: {
-          stitch: true,
-          fluent: true,
-          auto_match: true,
-          pad_audio: 0.0,
-          normalization_factor: 0.1,
-          align_driver: true,
-          align_expand_factor: 0.3,
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: "neutral",
-                intensity: 1
-              }
-            ]
-          }
-        }
-      }),
-    });
-
-    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
-
-    const newPeerConnection = new RTCPeerConnection({ iceServers });
-    const newDataChannel = newPeerConnection.createDataChannel('JanusDataChannel');
-
-    await newPeerConnection.setRemoteDescription(offer);
-    const answer = await newPeerConnection.createAnswer();
-    await newPeerConnection.setLocalDescription(answer);
-
-    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${newStreamId}/sdp`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        answer: answer,
-        session_id: newSessionId,
-      }),
-    });
-
-    if (!sdpResponse.ok) {
-      throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
-    }
-
-    return { newStreamId, newSessionId, newPeerConnection, newDataChannel };
-  } catch (error) {
-    logger.error('Background reconnection failed:', error);
-    throw error;
-  }
-}
-
-
-async function switchToNewConnection(newConnectionData) {
-  logger.debug('Switching to new connection');
-  const { newStreamId, newSessionId, newPeerConnection, newDataChannel } = newConnectionData;
-
-  await gracefulDisconnect();
-
-  persistentStreamId = newStreamId;
-  persistentSessionId = newSessionId;
-  peerConnection = newPeerConnection;
-  pcDataChannel = newDataChannel;
-
-  peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
-  peerConnection.addEventListener('icecandidate', onIceCandidate, true);
-  peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
-  peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
-  peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
-  peerConnection.addEventListener('track', onTrack, true);
-  pcDataChannel.addEventListener('message', onStreamEvent, true);
-
-  startKeepAlive();
-  logger.info('Switched to new connection successfully');
-}
-
-
-
-
-
 async function startStreaming(assistantReply) {
   try {
     logger.debug('Starting streaming with reply:', assistantReply);
@@ -1734,12 +1640,6 @@ async function startStreaming(assistantReply) {
     if (!streamVideoElement || !idleVideoElement) {
       logger.error('Video elements not found');
       return;
-    }
-
-    // Check if a new connection is ready and switch if necessary
-    if (newConnectionData) {
-      await switchToNewConnection(newConnectionData);
-      newConnectionData = null;
     }
 
     // Split the reply into chunks of about 250 characters, breaking at spaces
@@ -1820,35 +1720,6 @@ async function startStreaming(assistantReply) {
   }
 }
 
-async function gracefulDisconnect() {
-  logger.debug('Performing graceful disconnect');
-  if (peerConnection) {
-    peerConnection.close();
-  }
-  if (pcDataChannel) {
-    pcDataChannel.close();
-  }
-  if (keepAliveInterval) {
-    clearInterval(keepAliveInterval);
-  }
-  if (persistentStreamId) {
-    try {
-      await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Basic ${DID_API.key}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ session_id: persistentSessionId }),
-      });
-      logger.debug('Persistent stream destroyed successfully');
-    } catch (error) {
-      logger.error('Error destroying persistent stream:', error);
-    }
-  }
-  persistentStreamId = null;
-  persistentSessionId = null;
-}
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
@@ -2249,8 +2120,45 @@ async function reinitializeConnection() {
   logger.debug('Reinitializing connection...');
 
   try {
-    const newConnection = await backgroundReconnect();
-    await switchToNewConnection(newConnection);
+    await destroyPersistentStream();
+    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second
+
+    stopAllStreams();
+    closePC();
+
+    clearInterval(statsIntervalId);
+    clearTimeout(inactivityTimeout);
+    clearInterval(keepAliveInterval);
+
+    streamId = null;
+    sessionId = null;
+    peerConnection = null;
+    lastBytesReceived = 0;
+    videoIsPlaying = false;
+
+    currentUtterance = '';
+    interimMessageAdded = false;
+
+    const msgHistory = document.getElementById('msgHistory');
+    msgHistory.innerHTML = '';
+    chatHistory = [];
+
+    // Reset video elements
+    const streamVideoElement = document.getElementById('stream-video-element');
+    const idleVideoElement = document.getElementById('idle-video-element');
+    if (streamVideoElement) streamVideoElement.srcObject = null;
+    if (idleVideoElement) idleVideoElement.style.display = 'block';
+
+    // Add a delay before initializing to avoid rapid successive calls
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    await initializePersistentStream();
+
+    if (!persistentStreamId || !persistentSessionId) {
+      throw new Error('Persistent Stream ID or Session ID is missing after initialization');
+    }
+
+    await prepareForStreaming();
 
     logger.info('Connection reinitialized successfully');
     logger.debug(`New Persistent Stream ID: ${persistentStreamId}, New Persistent Session ID: ${persistentSessionId}`);
@@ -2261,18 +2169,6 @@ async function reinitializeConnection() {
   } finally {
     isReconnecting = false;
   }
-}
-
-function startReconnectionTimer() {
-  const RECONNECTION_INTERVAL = 110000; // 1 minute and 50 seconds
-  setInterval(async () => {
-    try {
-      newConnectionData = await backgroundReconnect();
-      logger.debug('Background reconnection successful, ready to switch');
-    } catch (error) {
-      logger.error('Background reconnection failed:', error);
-    }
-  }, RECONNECTION_INTERVAL);
 }
 
 const connectButton = document.getElementById('connect-button');
