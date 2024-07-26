@@ -482,23 +482,18 @@ function initializeTransitionCanvas() {
 
 
 
-function smoothTransition(toStreaming, duration = 250) {
+function smoothTransition(toStreaming, duration = 250, newVideoSrc = null) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
+  const preloadVideoElement = document.getElementById('preload-video-element');
 
-  if (!idleVideoElement || !streamVideoElement) {
+  if (!idleVideoElement || !streamVideoElement || !preloadVideoElement) {
     logger.warn('Video elements not found for transition');
     return;
   }
 
   if (isTransitioning) {
     logger.debug('Transition already in progress, skipping');
-    return;
-  }
-
-  // Don't transition if we're already in the desired state
-  if ((toStreaming && isCurrentlyStreaming) || (!toStreaming && !isCurrentlyStreaming)) {
-    logger.debug('Already in desired state, skipping transition');
     return;
   }
 
@@ -526,7 +521,7 @@ function smoothTransition(toStreaming, duration = 250) {
         transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
 
         transitionCtx.globalAlpha = progress;
-        transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+        transitionCtx.drawImage(preloadVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
       } else {
         transitionCtx.globalAlpha = 1;
         transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
@@ -536,7 +531,7 @@ function smoothTransition(toStreaming, duration = 250) {
       }
 
       // Update the opacity of the video elements
-      streamVideoElement.style.opacity = toStreaming ? progress.toString() : (1 - progress).toString();
+      preloadVideoElement.style.opacity = toStreaming ? progress.toString() : (1 - progress).toString();
       idleVideoElement.style.opacity = toStreaming ? (1 - progress).toString() : progress.toString();
 
     } catch (error) {
@@ -556,13 +551,18 @@ function smoothTransition(toStreaming, duration = 250) {
 
       // Ensure final state is set correctly
       if (toStreaming) {
-        streamVideoElement.style.opacity = '1';
-        streamVideoElement.style.display = 'block';
+        preloadVideoElement.style.opacity = '1';
+        preloadVideoElement.style.display = 'block';
         idleVideoElement.style.opacity = '0';
         idleVideoElement.style.display = 'none';
+        streamVideoElement.src = newVideoSrc;
+        streamVideoElement.style.opacity = '1';
+        streamVideoElement.style.display = 'block';
       } else {
         streamVideoElement.style.opacity = '0';
         streamVideoElement.style.display = 'none';
+        preloadVideoElement.style.opacity = '0';
+        preloadVideoElement.style.display = 'none';
         idleVideoElement.style.opacity = '1';
         idleVideoElement.style.display = 'block';
       }
@@ -1872,8 +1872,9 @@ async function startStreaming(assistantReply) {
 
     const streamVideoElement = document.getElementById('stream-video-element');
     const idleVideoElement = document.getElementById('idle-video-element');
+    const preloadVideoElement = document.getElementById('preload-video-element');
 
-    if (!streamVideoElement || !idleVideoElement) {
+    if (!streamVideoElement || !idleVideoElement || !preloadVideoElement) {
       logger.error('Video elements not found');
       return;
     }
@@ -1927,13 +1928,14 @@ async function startStreaming(assistantReply) {
         logger.debug('Stream chunk started successfully');
 
         if (playResponseData.result_url) {
-          smoothTransition(true);
-          streamVideoElement.src = playResponseData.result_url;
-          logger.debug('Setting stream video source:', playResponseData.result_url);
+          // Preload the new video
+          preloadVideoElement.src = playResponseData.result_url;
+          await new Promise((resolve) => {
+            preloadVideoElement.oncanplay = resolve;
+          });
 
-          streamVideoElement.oncanplay = () => {
-            streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
-          };
+          // Perform the transition
+          smoothTransition(true, 250, playResponseData.result_url);
 
           await new Promise(resolve => {
             streamVideoElement.onended = resolve;
