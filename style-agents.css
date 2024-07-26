@@ -398,6 +398,10 @@ body {
 }
 
 
+#idle-video-element, #stream-video-element {
+  transition: opacity 0.3s ease-in-out;
+}
+
 
 @media (max-width: 1024px) {
   #content {

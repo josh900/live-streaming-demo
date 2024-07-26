@@ -628,7 +628,7 @@ function updateTranscript(text, isFinal) {
   msgHistory.scrollTop = msgHistory.scrollHeight;
 }
 
-function handleTextInput(text) {
+async function handleTextInput(text) {
   if (text.trim() === '') return;
 
   const textInput = document.getElementById('text-input');
@@ -640,6 +640,9 @@ function handleTextInput(text) {
     role: 'user',
     content: text,
   });
+
+  // Initialize warm-up stream
+  await initializeWarmUpStream();
 
   sendChatToGroq();
 }
@@ -1847,27 +1850,93 @@ async function initializeConnection() {
   }
 }
 
+async function initializeWarmUpStream() {
+  logger.debug('Initializing warm-up stream...');
+  
+  if (!currentAvatar || !avatars[currentAvatar]) {
+    logger.error('No avatar selected or avatar not found. Cannot initialize warm-up stream.');
+    return;
+  }
+
+  try {
+    const warmUpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        source_url: avatars[currentAvatar].imageUrl,
+        driver_url: "bank://lively/driver-06",
+        output_resolution: 512,
+        stream_warmup: true,
+        config: {
+          stitch: true,
+          fluent: true,
+          auto_match: true,
+          pad_audio: 0.5,
+          normalization_factor: 0.1,
+          align_driver: true,
+          motion_factor: 0.55,
+          align_expand_factor: 0.3,
+          ssml: true,
+          driver_expressions: {
+            expressions: [
+              {
+                start_frame: 0,
+                expression: "neutral",
+                intensity: 0.5
+              }
+            ]
+          }
+        }
+      }),
+    });
+
+    const { id: warmUpStreamId, offer, ice_servers: iceServers, session_id: warmUpSessionId } = await warmUpResponse.json();
+
+    logger.debug('Warm-up stream created:', { warmUpStreamId, warmUpSessionId });
+
+    const warmUpAnswer = await createPeerConnection(offer, iceServers);
+
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${warmUpStreamId}/sdp`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        answer: warmUpAnswer,
+        session_id: warmUpSessionId,
+      }),
+    });
+
+    if (!sdpResponse.ok) {
+      throw new Error(`Failed to set SDP for warm-up stream: ${sdpResponse.status} ${sdpResponse.statusText}`);
+    }
+
+    logger.debug('Warm-up stream initialized successfully');
+    return { warmUpStreamId, warmUpSessionId };
+  } catch (error) {
+    logger.error('Failed to initialize warm-up stream:', error);
+    throw error;
+  }
+}
+
 
 async function startStreaming(assistantReply) {
+  logger.debug('Starting streaming with reply:', assistantReply);
+
+  let warmUpStreamId, warmUpSessionId;
+
   try {
-    logger.debug('Starting streaming with reply:', assistantReply);
-    if (!persistentStreamId || !persistentSessionId) {
-      logger.error('Persistent stream not initialized. Cannot start streaming.');
-      await initializePersistentStream();
-    }
+    // Initialize warm-up stream
+    ({ warmUpStreamId, warmUpSessionId } = await initializeWarmUpStream());
 
-    if (!currentAvatar || !avatars[currentAvatar]) {
-      logger.error('No avatar selected or avatar not found. Cannot start streaming.');
-      return;
-    }
-
-    const streamVideoElement = document.getElementById('stream-video-element');
-    const idleVideoElement = document.getElementById('idle-video-element');
-
-    if (!streamVideoElement || !idleVideoElement) {
-      logger.error('Video elements not found');
-      return;
-    }
+    // Start with a silent/idle video
+    await playIdleVideo(warmUpStreamId, warmUpSessionId);
 
     // Split the reply into chunks of about 250 characters, breaking at spaces
     const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
@@ -1877,7 +1946,7 @@ async function startStreaming(assistantReply) {
       if (chunk.length === 0) continue;
 
       isAvatarSpeaking = true;
-      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${warmUpStreamId}`, {
         method: 'POST',
         headers: {
           Authorization: `Basic ${DID_API.key}`,
@@ -1887,15 +1956,15 @@ async function startStreaming(assistantReply) {
           script: {
             type: 'text',
             input: chunk,
+            ssml: true,
             provider: {
               type: 'microsoft',
               voice_id: avatars[currentAvatar].voiceId,
             },
           },
-          session_id: persistentSessionId,
+          session_id: warmUpSessionId,
           driver_url: "bank://lively/driver-06",
           output_resolution: 512,
-          stream_warmup: true,
           config: {
             fluent: true,
             stitch: true,
@@ -1906,6 +1975,7 @@ async function startStreaming(assistantReply) {
             align_expand_factor: 0.3,
             motion_factor: 0.55,
             result_format: "mp4",
+            ssml: true,
             driver_expressions: {
               expressions: [
                 {
@@ -1918,7 +1988,6 @@ async function startStreaming(assistantReply) {
           },
         }),
       });
-      
 
       if (!playResponse.ok) {
         throw new Error(`HTTP error! status: ${playResponse.status}`);
@@ -1931,18 +2000,7 @@ async function startStreaming(assistantReply) {
         logger.debug('Stream chunk started successfully');
 
         if (playResponseData.result_url) {
-          // Wait for the video to be ready before transitioning
-          await new Promise((resolve) => {
-            streamVideoElement.src = playResponseData.result_url;
-            streamVideoElement.oncanplay = resolve;
-          });
-
-          // Perform the transition
-          smoothTransition(true);
-
-          await new Promise(resolve => {
-            streamVideoElement.onended = resolve;
-          });
+          await smoothTransitionToSpeaking(playResponseData.result_url);
         } else {
           logger.debug('No result_url in playResponseData. Waiting for next chunk.');
         }
@@ -1952,19 +2010,13 @@ async function startStreaming(assistantReply) {
     }
 
     isAvatarSpeaking = false;
-    smoothTransition(false);
-
-     // Check if we need to reconnect
-     if (shouldReconnect()) {
-      logger.info('Approaching reconnection threshold. Initiating background reconnect.');
-      await backgroundReconnect();
-    }
+    await transitionToIdle(warmUpStreamId, warmUpSessionId);
 
   } catch (error) {
     logger.error('Error during streaming:', error);
     if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
-      logger.warn('Stream not found or invalid session. Attempting to reinitialize persistent stream.');
-      await reinitializePersistentStream();
+      logger.warn('Stream not found or invalid session. Attempting to reinitialize warm-up stream.');
+      await initializeWarmUpStream();
     }
   }
 }
@@ -2024,6 +2076,116 @@ export function toggleSimpleMode() {
       startButton.click();
     }
   }
+}
+
+
+async function playIdleVideo(streamId, sessionId) {
+  logger.debug('Playing idle video');
+
+  try {
+    const idleResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: '<break time="5000ms"/>',
+          ssml: true,
+          provider: {
+            type: 'microsoft',
+            voice_id: avatars[currentAvatar].voiceId,
+          },
+        },
+        session_id: sessionId,
+        driver_url: "bank://lively/driver-06",
+        config: {
+          stitch: true,
+          fluent: true,
+          pad_audio: 0,
+          result_format: "mp4",
+        },
+      }),
+    });
+
+    if (!idleResponse.ok) {
+      throw new Error(`HTTP error! status: ${idleResponse.status}`);
+    }
+
+    const idleResponseData = await idleResponse.json();
+    logger.debug('Idle video response:', idleResponseData);
+
+    if (idleResponseData.status === 'started') {
+      logger.debug('Idle video started successfully');
+      if (idleResponseData.result_url) {
+        await setIdleVideoSource(idleResponseData.result_url);
+      }
+    } else {
+      logger.warn('Unexpected response status for idle video:', idleResponseData.status);
+    }
+  } catch (error) {
+    logger.error('Error playing idle video:', error);
+    throw error;
+  }
+}
+
+
+
+async function smoothTransitionToSpeaking(speakingVideoUrl) {
+  logger.debug('Transitioning to speaking video');
+
+  const streamVideoElement = document.getElementById('stream-video-element');
+  const idleVideoElement = document.getElementById('idle-video-element');
+
+  if (!streamVideoElement || !idleVideoElement) {
+    logger.error('Video elements not found for transition');
+    return;
+  }
+
+  // Preload the speaking video
+  const preloadVideoElement = document.getElementById('preload-video-element');
+  preloadVideoElement.src = speakingVideoUrl;
+  await new Promise((resolve) => {
+    preloadVideoElement.oncanplay = resolve;
+    preloadVideoElement.load();
+  });
+
+  // Fade out idle video and fade in speaking video
+  streamVideoElement.style.opacity = 0;
+  streamVideoElement.src = speakingVideoUrl;
+  await new Promise((resolve) => {
+    streamVideoElement.oncanplay = () => {
+      streamVideoElement.play();
+      resolve();
+    };
+  });
+
+  idleVideoElement.style.opacity = 0;
+  streamVideoElement.style.opacity = 1;
+
+  logger.debug('Transitioned to speaking video');
+}
+
+async function transitionToIdle(streamId, sessionId) {
+  logger.debug('Transitioning to idle video');
+
+  await playIdleVideo(streamId, sessionId);
+
+  const streamVideoElement = document.getElementById('stream-video-element');
+  const idleVideoElement = document.getElementById('idle-video-element');
+
+  if (!streamVideoElement || !idleVideoElement) {
+    logger.error('Video elements not found for idle transition');
+    return;
+  }
+
+  // Fade out speaking video and fade in idle video
+  streamVideoElement.style.opacity = 0;
+  idleVideoElement.style.opacity = 1;
+
+  logger.debug('Transitioned to idle video');
 }
 
 
@@ -2097,68 +2259,10 @@ async function startRecording() {
   interimMessageAdded = false;
 
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    logger.info('Microphone stream obtained');
+    // Initialize warm-up stream
+    await initializeWarmUpStream();
 
-    audioContext = new AudioContext();
-    logger.debug('Audio context created. Sample rate:', audioContext.sampleRate);
-
-    await audioContext.audioWorklet.addModule('audio-processor.js');
-    logger.debug('Audio worklet module added successfully');
-
-    const source = audioContext.createMediaStreamSource(stream);
-    logger.debug('Media stream source created');
-
-    audioWorkletNode = new AudioWorkletNode(audioContext, 'audio-processor');
-    logger.debug('Audio worklet node created');
-
-    source.connect(audioWorkletNode);
-    logger.debug('Media stream source connected to audio worklet node');
-
-    const deepgramOptions = {
-      model: "nova-2",
-      language: "en-US",
-      smart_format: true,
-      interim_results: true,
-      utterance_end_ms: 2500,
-      punctuate: true,
-      // endpointing: 300,
-      vad_events: true,
-      encoding: "linear16",
-      sample_rate: audioContext.sampleRate
-    };
-
-    logger.debug('Creating Deepgram connection with options:', deepgramOptions);
-
-    deepgramConnection = await deepgramClient.listen.live(deepgramOptions);
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
-      logger.debug('Deepgram WebSocket Connection opened');
-      startSendingAudioData();
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Close, () => {
-      logger.debug('Deepgram WebSocket connection closed');
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
-      logger.debug('Received transcription:', JSON.stringify(data));
-      handleTranscription(data);
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.UtteranceEnd, (data) => {
-      logger.debug('Utterance end event received:', data);
-      handleUtteranceEnd(data);
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
-      logger.error('Deepgram error:', err);
-      handleDeepgramError(err);
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Warning, (warning) => {
-      logger.warn('Deepgram warning:', warning);
-    });
+    // ... (rest of the existing startRecording code)
 
     isRecording = true;
     if (autoSpeakMode) {
@@ -2177,6 +2281,7 @@ async function startRecording() {
     throw error;
   }
 }
+
 
 function handleDeepgramError(err) {
   logger.error('Deepgram error:', err);
