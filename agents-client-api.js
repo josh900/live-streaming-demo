@@ -482,20 +482,6 @@ function initializeTransitionCanvas() {
   });
 }
 
-  videoWrapper.appendChild(transitionCanvas);
-
-  window.addEventListener('resize', () => {
-    const videoWrapper = document.querySelector('#video-wrapper');
-    const rect = videoWrapper.getBoundingClientRect();
-    const size = Math.min(rect.width, rect.height, 550);
-
-    transitionCanvas.width = size;
-    transitionCanvas.height = size;
-  });
-
-
-}
-
 
 
 
