@@ -1010,6 +1010,15 @@ async function sendSDPAnswer(streamId, sessionId, answer) {
   });
 }
 
+let responseQueue = [];
+const ESTIMATED_RESPONSE_TIME = 20000; // Estimate 20 seconds for response generation and streaming
+const TIME_BUFFER = 10000; // 10 seconds buffer
+const RECONNECTION_INTERVAL = 90000; // 90 seconds
+let lastConnectionTime = Date.now();
+let isTransitioning = false;
+let isCurrentlyStreaming = false;
+let transitionCanvas, transitionCtx;
+
 function initializeTransitionCanvas() {
   const videoWrapper = document.querySelector('#video-wrapper');
   const rect = videoWrapper.getBoundingClientRect();
