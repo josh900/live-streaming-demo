@@ -2434,7 +2434,12 @@ async function startStreamingWithSilence() {
     return;
   }
 
-  const silentSSML = '<speak><break time="5000ms"/></speak>';
+  // Correct D-ID syntax for silent video
+  const silentScript = {
+    type: "text",
+    input: "<break time=\"5000ms\"/>",
+    ssml: true
+  };
   
   try {
     const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
@@ -2444,20 +2449,12 @@ async function startStreamingWithSilence() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        script: {
-          type: 'ssml',
-          input: silentSSML,
-          provider: {
-            type: 'microsoft',
-            voice_id: avatars[currentAvatar].voiceId,
-          },
-        },
+        script: silentScript,
         session_id: persistentSessionId,
         driver_url: "bank://lively/driver-06",
         config: {
           fluent: true,
           stitch: true,
-          ssml: true,
           pad_audio: 0.5,
           auto_match: true,
           align_driver: true,
@@ -2483,7 +2480,13 @@ async function startStreamingWithSilence() {
   }
 }
 
+
 async function sendStreamingChunk(content) {
+  if (!content.trim()) {
+    logger.debug('Skipping empty content chunk');
+    return;
+  }
+
   logger.debug('Sending streaming chunk:', content);
   try {
     const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
