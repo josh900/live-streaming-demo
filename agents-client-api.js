@@ -1252,7 +1252,14 @@ function onConnectionStateChange() {
   }
 }
 
-
+function startConnectionHealthCheck() {
+  setInterval(() => {
+    if (peerConnection && (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected')) {
+      logger.warn('Connection health check detected disconnected state. Attempting to reconnect...');
+      reinitializeConnection();
+    }
+  }, 30000); // Check every 30 seconds
+}
 
 function startBackgroundReconnectionTimer() {
   setInterval(async () => {
