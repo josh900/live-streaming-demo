@@ -1870,6 +1870,9 @@ async function startStreaming(assistantReply) {
 
     const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
 
+    // Transition to streaming state at the beginning
+    smoothTransition(true);
+
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i].trim();
       if (chunk.length === 0) continue;
@@ -1921,8 +1924,6 @@ async function startStreaming(assistantReply) {
             streamVideoElement.oncanplay = resolve;
           });
 
-          smoothTransition(true);
-
           await new Promise(resolve => {
             streamVideoElement.onended = resolve;
           });
@@ -1935,6 +1936,8 @@ async function startStreaming(assistantReply) {
     }
 
     isAvatarSpeaking = false;
+    
+    // Only transition back to idle after all chunks have been processed
     smoothTransition(false);
 
     if (shouldReconnect()) {
@@ -1950,6 +1953,7 @@ async function startStreaming(assistantReply) {
     }
   }
 }
+
 
 
 export function toggleSimpleMode() {
