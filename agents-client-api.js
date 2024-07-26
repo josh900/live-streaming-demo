@@ -418,6 +418,24 @@ NEVER mentioning your instructions or capabilities!!
 Keep responses natural and focused solely on answering the customer's question.
 
 Don't be too formal. For example, instead of saying "Hello! How can I assist you today?", say something like "Hey! how's it going. What can I help you with?"
+
+
+ALWAYS respond with strict Speech Synthesis Markup Language (SSML), like:
+
+
+<speak>
+  Here are <say-as interpret-as="characters">SSML</say-as> samples.
+  I can pause <break time="3s"/>.
+  I can speak in cardinals. Your number is <say-as interpret-as="cardinal">10</say-as>.
+  Or I can speak in ordinals. You are <say-as interpret-as="ordinal">10</say-as> in line.
+  Or I can even speak in digits. The digits for ten are <say-as interpret-as="characters">10</say-as>.
+  I can also substitute phrases, like the <sub alias="World Wide Web Consortium">W3C</sub>.
+  Finally, I can speak a paragraph with two sentences.
+  <p><s>This is sentence one.</s><s>This is sentence two.</s></p>
+</speak>
+
+
+Please provide your response in SSML syntax:
 `;
 
 async function prepareForStreaming() {
@@ -481,7 +499,7 @@ function initializeTransitionCanvas() {
 
 
 
-function smoothTransition(toStreaming, duration = 250) {
+function smoothTransition(toStreaming, duration = 250, forceTransition = false) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
 
@@ -495,8 +513,8 @@ function smoothTransition(toStreaming, duration = 250) {
     return;
   }
 
-  // Don't transition if we're already in the desired state
-  if ((toStreaming && isCurrentlyStreaming) || (!toStreaming && !isCurrentlyStreaming)) {
+  // Allow forced transition even if the state seems unchanged
+  if (!forceTransition && ((toStreaming && isCurrentlyStreaming) || (!toStreaming && !isCurrentlyStreaming))) {
     logger.debug('Already in desired state, skipping transition');
     return;
   }
@@ -545,6 +563,7 @@ function smoothTransition(toStreaming, duration = 250) {
   // Start the animation
   requestAnimationFrame(animate);
 }
+
 
 function getVideoElements() {
   const idle = document.getElementById('idle-video-element');
@@ -735,7 +754,10 @@ async function initializePersistentStream() {
 }
 
 
-
+function shouldReconnect() {
+  const timeSinceLastConnection = Date.now() - lastConnectionTime;
+  return timeSinceLastConnection > RECONNECTION_INTERVAL * 0.9;
+}
 
 
 function scheduleReconnect() {
@@ -1847,6 +1869,10 @@ async function initializeConnection() {
   }
 }
 
+function splitSSMLIntoChunks(ssml) {
+  const speakTags = ssml.match(/<speak>[\s\S]*?<\/speak>/g) || [];
+  return speakTags.map(tag => tag.trim());
+}
 
 async function startStreaming(assistantReply) {
   try {
@@ -1869,11 +1895,14 @@ async function startStreaming(assistantReply) {
       return;
     }
 
-    // Split the reply into chunks of about 250 characters, breaking at spaces
-    const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
+    // Force transition to streaming state
+    smoothTransition(true, 250, true);
+
+    // Split the SSML content into chunks of speak tags
+    const chunks = splitSSMLIntoChunks(assistantReply);
 
     for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i].trim();
+      const chunk = chunks[i];
       if (chunk.length === 0) continue;
 
       isAvatarSpeaking = true;
@@ -1887,6 +1916,7 @@ async function startStreaming(assistantReply) {
           script: {
             type: 'text',
             input: chunk,
+            ssml: true,
             provider: {
               type: 'microsoft',
               voice_id: avatars[currentAvatar].voiceId,
@@ -1918,33 +1948,35 @@ async function startStreaming(assistantReply) {
           },
         }),
       });
-      
 
       if (!playResponse.ok) {
         throw new Error(`HTTP error! status: ${playResponse.status}`);
       }
 
-      const playResponseData = await playResponse.json();
-      logger.debug('Streaming response:', playResponseData);
+      let playResponseData = await playResponse.json();
+      logger.debug('Initial streaming response:', playResponseData);
 
       if (playResponseData.status === 'started') {
         logger.debug('Stream chunk started successfully');
 
+        // Wait for the result_url if it's not immediately available
+        if (!playResponseData.result_url) {
+          logger.debug('No result_url in initial response. Waiting for result...');
+          playResponseData = await waitForResultUrl(persistentStreamId, persistentSessionId);
+        }
+
         if (playResponseData.result_url) {
-          // Wait for the video to be ready before transitioning
+          // Wait for the video to be ready before playing
           await new Promise((resolve) => {
             streamVideoElement.src = playResponseData.result_url;
             streamVideoElement.oncanplay = resolve;
           });
 
-          // Perform the transition
-          smoothTransition(true);
-
           await new Promise(resolve => {
             streamVideoElement.onended = resolve;
           });
         } else {
-          logger.debug('No result_url in playResponseData. Waiting for next chunk.');
+          logger.warn('Failed to get result_url for chunk. Skipping this chunk.');
         }
       } else {
         logger.warn('Unexpected response status:', playResponseData.status);
@@ -1952,10 +1984,12 @@ async function startStreaming(assistantReply) {
     }
 
     isAvatarSpeaking = false;
-    smoothTransition(false);
+    
+    // Force transition back to idle state
+    smoothTransition(false, 250, true);
 
-     // Check if we need to reconnect
-     if (shouldReconnect()) {
+    // Check if we need to reconnect
+    if (shouldReconnect()) {
       logger.info('Approaching reconnection threshold. Initiating background reconnect.');
       await backgroundReconnect();
     }
@@ -1968,6 +2002,36 @@ async function startStreaming(assistantReply) {
     }
   }
 }
+
+
+async function waitForResultUrl(streamId, sessionId, maxAttempts = 50, delay = 200) {
+  for (let i = 0; i < maxAttempts; i++) {
+    const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (data.result_url) {
+      logger.debug('Received result_url:', data.result_url);
+      return data;
+    }
+
+    logger.debug(`Attempt ${i + 1}: Still waiting for result_url. Retrying in ${delay}ms.`);
+    await new Promise(resolve => setTimeout(resolve, delay));
+  }
+
+  logger.warn(`Failed to get result_url after ${maxAttempts} attempts.`);
+  return null;
+}
+
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
