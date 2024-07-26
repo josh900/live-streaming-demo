@@ -765,14 +765,22 @@ function startKeepAlive() {
   }
 
   keepAliveInterval = setInterval(() => {
-    if (isPersistentStreamActive && peerConnection && peerConnection.connectionState === 'connected') {
+    if (isPersistentStreamActive && peerConnection && peerConnection.connectionState === 'connected' && pcDataChannel) {
       try {
         const keepAliveMessage = JSON.stringify({ type: 'KeepAlive' });
-        peerConnection.send(keepAliveMessage);
-        logger.debug('Keepalive message sent successfully');
+        if (pcDataChannel.readyState === 'open') {
+          pcDataChannel.send(keepAliveMessage);
+          logger.debug('Keepalive message sent successfully');
+        } else {
+          logger.warn('Data channel is not open. Current state:', pcDataChannel.readyState);
+        }
       } catch (error) {
         logger.warn('Error sending keepalive message:', error);
       }
+    } else {
+      logger.debug('Conditions not met for sending keepalive. isPersistentStreamActive:', isPersistentStreamActive, 
+                   'peerConnection state:', peerConnection ? peerConnection.connectionState : 'null', 
+                   'pcDataChannel:', pcDataChannel ? 'exists' : 'null');
     }
   }, 30000); // Send keepalive every 30 seconds
 }
@@ -1345,7 +1353,17 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
     peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
     peerConnection.addEventListener('track', onTrack, true);
-    pcDataChannel.addEventListener('message', onStreamEvent, true);
+    
+    pcDataChannel.onopen = () => {
+      logger.debug('Data channel opened');
+    };
+    pcDataChannel.onclose = () => {
+      logger.debug('Data channel closed');
+    };
+    pcDataChannel.onerror = (error) => {
+      logger.error('Data channel error:', error);
+    };
+    pcDataChannel.onmessage = onStreamEvent;
   }
 
   await peerConnection.setRemoteDescription(offer);
