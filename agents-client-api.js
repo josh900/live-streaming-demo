@@ -916,6 +916,9 @@ async function backgroundReconnect() {
   logger.debug('Starting background reconnection process...');
 
   try {
+    // Ensure we switch back to the idle video
+    smoothTransition(false);
+    
     // Destroy the current stream before creating a new one
     await destroyPersistentStream();
     
@@ -932,6 +935,9 @@ async function backgroundReconnect() {
     connectionState = ConnectionState.DISCONNECTED;
     // If background reconnection fails, schedule another attempt
     scheduleReconnect();
+  } finally {
+    // Ensure the idle video is playing
+    playIdleVideo();
   }
 }
 
@@ -1105,9 +1111,6 @@ async function initialize() {
       }
     }
   });
-
-  // Initialize UI components
-  initializeUI();
 
   logger.info('Initialization complete');
 }
