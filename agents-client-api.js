@@ -628,7 +628,7 @@ function updateTranscript(text, isFinal) {
   msgHistory.scrollTop = msgHistory.scrollHeight;
 }
 
-async function handleTextInput(text) {
+function handleTextInput(text) {
   if (text.trim() === '') return;
 
   const textInput = document.getElementById('text-input');
@@ -641,14 +641,13 @@ async function handleTextInput(text) {
     content: text,
   });
 
-  // Start preparing the stream and sending to Groq concurrently
-  const [prepareStreamPromise, groqResponsePromise] = await Promise.all([
-    prepareStreamEarly(),
-    sendChatToGroq()
-  ]);
-
-  // Wait for both to complete before proceeding
-  await Promise.all([prepareStreamPromise, groqResponsePromise]);
+  // Prepare the stream early
+  prepareStreamEarly().then(() => {
+    sendChatToGroq();
+  }).catch(error => {
+    logger.error('Error preparing stream early:', error);
+    sendChatToGroq();
+  });
 }
 
 
