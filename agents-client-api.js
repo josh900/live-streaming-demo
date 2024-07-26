@@ -1775,22 +1775,23 @@ async function initializeConnection() {
       body: JSON.stringify({
         source_url: avatars[currentAvatar].imageUrl,
         driver_url: "bank://lively/driver-06",
-        stream_warmup: true,
         output_resolution: 512,
+        stream_warmup: true,
         config: {
           stitch: true,
           fluent: true,
           auto_match: true,
-          pad_audio: 0.0,
+          pad_audio: 0.5,
           normalization_factor: 0.1,
           align_driver: true,
+          motion_factor: 0.55,
           align_expand_factor: 0.3,
           driver_expressions: {
             expressions: [
               {
                 start_frame: 0,
                 expression: "neutral",
-                intensity: 1
+                intensity: 0.5
               }
             ]
           }
