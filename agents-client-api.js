@@ -28,7 +28,6 @@ let keepAliveInterval;
 let socket;
 let isInitializing = false;
 let audioContext;
-let streamVideoElement;
 let idleVideoElement;
 let deepgramConnection;
 let isRecording = false;
