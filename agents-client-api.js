@@ -1890,18 +1890,30 @@ async function startStreaming(assistantReply) {
               voice_id: avatars[currentAvatar].voiceId,
             },
           },
+          session_id: persistentSessionId,
+          driver_url: "bank://lively/driver-06",
+          output_resolution: 512,
+          stream_warmup: true,
           config: {
             fluent: true,
             stitch: true,
-            pad_audio: 0.0,
+            pad_audio: 0.5,
+            auto_match: true,
             align_driver: true,
+            normalization_factor: 0.1,
             align_expand_factor: 0.3,
-            motion_factor: 0.7,
+            motion_factor: 0.55,
             result_format: "mp4",
+            driver_expressions: {
+              expressions: [
+                {
+                  start_frame: 0,
+                  expression: "neutral",
+                  intensity: 0.5
+                }
+              ]
+            }
           },
-          session_id: persistentSessionId,
-          driver_url: "bank://lively/driver-06",
-          stream_warmup: true,
         }),
       });
 
