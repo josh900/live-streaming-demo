@@ -546,59 +546,6 @@ function smoothTransition(toStreaming, duration = 250) {
   requestAnimationFrame(animate);
 }
 
-function getVideoElements() {
-  const idle = document.getElementById('idle-video-element');
-  const stream = document.getElementById('stream-video-element');
-
-  if (!idle || !stream) {
-    logger.warn('Video elements not found in the DOM');
-  }
-
-  return { idle, stream };
-}
-
-function getStatusLabels() {
-  return {
-    peer: document.getElementById('peer-status-label'),
-    ice: document.getElementById('ice-status-label'),
-    iceGathering: document.getElementById('ice-gathering-status-label'),
-    signaling: document.getElementById('signaling-status-label'),
-    streaming: document.getElementById('streaming-status-label')
-  };
-}
-
-function initializeWebSocket() {
-  socket = new WebSocket(`wss://${window.location.host}`);
-
-  socket.onopen = () => {
-    logger.info('WebSocket connection established');
-  };
-
-  socket.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    logger.debug('Received WebSocket message:', data);
-
-    switch (data.type) {
-      case 'transcription':
-        updateTranscription(data.text);
-        break;
-      case 'assistantReply':
-        updateAssistantReply(data.text);
-        break;
-      default:
-        logger.warn('Unknown WebSocket message type:', data.type);
-    }
-  };
-
-  socket.onerror = (error) => {
-    logger.error('WebSocket error:', error);
-  };
-
-  socket.onclose = () => {
-    logger.info('WebSocket connection closed');
-    setTimeout(initializeWebSocket, 10000);
-  };
-}
 
 
 
@@ -641,20 +588,110 @@ function handleTextInput(text) {
     content: text,
   });
 
-  // Start the silent stream before sending chat to Groq
-  startSilentStream().then(() => {
+  logger.debug('Initiating warm-up stream before sending chat to Groq');
+  initializeWarmUpStream().then(() => {
     sendChatToGroq();
   });
 }
 
-function updateAssistantReply(text) {
-  document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
+async function startRecording() {
+  if (isRecording) {
+    logger.warn('Recording is already in progress. Stopping current recording.');
+    await stopRecording();
+    return;
+  }
+
+  logger.debug('Starting recording process...');
+
+  currentUtterance = '';
+  interimMessageAdded = false;
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    logger.info('Microphone stream obtained');
+
+    audioContext = new AudioContext();
+    logger.debug('Audio context created. Sample rate:', audioContext.sampleRate);
+
+    await audioContext.audioWorklet.addModule('audio-processor.js');
+    logger.debug('Audio worklet module added successfully');
+
+    const source = audioContext.createMediaStreamSource(stream);
+    logger.debug('Media stream source created');
+
+    audioWorkletNode = new AudioWorkletNode(audioContext, 'audio-processor');
+    logger.debug('Audio worklet node created');
+
+    source.connect(audioWorkletNode);
+    logger.debug('Media stream source connected to audio worklet node');
+
+    const deepgramOptions = {
+      model: "nova-2",
+      language: "en-US",
+      smart_format: true,
+      interim_results: true,
+      utterance_end_ms: 2500,
+      punctuate: true,
+      vad_events: true,
+      encoding: "linear16",
+      sample_rate: audioContext.sampleRate
+    };
+
+    logger.debug('Creating Deepgram connection with options:', deepgramOptions);
+
+    deepgramConnection = await deepgramClient.listen.live(deepgramOptions);
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
+      logger.debug('Deepgram WebSocket Connection opened');
+      startSendingAudioData();
+      // Initiate warm-up stream when recording begins
+      logger.debug('Initiating warm-up stream as recording begins');
+      initializeWarmUpStream();
+    });
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.Close, () => {
+      logger.debug('Deepgram WebSocket connection closed');
+    });
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
+      logger.debug('Received transcription:', JSON.stringify(data));
+      handleTranscription(data);
+    });
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.UtteranceEnd, (data) => {
+      logger.debug('Utterance end event received:', data);
+      handleUtteranceEnd(data);
+    });
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
+      logger.error('Deepgram error:', err);
+      handleDeepgramError(err);
+    });
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.Warning, (warning) => {
+      logger.warn('Deepgram warning:', warning);
+    });
+
+    isRecording = true;
+    if (autoSpeakMode) {
+      autoSpeakInProgress = true;
+    }
+    const startButton = document.getElementById('start-button');
+    startButton.textContent = 'Stop';
+
+    logger.debug('Recording and transcription started successfully');
+  } catch (error) {
+    logger.error('Error starting recording:', error);
+    isRecording = false;
+    const startButton = document.getElementById('start-button');
+    startButton.textContent = 'Speak';
+    showErrorMessage('Failed to start recording. Please try again.');
+    throw error;
+  }
 }
 
-async function initializePersistentStream() {
-  logger.info('Initializing persistent stream...');
-  connectionState = ConnectionState.CONNECTING;
-
+async function initializeWarmUpStream() {
+  logger.debug('Initializing warm-up stream...');
   try {
     const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
       method: 'POST',
@@ -689,50 +726,33 @@ async function initializePersistentStream() {
       }),
     });
 
-    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+    const { id: warmUpStreamId, offer, ice_servers: iceServers, session_id: warmUpSessionId } = await sessionResponse.json();
+    logger.debug('Warm-up stream created:', { warmUpStreamId, warmUpSessionId });
 
-    persistentStreamId = newStreamId;
-    persistentSessionId = newSessionId;
-
-    logger.info('Persistent stream created:', { persistentStreamId, persistentSessionId });
-
-    try {
-      sessionClientAnswer = await createPeerConnection(offer, iceServers);
-    } catch (e) {
-      logger.error('Error during streaming setup:', e);
-      stopAllStreams();
-      closePC();
-      throw e;
-    }
+    const warmUpSessionClientAnswer = await createPeerConnection(offer, iceServers);
 
     await new Promise(resolve => setTimeout(resolve, 1000));
 
-    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/sdp`, {
+    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${warmUpStreamId}/sdp`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        answer: sessionClientAnswer,
-        session_id: persistentSessionId,
+        answer: warmUpSessionClientAnswer,
+        session_id: warmUpSessionId,
       }),
     });
 
     if (!sdpResponse.ok) {
-      throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
+      throw new Error(`Failed to set SDP for warm-up stream: ${sdpResponse.status} ${sdpResponse.statusText}`);
     }
-    isPersistentStreamActive = true;
-    startKeepAlive();
-    lastConnectionTime = Date.now();
-    logger.info('Persistent stream initialized successfully');
-    connectionState = ConnectionState.CONNECTED;
+
+    logger.debug('Warm-up stream initialized successfully');
+    return { warmUpStreamId, warmUpSessionId };
   } catch (error) {
-    logger.error('Failed to initialize persistent stream:', error);
-    isPersistentStreamActive = false;
-    persistentStreamId = null;
-    persistentSessionId = null;
-    connectionState = ConnectionState.DISCONNECTED;
+    logger.error('Failed to initialize warm-up stream:', error);
     throw error;
   }
 }
@@ -1872,9 +1892,6 @@ async function startStreaming(assistantReply) {
       return;
     }
 
-    // Start with a silent warm-up stream
-    await startSilentStream();
-
     // Split the reply into chunks of about 250 characters, breaking at spaces
     const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
 
@@ -1936,6 +1953,7 @@ async function startStreaming(assistantReply) {
         logger.debug('Stream chunk started successfully');
 
         if (playResponseData.result_url) {
+          logger.debug('Received result_url, preparing to transition to streaming video');
           // Wait for the video to be ready before transitioning
           await new Promise((resolve) => {
             streamVideoElement.src = playResponseData.result_url;
@@ -1944,6 +1962,7 @@ async function startStreaming(assistantReply) {
 
           // Perform the transition
           smoothTransition(true);
+          logger.debug('Transitioned to streaming video');
 
           await new Promise(resolve => {
             streamVideoElement.onended = resolve;
@@ -1958,6 +1977,7 @@ async function startStreaming(assistantReply) {
 
     isAvatarSpeaking = false;
     smoothTransition(false);
+    logger.debug('Transitioned back to idle video');
 
     // Check if we need to reconnect
     if (shouldReconnect()) {
