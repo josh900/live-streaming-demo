@@ -495,6 +495,7 @@ function smoothTransition(toStreaming, duration = 250) {
     return;
   }
 
+  // Don't transition if we're already in the desired state
   if ((toStreaming && isCurrentlyStreaming) || (!toStreaming && !isCurrentlyStreaming)) {
     logger.debug('Already in desired state, skipping transition');
     return;
@@ -523,30 +524,27 @@ function smoothTransition(toStreaming, duration = 250) {
     if (progress < 1) {
       requestAnimationFrame(animate);
     } else {
+      // Ensure final state is set correctly
       if (toStreaming) {
-        setTimeout(() => {
-          streamVideoElement.style.display = 'block';
-          idleVideoElement.style.display = 'none';
-          isTransitioning = false;
-          isCurrentlyStreaming = true;
-          transitionCanvas.style.display = 'none';
-          logger.debug('Smooth transition to streaming completed');
-        }, 500);  // 500ms delay before finalizing transition to speaking state
+        streamVideoElement.style.display = 'block';
+        idleVideoElement.style.display = 'none';
       } else {
         streamVideoElement.style.display = 'none';
         idleVideoElement.style.display = 'block';
-        isTransitioning = false;
-        isCurrentlyStreaming = false;
-        transitionCanvas.style.display = 'none';
-        logger.debug('Smooth transition to idle completed');
       }
+      isTransitioning = false;
+      isCurrentlyStreaming = toStreaming;
+      transitionCanvas.style.display = 'none';
+      logger.debug('Smooth transition completed');
     }
   }
 
+  // Show the transition canvas
   transitionCanvas.style.display = 'block';
+  
+  // Start the animation
   requestAnimationFrame(animate);
 }
-
 
 function getVideoElements() {
   const idle = document.getElementById('idle-video-element');
@@ -643,10 +641,8 @@ function handleTextInput(text) {
     content: text,
   });
 
-  prepareStream();
   sendChatToGroq();
 }
-
 
 function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
@@ -1851,6 +1847,7 @@ async function initializeConnection() {
   }
 }
 
+
 async function startStreaming(assistantReply) {
   try {
     logger.debug('Starting streaming with reply:', assistantReply);
@@ -1872,6 +1869,7 @@ async function startStreaming(assistantReply) {
       return;
     }
 
+    // Split the reply into chunks of about 250 characters, breaking at spaces
     const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
 
     for (let i = 0; i < chunks.length; i++) {
@@ -1920,6 +1918,7 @@ async function startStreaming(assistantReply) {
           },
         }),
       });
+      
 
       if (!playResponse.ok) {
         throw new Error(`HTTP error! status: ${playResponse.status}`);
@@ -1932,11 +1931,13 @@ async function startStreaming(assistantReply) {
         logger.debug('Stream chunk started successfully');
 
         if (playResponseData.result_url) {
+          // Wait for the video to be ready before transitioning
           await new Promise((resolve) => {
             streamVideoElement.src = playResponseData.result_url;
             streamVideoElement.oncanplay = resolve;
           });
 
+          // Perform the transition
           smoothTransition(true);
 
           await new Promise(resolve => {
@@ -1953,7 +1954,8 @@ async function startStreaming(assistantReply) {
     isAvatarSpeaking = false;
     smoothTransition(false);
 
-    if (shouldReconnect()) {
+     // Check if we need to reconnect
+     if (shouldReconnect()) {
       logger.info('Approaching reconnection threshold. Initiating background reconnect.');
       await backgroundReconnect();
     }
@@ -1966,7 +1968,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
@@ -2080,101 +2081,6 @@ function handleTranscription(data) {
   } else {
     logger.debug('Interim transcript:', transcript);
     updateTranscript(currentUtterance + transcript, false);
-  }
-}
-
-async function startRecording() {
-  if (isRecording) {
-    logger.warn('Recording is already in progress. Stopping current recording.');
-    await stopRecording();
-    return;
-  }
-
-  logger.debug('Starting recording process...');
-
-  currentUtterance = '';
-  interimMessageAdded = false;
-
-  try {
-    await prepareStream();
-
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    logger.info('Microphone stream obtained');
-
-    audioContext = new AudioContext();
-    logger.debug('Audio context created. Sample rate:', audioContext.sampleRate);
-
-    await audioContext.audioWorklet.addModule('audio-processor.js');
-    logger.debug('Audio worklet module added successfully');
-
-    const source = audioContext.createMediaStreamSource(stream);
-    logger.debug('Media stream source created');
-
-    audioWorkletNode = new AudioWorkletNode(audioContext, 'audio-processor');
-    logger.debug('Audio worklet node created');
-
-    source.connect(audioWorkletNode);
-    logger.debug('Media stream source connected to audio worklet node');
-
-    const deepgramOptions = {
-      model: "nova-2",
-      language: "en-US",
-      smart_format: true,
-      interim_results: true,
-      utterance_end_ms: 2500,
-      punctuate: true,
-      vad_events: true,
-      encoding: "linear16",
-      sample_rate: audioContext.sampleRate
-    };
-
-    logger.debug('Creating Deepgram connection with options:', deepgramOptions);
-
-    deepgramConnection = await deepgramClient.listen.live(deepgramOptions);
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
-      logger.debug('Deepgram WebSocket Connection opened');
-      startSendingAudioData();
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Close, () => {
-      logger.debug('Deepgram WebSocket connection closed');
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
-      logger.debug('Received transcription:', JSON.stringify(data));
-      handleTranscription(data);
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.UtteranceEnd, (data) => {
-      logger.debug('Utterance end event received:', data);
-      handleUtteranceEnd(data);
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
-      logger.error('Deepgram error:', err);
-      handleDeepgramError(err);
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Warning, (warning) => {
-      logger.warn('Deepgram warning:', warning);
-    });
-
-    isRecording = true;
-    if (autoSpeakMode) {
-      autoSpeakInProgress = true;
-    }
-    const startButton = document.getElementById('start-button');
-    startButton.textContent = 'Stop';
-
-    logger.debug('Recording and transcription started successfully');
-  } catch (error) {
-    logger.error('Error starting recording:', error);
-    isRecording = false;
-    const startButton = document.getElementById('start-button');
-    startButton.textContent = 'Speak';
-    showErrorMessage('Failed to start recording. Please try again.');
-    throw error;
   }
 }
 
