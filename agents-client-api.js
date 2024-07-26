@@ -69,6 +69,10 @@ const ConnectionState = {
   RECONNECTING: 'reconnecting'
 };
 
+let lastConnectionTime = Date.now();
+
+
+
 let connectionState = ConnectionState.DISCONNECTED;
 
 
@@ -718,9 +722,9 @@ async function initializePersistentStream() {
     if (!sdpResponse.ok) {
       throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
     }
-
     isPersistentStreamActive = true;
     startKeepAlive();
+    lastConnectionTime = Date.now(); // Update the last connection time
     logger.info('Persistent stream initialized successfully');
     connectionState = ConnectionState.CONNECTED;
   } catch (error) {
@@ -732,6 +736,14 @@ async function initializePersistentStream() {
     throw error;
   }
 }
+
+function shouldReconnect() {
+  const timeSinceLastConnection = Date.now() - lastConnectionTime;
+  return timeSinceLastConnection > RECONNECTION_INTERVAL * 0.9; // Reconnect when we're at 90% of the interval
+}
+
+
+
 
 function scheduleReconnect() {
   if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
@@ -890,21 +902,15 @@ async function backgroundReconnect() {
   logger.debug('Starting background reconnection process...');
 
   try {
-    // Destroy the current stream before creating a new one
     await destroyPersistentStream();
-    
-    // Wait a moment before creating a new stream
     await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // Create a new stream using the same process as the initial connection
     await initializePersistentStream();
-
+    lastConnectionTime = Date.now(); // Update the last connection time
     logger.info('Background reconnection completed successfully');
     connectionState = ConnectionState.CONNECTED;
   } catch (error) {
     logger.error('Error during background reconnection:', error);
     connectionState = ConnectionState.DISCONNECTED;
-    // If background reconnection fails, schedule another attempt
     scheduleReconnect();
   }
 }
@@ -1049,7 +1055,6 @@ async function initialize() {
   try {
     await initializePersistentStream();
     startConnectionHealthCheck();
-    setInterval(backgroundReconnect, RECONNECTION_INTERVAL);
     hideLoadingSymbol();
   } catch (error) {
     logger.error('Error during initialization:', error);
@@ -1917,6 +1922,12 @@ async function startStreaming(assistantReply) {
 
     isAvatarSpeaking = false;
     smoothTransition(false);
+
+     // Check if we need to reconnect
+     if (shouldReconnect()) {
+      logger.info('Approaching reconnection threshold. Initiating background reconnect.');
+      await backgroundReconnect();
+    }
 
   } catch (error) {
     logger.error('Error during streaming:', error);
