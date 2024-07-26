@@ -2337,8 +2337,8 @@ async function sendChatToGroq() {
     };
     logger.debug('Request body:', JSON.stringify(requestBody));
 
-    // Start streaming with silent SSML before sending request to Groq
-    startStreamingWithSilence();
+    // Start streaming with silence immediately
+    await startStreamingWithSilence();
 
     const response = await fetch('/chat', {
       method: 'POST',
@@ -2388,8 +2388,10 @@ async function sendChatToGroq() {
               assistantSpan.innerHTML += content;
               logger.debug('Parsed content:', content);
 
-              // Send the content chunk to the streaming function
-              await sendStreamingChunk(content);
+              // Send content to D-ID immediately
+              if (content.trim()) {
+                await sendStreamingChunk(content);
+              }
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
@@ -2509,7 +2511,7 @@ async function sendStreamingChunk(content) {
         config: {
           fluent: true,
           stitch: true,
-          pad_audio: 0.5,
+          pad_audio: 0,
           auto_match: true,
           align_driver: true,
           normalization_factor: 0.1,
