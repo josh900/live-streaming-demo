@@ -641,7 +641,10 @@ function handleTextInput(text) {
     content: text,
   });
 
-  sendChatToGroq();
+  // Start the silent stream before sending chat to Groq
+  startSilentStream().then(() => {
+    sendChatToGroq();
+  });
 }
 
 function updateAssistantReply(text) {
@@ -721,7 +724,7 @@ async function initializePersistentStream() {
     }
     isPersistentStreamActive = true;
     startKeepAlive();
-    lastConnectionTime = Date.now(); // Update the last connection time
+    lastConnectionTime = Date.now();
     logger.info('Persistent stream initialized successfully');
     connectionState = ConnectionState.CONNECTED;
   } catch (error) {
@@ -733,7 +736,6 @@ async function initializePersistentStream() {
     throw error;
   }
 }
-
 
 
 
@@ -1623,7 +1625,7 @@ function onTrack(event) {
             //  videoStatusChanged
             // });
 
-            
+
             if (videoStatusChanged) {
               videoIsPlaying = report.bytesReceived > lastBytesReceived;
               logger.debug('Video status changed:', videoIsPlaying);
@@ -1870,6 +1872,9 @@ async function startStreaming(assistantReply) {
       return;
     }
 
+    // Start with a silent warm-up stream
+    await startSilentStream();
+
     // Split the reply into chunks of about 250 characters, breaking at spaces
     const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
 
@@ -1888,6 +1893,7 @@ async function startStreaming(assistantReply) {
           script: {
             type: 'text',
             input: chunk,
+            ssml: true,
             provider: {
               type: 'microsoft',
               voice_id: avatars[currentAvatar].voiceId,
@@ -1896,7 +1902,6 @@ async function startStreaming(assistantReply) {
           session_id: persistentSessionId,
           driver_url: "bank://lively/driver-06",
           output_resolution: 512,
-          stream_warmup: true,
           config: {
             fluent: true,
             stitch: true,
@@ -1919,7 +1924,6 @@ async function startStreaming(assistantReply) {
           },
         }),
       });
-      
 
       if (!playResponse.ok) {
         throw new Error(`HTTP error! status: ${playResponse.status}`);
@@ -1955,8 +1959,8 @@ async function startStreaming(assistantReply) {
     isAvatarSpeaking = false;
     smoothTransition(false);
 
-     // Check if we need to reconnect
-     if (shouldReconnect()) {
+    // Check if we need to reconnect
+    if (shouldReconnect()) {
       logger.info('Approaching reconnection threshold. Initiating background reconnect.');
       await backgroundReconnect();
     }
@@ -1967,6 +1971,59 @@ async function startStreaming(assistantReply) {
       logger.warn('Stream not found or invalid session. Attempting to reinitialize persistent stream.');
       await reinitializePersistentStream();
     }
+  }
+}
+
+async function startSilentStream() {
+  logger.debug('Starting silent stream...');
+  try {
+    const silentResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: '<break time="5s"/>',
+          ssml: true,
+          provider: {
+            type: 'microsoft',
+            voice_id: avatars[currentAvatar].voiceId,
+          },
+        },
+        session_id: persistentSessionId,
+        driver_url: "bank://lively/driver-06",
+        output_resolution: 512,
+        config: {
+          fluent: true,
+          stitch: true,
+          pad_audio: 0.5,
+          auto_match: true,
+          align_driver: true,
+          normalization_factor: 0.1,
+          align_expand_factor: 0.3,
+          motion_factor: 0.55,
+          result_format: "mp4",
+        },
+      }),
+    });
+
+    if (!silentResponse.ok) {
+      throw new Error(`HTTP error! status: ${silentResponse.status}`);
+    }
+
+    const silentResponseData = await silentResponse.json();
+    logger.debug('Silent stream response:', silentResponseData);
+
+    if (silentResponseData.status === 'started') {
+      logger.debug('Silent stream started successfully');
+    } else {
+      logger.warn('Unexpected response status for silent stream:', silentResponseData.status);
+    }
+  } catch (error) {
+    logger.error('Error starting silent stream:', error);
   }
 }
 
@@ -2123,7 +2180,6 @@ async function startRecording() {
       interim_results: true,
       utterance_end_ms: 2500,
       punctuate: true,
-      // endpointing: 300,
       vad_events: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate
@@ -2136,6 +2192,8 @@ async function startRecording() {
     deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
       logger.debug('Deepgram WebSocket Connection opened');
       startSendingAudioData();
+      // Start the silent stream when recording begins
+      startSilentStream();
     });
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Close, () => {
