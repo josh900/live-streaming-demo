@@ -38,30 +38,24 @@ let interimMessageAdded = false;
 let autoSpeakMode = true;
 let transitionCanvas;
 let transitionCtx;
-let transitionAnimationFrame;
 let isDebugMode = false;
 let isTransitioning = false;
 let lastVideoStatus = null;
 let isCurrentlyStreaming = false;
-let reconnectAttempts = 10;
-let isReconnecting = false;
 let persistentStreamId = null;
 let persistentSessionId = null;
 let isPersistentStreamActive = false;
-let keepAliveFailureCount = 0;
-const API_RATE_LIMIT = 30; // Maximum number of calls per minute
-const API_CALL_INTERVAL = 40000 / API_RATE_LIMIT; // Minimum time between API calls in milliseconds
-let lastApiCallTime = 0;
-let keepAliveTimeout;
-const MAX_KEEPALIVE_FAILURES = 10;
-const KEEPALIVE_INTERVAL = 30000; // 30 seconds
-const maxRetryCount = 10;
-const maxDelaySec = 90;
-const RECONNECTION_INTERVAL = 90000; // 25 seconds for testing, adjust as needed
-let isAvatarSpeaking = false;
-const MAX_RECONNECT_ATTEMPTS = 10;
-const INITIAL_RECONNECT_DELAY = 4000; // 1 second
-const MAX_RECONNECT_DELAY = 90000; // 30 seconds
+
+let reconnectAttempts = 10; // Number of reconnection attempts made
+const API_RATE_LIMIT = 40; // Maximum number of API calls allowed per minute
+const API_CALL_INTERVAL = 30000 / API_RATE_LIMIT; // Minimum time between API calls in milliseconds
+let lastApiCallTime = 0; // Timestamp of the last API call made
+const maxRetryCount = 10; // Maximum number of retry attempts for failed operations
+const maxDelaySec = 15; // Maximum delay in seconds between retry attempts
+const RECONNECTION_INTERVAL = 107500; // Interval in milliseconds before attempting a reconnection
+const MAX_RECONNECT_ATTEMPTS = 10; // Maximum number of reconnection attempts before giving up
+const INITIAL_RECONNECT_DELAY = 1750; // Initial delay in milliseconds before the first reconnection attempt
+const MAX_RECONNECT_DELAY = 15000; // Maximum delay in milliseconds between reconnection attempts
 
 const ConnectionState = {
   DISCONNECTED: 'disconnected',
@@ -671,8 +665,9 @@ async function initializePersistentStream() {
           stitch: true,
           fluent: true,
           auto_match: true,
-          pad_audio: 0.0,
+          pad_audio: 0.5,
           normalization_factor: 0.1,
+          motion_factor: 0.5,
           align_driver: true,
           align_expand_factor: 0.3,
           driver_expressions: {
@@ -680,7 +675,7 @@ async function initializePersistentStream() {
               {
                 start_frame: 0,
                 expression: "neutral",
-                intensity: 1
+                intensity: 0.5
               }
             ]
           }
@@ -836,7 +831,8 @@ async function createNewPersistentStream() {
           stitch: true,
           fluent: true,
           auto_match: true,
-          pad_audio: 0.0,
+          pad_audio: 0.5,
+          motion_factor: 0.5,
           normalization_factor: 0.1,
           align_driver: true,
           align_expand_factor: 0.3,
@@ -845,7 +841,7 @@ async function createNewPersistentStream() {
               {
                 start_frame: 0,
                 expression: "neutral",
-                intensity: 1
+                intensity: 0.5
               }
             ]
           }
@@ -911,100 +907,6 @@ async function backgroundReconnect() {
 }
 
 
-function waitForIdleState() {
-  return new Promise((resolve) => {
-    const checkIdleState = () => {
-      if (!isAvatarSpeaking) {
-        resolve();
-      } else {
-        setTimeout(checkIdleState, 500); // Check every 500ms
-      }
-    };
-    checkIdleState();
-  });
-}
-
-async function switchToNewStream(newStreamData) {
-  logger.debug('Switching to new stream...');
-
-  try {
-    connectionState = ConnectionState.RECONNECTING;
-
-    // Quickly switch the video source to the new stream
-    if (streamVideoElement) {
-      // Instead of directly setting src, we need to update the WebRTC connection
-      await updateWebRTCConnection(newStreamData);
-    }
-
-    // Update global variables
-    persistentStreamId = newStreamData.streamId;
-    persistentSessionId = newStreamData.sessionId;
-
-    // Clean up the old stream
-    await cleanupOldStream();
-
-    connectionState = ConnectionState.CONNECTED;
-    logger.debug('Successfully switched to new stream');
-  } catch (error) {
-    logger.error('Error switching to new stream:', error);
-    connectionState = ConnectionState.DISCONNECTED;
-    throw error;
-  }
-}
-
-async function updateWebRTCConnection(newStreamData) {
-  logger.debug('Updating WebRTC connection...');
-
-  try {
-    const offer = await fetchStreamOffer(newStreamData.streamId);
-    const iceServers = await fetchIceServers();
-
-    const newSessionClientAnswer = await createPeerConnection(offer, iceServers);
-
-    await sendSDPAnswer(newStreamData.streamId, newStreamData.sessionId, newSessionClientAnswer);
-
-    logger.debug('WebRTC connection updated successfully');
-  } catch (error) {
-    logger.error('Error updating WebRTC connection:', error);
-    throw error;
-  }
-}
-
-async function fetchStreamOffer(streamId) {
-  const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/offer`, {
-    method: 'GET',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-    },
-  });
-  const data = await response.json();
-  return data.offer;
-}
-
-async function fetchIceServers() {
-  const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/ice_servers`, {
-    method: 'GET',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-    },
-  });
-  const data = await response.json();
-  return data.ice_servers;
-}
-
-async function sendSDPAnswer(streamId, sessionId, answer) {
-  await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      answer,
-      session_id: sessionId,
-    }),
-  });
-}
 
 async function initialize() {
   setLogLevel('DEBUG');
@@ -1640,7 +1542,7 @@ function onTrack(event) {
     } else {
       logger.debug('Peer connection not ready for stats.');
     }
-  }, 250);  // Check every 500ms
+  }, 300);  // Check every 300ms
 
   if (event.streams && event.streams.length > 0) {
     const stream = event.streams[0];
@@ -1783,7 +1685,8 @@ async function initializeConnection() {
           stitch: true,
           fluent: true,
           auto_match: true,
-          pad_audio: 0.0,
+          motion_factor: 0.5,
+          pad_audio: 0.5,
           normalization_factor: 0.1,
           align_driver: true,
           align_expand_factor: 0.3,
@@ -1792,7 +1695,7 @@ async function initializeConnection() {
               {
                 start_frame: 0,
                 expression: "neutral",
-                intensity: 1
+                intensity: 0.5
               }
             ]
           }
@@ -1894,11 +1797,21 @@ async function startStreaming(assistantReply) {
           config: {
             fluent: true,
             stitch: true,
-            pad_audio: 0.0,
+            pad_audio: 0.5,
             align_driver: true,
             align_expand_factor: 0.3,
-            motion_factor: 0.7,
+            motion_factor: 0.5,
             result_format: "mp4",
+            normalization_factor: 0.1,
+            driver_expressions: {
+              expressions: [
+                {
+                  start_frame: 0,
+                  expression: "neutral",
+                  intensity: 0.5
+                }
+              ]
+            }
           },
           session_id: persistentSessionId,
           driver_url: "bank://lively/driver-06",
