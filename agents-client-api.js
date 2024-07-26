@@ -482,18 +482,23 @@ function initializeTransitionCanvas() {
 
 
 
-function smoothTransition(toStreaming, duration = 250, newVideoSrc = null) {
+function smoothTransition(toStreaming, duration = 250) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
-  const preloadVideoElement = document.getElementById('preload-video-element');
 
-  if (!idleVideoElement || !streamVideoElement || !preloadVideoElement) {
+  if (!idleVideoElement || !streamVideoElement) {
     logger.warn('Video elements not found for transition');
     return;
   }
 
   if (isTransitioning) {
     logger.debug('Transition already in progress, skipping');
+    return;
+  }
+
+  // Don't transition if we're already in the desired state
+  if ((toStreaming && isCurrentlyStreaming) || (!toStreaming && !isCurrentlyStreaming)) {
+    logger.debug('Already in desired state, skipping transition');
     return;
   }
 
@@ -507,62 +512,31 @@ function smoothTransition(toStreaming, duration = 250, newVideoSrc = null) {
     const elapsed = currentTime - startTime;
     const progress = Math.min(elapsed / duration, 1);
 
-    if (!transitionCtx) {
-      logger.error('Transition context not found');
-      isTransitioning = false;
-      return;
-    }
-
-    transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
-
-    try {
-      if (toStreaming) {
-        transitionCtx.globalAlpha = 1;
-        transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-
-        transitionCtx.globalAlpha = progress;
-        transitionCtx.drawImage(preloadVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-      } else {
-        transitionCtx.globalAlpha = 1;
-        transitionCtx.drawImage(streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-
-        transitionCtx.globalAlpha = progress;
-        transitionCtx.drawImage(idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-      }
-
-      // Update the opacity of the video elements
-      preloadVideoElement.style.opacity = toStreaming ? progress.toString() : (1 - progress).toString();
-      idleVideoElement.style.opacity = toStreaming ? (1 - progress).toString() : progress.toString();
-
-    } catch (error) {
-      logger.error('Error during transition animation:', error);
-      isTransitioning = false;
-      return;
+    if (toStreaming) {
+      streamVideoElement.style.opacity = progress.toString();
+      idleVideoElement.style.opacity = (1 - progress).toString();
+    } else {
+      streamVideoElement.style.opacity = (1 - progress).toString();
+      idleVideoElement.style.opacity = progress.toString();
     }
 
     if (progress < 1) {
       transitionAnimationFrame = requestAnimationFrame(animate);
     } else {
       cancelAnimationFrame(transitionAnimationFrame);
-      transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
       logger.debug('Smooth transition completed');
       isTransitioning = false;
       isCurrentlyStreaming = toStreaming;
 
       // Ensure final state is set correctly
       if (toStreaming) {
-        preloadVideoElement.style.opacity = '1';
-        preloadVideoElement.style.display = 'block';
-        idleVideoElement.style.opacity = '0';
-        idleVideoElement.style.display = 'none';
-        streamVideoElement.src = newVideoSrc;
         streamVideoElement.style.opacity = '1';
         streamVideoElement.style.display = 'block';
+        idleVideoElement.style.opacity = '0';
+        idleVideoElement.style.display = 'none';
       } else {
         streamVideoElement.style.opacity = '0';
         streamVideoElement.style.display = 'none';
-        preloadVideoElement.style.opacity = '0';
-        preloadVideoElement.style.display = 'none';
         idleVideoElement.style.opacity = '1';
         idleVideoElement.style.display = 'block';
       }
@@ -916,9 +890,6 @@ async function backgroundReconnect() {
   logger.debug('Starting background reconnection process...');
 
   try {
-    // Ensure we switch back to the idle video
-    smoothTransition(false);
-    
     // Destroy the current stream before creating a new one
     await destroyPersistentStream();
     
@@ -935,9 +906,6 @@ async function backgroundReconnect() {
     connectionState = ConnectionState.DISCONNECTED;
     // If background reconnection fails, schedule another attempt
     scheduleReconnect();
-  } finally {
-    // Ensure the idle video is playing
-    playIdleVideo();
   }
 }
 
@@ -1872,9 +1840,8 @@ async function startStreaming(assistantReply) {
 
     const streamVideoElement = document.getElementById('stream-video-element');
     const idleVideoElement = document.getElementById('idle-video-element');
-    const preloadVideoElement = document.getElementById('preload-video-element');
 
-    if (!streamVideoElement || !idleVideoElement || !preloadVideoElement) {
+    if (!streamVideoElement || !idleVideoElement) {
       logger.error('Video elements not found');
       return;
     }
@@ -1928,14 +1895,14 @@ async function startStreaming(assistantReply) {
         logger.debug('Stream chunk started successfully');
 
         if (playResponseData.result_url) {
-          // Preload the new video
-          preloadVideoElement.src = playResponseData.result_url;
+          // Wait for the video to be ready before transitioning
           await new Promise((resolve) => {
-            preloadVideoElement.oncanplay = resolve;
+            streamVideoElement.src = playResponseData.result_url;
+            streamVideoElement.oncanplay = resolve;
           });
 
           // Perform the transition
-          smoothTransition(true, 250, playResponseData.result_url);
+          smoothTransition(true);
 
           await new Promise(resolve => {
             streamVideoElement.onended = resolve;
