@@ -45,6 +45,12 @@ let isCurrentlyStreaming = false;
 let persistentStreamId = null;
 let persistentSessionId = null;
 let isPersistentStreamActive = false;
+let transitionAnimationFrame;
+let isReconnecting = false;
+let keepAliveFailureCount = 0;
+let keepAliveTimeout;
+const MAX_KEEPALIVE_FAILURES = 10;
+const KEEPALIVE_INTERVAL = 30000; // 30 seconds
 
 let reconnectAttempts = 10;
 const API_RATE_LIMIT = 40; // Maximum number of calls per minute
@@ -1899,7 +1905,16 @@ async function startStreaming(assistantReply) {
             motion_factor: 0.5,
             result_format: "mp4",
             align_expand_factor: 0.3,
-            align_driver: true
+            align_driver: true,
+            driver_expressions: {
+              expressions: [
+                {
+                  start_frame: 0,
+                  expression: "neutral",
+                  intensity: 0.5
+                }
+              ]
+            }
           },
           session_id: persistentSessionId,
           driver_url: "bank://lively/driver-06",
