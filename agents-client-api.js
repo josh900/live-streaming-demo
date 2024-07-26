@@ -479,8 +479,9 @@ function initializeTransitionCanvas() {
     transitionCanvas.width = size;
     transitionCanvas.height = size;
   });
-}
 
+
+}
 
 
 
@@ -515,39 +516,39 @@ function smoothTransition(toStreaming, duration = 250) {
     const elapsed = currentTime - startTime;
     const progress = Math.min(elapsed / duration, 1);
 
-    transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
-    
-    // Draw the fading out video
-    transitionCtx.globalAlpha = 1 - progress;
-    transitionCtx.drawImage(toStreaming ? idleVideoElement : streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-    
-    // Draw the fading in video
-    transitionCtx.globalAlpha = progress;
-    transitionCtx.drawImage(toStreaming ? streamVideoElement : idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+    if (toStreaming) {
+      streamVideoElement.style.opacity = progress.toString();
+      idleVideoElement.style.opacity = (1 - progress).toString();
+    } else {
+      streamVideoElement.style.opacity = (1 - progress).toString();
+      idleVideoElement.style.opacity = progress.toString();
+    }
 
     if (progress < 1) {
-      requestAnimationFrame(animate);
+      transitionAnimationFrame = requestAnimationFrame(animate);
     } else {
-      // Ensure final state is set correctly
-      if (toStreaming) {
-        streamVideoElement.style.display = 'block';
-        idleVideoElement.style.display = 'none';
-      } else {
-        streamVideoElement.style.display = 'none';
-        idleVideoElement.style.display = 'block';
-      }
+      cancelAnimationFrame(transitionAnimationFrame);
+      logger.debug('Smooth transition completed');
       isTransitioning = false;
       isCurrentlyStreaming = toStreaming;
-      transitionCanvas.style.display = 'none';
-      logger.debug('Smooth transition completed');
+
+      // Ensure final state is set correctly
+      if (toStreaming) {
+        streamVideoElement.style.opacity = '1';
+        streamVideoElement.style.display = 'block';
+        idleVideoElement.style.opacity = '0';
+        idleVideoElement.style.display = 'none';
+      } else {
+        streamVideoElement.style.opacity = '0';
+        streamVideoElement.style.display = 'none';
+        idleVideoElement.style.opacity = '1';
+        idleVideoElement.style.display = 'block';
+      }
     }
   }
 
-  // Show the transition canvas
-  transitionCanvas.style.display = 'block';
-  
-  // Start the animation
-  requestAnimationFrame(animate);
+  cancelAnimationFrame(transitionAnimationFrame);
+  transitionAnimationFrame = requestAnimationFrame(animate);
 }
 
 function getVideoElements() {
@@ -1505,6 +1506,7 @@ function onVideoStatusChange(videoIsPlaying, stream) {
 
   if (status === 'streaming') {
     setStreamVideoElement(stream);
+    smoothTransition(true);
   } else {
     smoothTransition(false);
   }
@@ -1534,12 +1536,12 @@ function setStreamVideoElement(stream) {
     logger.warn('Invalid stream provided to setStreamVideoElement');
     return;
   }
+  streamVideoElement.style.opacity = '0';
 
   streamVideoElement.onloadedmetadata = () => {
     logger.debug('Stream video metadata loaded');
     streamVideoElement.play().then(() => {
       logger.debug('Stream video playback started');
-      smoothTransition(true);
     }).catch(e => logger.error('Error playing stream video:', e));
   };
 
@@ -1551,7 +1553,6 @@ function setStreamVideoElement(stream) {
     logger.error('Error with stream video:', e);
   };
 }
-
 
 function onStreamEvent(message) {
   if (pcDataChannel.readyState === 'open') {
