@@ -647,7 +647,6 @@ function handleTextInput(text) {
   sendChatToGroq();
 }
 
-
 function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
 }
@@ -2178,99 +2177,6 @@ async function startRecording() {
   }
 }
 
-async function startRecording() {
-  if (isRecording) {
-    logger.warn('Recording is already in progress. Stopping current recording.');
-    await stopRecording();
-    return;
-  }
-
-  logger.debug('Starting recording process...');
-
-  currentUtterance = '';
-  interimMessageAdded = false;
-
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    logger.info('Microphone stream obtained');
-
-    audioContext = new AudioContext();
-    logger.debug('Audio context created. Sample rate:', audioContext.sampleRate);
-
-    await audioContext.audioWorklet.addModule('audio-processor.js');
-    logger.debug('Audio worklet module added successfully');
-
-    const source = audioContext.createMediaStreamSource(stream);
-    logger.debug('Media stream source created');
-
-    audioWorkletNode = new AudioWorkletNode(audioContext, 'audio-processor');
-    logger.debug('Audio worklet node created');
-
-    source.connect(audioWorkletNode);
-    logger.debug('Media stream source connected to audio worklet node');
-
-    const deepgramOptions = {
-      model: "nova-2",
-      language: "en-US",
-      smart_format: true,
-      interim_results: true,
-      utterance_end_ms: 2500,
-      punctuate: true,
-      // endpointing: 300,
-      vad_events: true,
-      encoding: "linear16",
-      sample_rate: audioContext.sampleRate
-    };
-
-    logger.debug('Creating Deepgram connection with options:', deepgramOptions);
-
-    deepgramConnection = await deepgramClient.listen.live(deepgramOptions);
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
-      logger.debug('Deepgram WebSocket Connection opened');
-      startSendingAudioData();
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Close, () => {
-      logger.debug('Deepgram WebSocket connection closed');
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
-      logger.debug('Received transcription:', JSON.stringify(data));
-      handleTranscription(data);
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.UtteranceEnd, (data) => {
-      logger.debug('Utterance end event received:', data);
-      handleUtteranceEnd(data);
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
-      logger.error('Deepgram error:', err);
-      handleDeepgramError(err);
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Warning, (warning) => {
-      logger.warn('Deepgram warning:', warning);
-    });
-
-    isRecording = true;
-    if (autoSpeakMode) {
-      autoSpeakInProgress = true;
-    }
-    const startButton = document.getElementById('start-button');
-    startButton.textContent = 'Stop';
-
-    logger.debug('Recording and transcription started successfully');
-  } catch (error) {
-    logger.error('Error starting recording:', error);
-    isRecording = false;
-    const startButton = document.getElementById('start-button');
-    startButton.textContent = 'Speak';
-    showErrorMessage('Failed to start recording. Please try again.');
-    throw error;
-  }
-}
 
 function handleDeepgramError(err) {
   logger.error('Deepgram error:', err);
