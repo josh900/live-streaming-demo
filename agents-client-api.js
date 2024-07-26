@@ -58,9 +58,6 @@ const INITIAL_RECONNECT_DELAY = 2000; // 1 second
 const MAX_RECONNECT_DELAY = 90000; // 30 seconds
 let autoSpeakInProgress = false;
 
-let transitionInProgress = false;
-const transitionDuration = 500; // ms
-
 
 const ConnectionState = {
   DISCONNECTED: 'disconnected',
@@ -484,41 +481,28 @@ function initializeTransitionCanvas() {
 
 
 
-async function smoothTransition(toStreaming, duration = transitionDuration) {
-  if (transitionInProgress) {
-    logger.debug('Transition already in progress, queueing next transition');
-    setTimeout(() => smoothTransition(toStreaming, duration), 100);
-    return;
-  }
-
-  transitionInProgress = true;
+function smoothTransition(toStreaming, duration = 250) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
 
   if (!idleVideoElement || !streamVideoElement) {
     logger.warn('Video elements not found for transition');
-    transitionInProgress = false;
     return;
   }
 
+  if (isTransitioning) {
+    logger.debug('Transition already in progress, skipping');
+    return;
+  }
+
+  // Don't transition if we're already in the desired state
   if ((toStreaming && isCurrentlyStreaming) || (!toStreaming && !isCurrentlyStreaming)) {
     logger.debug('Already in desired state, skipping transition');
-    transitionInProgress = false;
     return;
   }
 
+  isTransitioning = true;
   logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
-
-  // Ensure video is loaded before transitioning
-  if (toStreaming) {
-    await new Promise(resolve => {
-      if (streamVideoElement.readyState >= 3) {
-        resolve();
-      } else {
-        streamVideoElement.oncanplay = resolve;
-      }
-    });
-  }
 
   let startTime = null;
 
@@ -540,6 +524,7 @@ async function smoothTransition(toStreaming, duration = transitionDuration) {
     if (progress < 1) {
       requestAnimationFrame(animate);
     } else {
+      // Ensure final state is set correctly
       if (toStreaming) {
         streamVideoElement.style.display = 'block';
         idleVideoElement.style.display = 'none';
@@ -547,25 +532,19 @@ async function smoothTransition(toStreaming, duration = transitionDuration) {
         streamVideoElement.style.display = 'none';
         idleVideoElement.style.display = 'block';
       }
+      isTransitioning = false;
       isCurrentlyStreaming = toStreaming;
       transitionCanvas.style.display = 'none';
-      transitionInProgress = false;
       logger.debug('Smooth transition completed');
     }
   }
 
+  // Show the transition canvas
   transitionCanvas.style.display = 'block';
+  
+  // Start the animation
   requestAnimationFrame(animate);
 }
-
-
-function shouldReconnect() {
-  const currentTime = Date.now();
-  const timeSinceLastConnection = currentTime - lastConnectionTime;
-  return timeSinceLastConnection > RECONNECTION_INTERVAL * 0.9;
-}
-
-
 
 function getVideoElements() {
   const idle = document.getElementById('idle-video-element');
@@ -2046,26 +2025,34 @@ async function startStreaming(assistantReply) {
       const playResponseData = await playResponse.json();
       logger.debug('Streaming response:', playResponseData);
 
-      if (playResponseData.status === 'started' && playResponseData.result_url) {
+      if (playResponseData.status === 'started') {
         logger.debug('Stream chunk started successfully');
-        await new Promise((resolve) => {
-          streamVideoElement.src = playResponseData.result_url;
-          streamVideoElement.oncanplay = () => {
-            smoothTransition(true);
-            resolve();
-          };
-        });
 
-        await new Promise(resolve => {
-          streamVideoElement.onended = resolve;
-        });
+        if (playResponseData.result_url) {
+          // Preload the video
+          const preloadVideo = document.createElement('video');
+          preloadVideo.src = playResponseData.result_url;
+          preloadVideo.load();
+
+          preloadVideo.oncanplay = () => {
+            logger.debug('Video preloaded and ready to play');
+            streamVideoElement.src = playResponseData.result_url;
+            smoothTransition(true);
+          };
+
+          await new Promise(resolve => {
+            streamVideoElement.onended = resolve;
+          });
+        } else {
+          logger.debug('No result_url in playResponseData. Waiting for next chunk.');
+        }
       } else {
-        logger.warn('Unexpected response status or missing result_url:', playResponseData.status);
+        logger.warn('Unexpected response status:', playResponseData.status);
       }
     }
 
     isAvatarSpeaking = false;
-    await smoothTransition(false);
+    smoothTransition(false);
 
     if (shouldReconnect()) {
       logger.info('Approaching reconnection threshold. Initiating background reconnect.');
