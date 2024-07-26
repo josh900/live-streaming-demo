@@ -1590,7 +1590,7 @@ function onTrack(event) {
             //  lastBytesReceived,
             //  videoIsPlaying,
             //  videoStatusChanged
-            });
+            // });
 
             if (videoStatusChanged) {
               videoIsPlaying = report.bytesReceived > lastBytesReceived;
