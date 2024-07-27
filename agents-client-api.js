@@ -481,7 +481,6 @@ function initializeTransitionCanvas() {
 
 
 
-
 function smoothTransition(toStreaming, duration = 250) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
@@ -529,11 +528,9 @@ function smoothTransition(toStreaming, duration = 250) {
       if (toStreaming) {
         streamVideoElement.style.display = 'block';
         idleVideoElement.style.display = 'none';
-        streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
       } else {
         streamVideoElement.style.display = 'none';
         idleVideoElement.style.display = 'block';
-        idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e));
       }
       isTransitioning = false;
       isCurrentlyStreaming = toStreaming;
@@ -548,62 +545,6 @@ function smoothTransition(toStreaming, duration = 250) {
   // Start the animation
   requestAnimationFrame(animate);
 }
-
-
-async function finishStreaming() {
-  logger.debug('Finishing streaming...');
-  if (!persistentStreamId || !persistentSessionId) {
-    logger.warn('No persistent stream to finish');
-    return;
-  }
-
-  try {
-    const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: '<break time="1000ms"/>',
-          ssml: true,
-        },
-        driver_url: "bank://lively/driver-06",
-        config: {
-          stitch: true,
-          fluent: true,
-          pad_audio: 0,
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: "neutral",
-                intensity: 0.5
-              }
-            ]
-          }
-        },
-        session_id: persistentSessionId,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to finish streaming: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    logger.debug('Streaming finished successfully:', data);
-
-    // Transition back to idle video
-    smoothTransition(false);
-
-  } catch (error) {
-    logger.error('Error finishing streaming:', error);
-  }
-}
-
 
 function getVideoElements() {
   const idle = document.getElementById('idle-video-element');
@@ -687,7 +628,7 @@ function updateTranscript(text, isFinal) {
   msgHistory.scrollTop = msgHistory.scrollHeight;
 }
 
-async function handleTextInput(text) {
+function handleTextInput(text) {
   if (text.trim() === '') return;
 
   const textInput = document.getElementById('text-input');
@@ -700,10 +641,6 @@ async function handleTextInput(text) {
     content: text,
   });
 
-  // Prepare the stream early
-  prepareStreamEarly();
-
-  // Send chat to Groq immediately
   sendChatToGroq();
 }
 
@@ -2148,7 +2085,6 @@ function handleTranscription(data) {
   }
 }
 
-
 async function startRecording() {
   if (isRecording) {
     logger.warn('Recording is already in progress. Stopping current recording.');
@@ -2162,9 +2098,6 @@ async function startRecording() {
   interimMessageAdded = false;
 
   try {
-    // Start preparing the stream early
-    prepareStreamEarly();
-
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     logger.info('Microphone stream obtained');
 
@@ -2190,6 +2123,7 @@ async function startRecording() {
       interim_results: true,
       utterance_end_ms: 2500,
       punctuate: true,
+      // endpointing: 300,
       vad_events: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate
@@ -2242,57 +2176,6 @@ async function startRecording() {
     startButton.textContent = 'Speak';
     showErrorMessage('Failed to start recording. Please try again.');
     throw error;
-  }
-}
-
-async function prepareStreamEarly() {
-  logger.debug('Preparing stream early...');
-  try {
-    if (!persistentStreamId || !persistentSessionId) {
-      logger.debug('No persistent stream available. Initializing new stream...');
-      await initializePersistentStream();
-    }
-
-    logger.debug('Sending silent audio to warm up the stream...');
-    const silentAudio = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: '<break time="5000ms"/>',
-          ssml: true,
-        },
-        driver_url: "bank://lively/driver-06",
-        config: {
-          stitch: true,
-          fluent: true,
-          pad_audio: 0,
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: "neutral",
-                intensity: 0.5
-              }
-            ]
-          }
-        },
-        session_id: persistentSessionId,
-      }),
-    });
-
-    if (!silentAudio.ok) {
-      throw new Error(`Failed to send silent audio: ${silentAudio.status} ${silentAudio.statusText}`);
-    }
-
-    logger.debug('Silent audio sent successfully. Stream is warmed up and ready.');
-  } catch (error) {
-    logger.error('Error in prepareStreamEarly:', error);
-    // Don't throw the error here, as we want to continue with the recording process
   }
 }
 
@@ -2426,11 +2309,6 @@ async function sendChatToGroq() {
               assistantReply += content;
               assistantSpan.innerHTML += content;
               logger.debug('Parsed content:', content);
-
-              // Send chunk to D-ID as soon as we have some content
-              if (assistantReply.trim().length > 0) {
-                await sendStreamingChunk(assistantReply);
-              }
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
@@ -2452,8 +2330,8 @@ async function sendChatToGroq() {
 
     logger.debug('Assistant reply:', assistantReply);
 
-    // Ensure the stream is properly closed
-    await finishStreaming();
+    // Start streaming the entire response
+    await startStreaming(assistantReply);
 
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
@@ -2462,81 +2340,6 @@ async function sendChatToGroq() {
     msgHistory.scrollTop = msgHistory.scrollHeight;
   }
 }
-
-
-async function sendStreamingChunk(content) {
-  logger.debug('Sending streaming chunk:', content);
-  if (!persistentStreamId || !persistentSessionId) {
-    logger.error('No persistent stream available. Cannot send chunk.');
-    return;
-  }
-
-  try {
-    const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: content,
-          ssml: true,
-        },
-        driver_url: "bank://lively/driver-06",
-        config: {
-          stitch: true,
-          fluent: true,
-          pad_audio: 0,
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: "neutral",
-                intensity: 0.5
-              }
-            ]
-          }
-        },
-        session_id: persistentSessionId,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to send streaming chunk: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    logger.debug('Streaming chunk sent successfully:', data);
-
-    // Update the video element with the new chunk
-    updateStreamingVideo(data.result_url);
-  } catch (error) {
-    logger.error('Error sending streaming chunk:', error);
-  }
-}
-
-
-function updateStreamingVideo(resultUrl) {
-  logger.debug('Updating streaming video with URL:', resultUrl);
-  const streamVideoElement = document.getElementById('stream-video-element');
-  if (!streamVideoElement) {
-    logger.error('Stream video element not found');
-    return;
-  }
-
-  streamVideoElement.src = resultUrl;
-  streamVideoElement.oncanplay = () => {
-    logger.debug('New video chunk can play, transitioning...');
-    smoothTransition(true);
-  };
-  streamVideoElement.onerror = (error) => {
-    logger.error('Error loading new video chunk:', error);
-  };
-}
-
-
 
 function toggleAutoSpeak() {
   autoSpeakMode = !autoSpeakMode;
