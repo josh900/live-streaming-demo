@@ -661,11 +661,13 @@ async function handleTextInput(text) {
     content: text,
   });
 
-  // Start the D-ID stream with silent video
+  // Start the silent video immediately
   await startSilentStream();
 
-  sendChatToGroq();
+  // Send chat to Groq
+  await sendChatToGroq();
 }
+
 
 async function startSilentStream() {
   logger.debug('Starting silent stream...');
@@ -2266,7 +2268,7 @@ async function startRecording() {
     const startButton = document.getElementById('start-button');
     startButton.textContent = 'Stop';
 
-    // Start the D-ID stream with silent video
+    // Start the silent video immediately
     await startSilentStream();
 
     logger.debug('Recording and transcription started successfully');
@@ -2389,7 +2391,7 @@ async function sendChatToGroq() {
     msgHistory.appendChild(document.createElement('br'));
 
     let accumulatedContent = '';
-    const contentThreshold = 50; // Number of characters to accumulate before sending to D-ID
+    const contentThreshold = 10; // Reduced threshold for more frequent updates
 
     while (!done) {
       const { value, done: readerDone } = await reader.read();
@@ -2454,6 +2456,12 @@ async function sendChatToGroq() {
     const msgHistory = document.getElementById('msgHistory');
     msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
     msgHistory.scrollTop = msgHistory.scrollHeight;
+
+    // End the streaming session in case of an error
+    await endStreaming();
+  } finally {
+    // Reset any UI elements or states as needed
+    isAvatarSpeaking = false;
   }
 }
 
@@ -2531,6 +2539,7 @@ async function updateStreamingContent(content) {
 
 
 
+
 function debouncedStateChange(toStreaming) {
   clearTimeout(stateChangeTimeout);
   stateChangeTimeout = setTimeout(() => {
@@ -2554,18 +2563,14 @@ async function updateVideoSource(resultUrl) {
 
     // Wait for the video to be ready before transitioning
     await new Promise((resolve) => {
-      const checkReady = () => {
-        if (streamVideoElement.readyState >= 3) {
-          resolve();
-        } else {
-          setTimeout(checkReady, 100);
-        }
-      };
-      checkReady();
+      streamVideoElement.oncanplay = resolve;
     });
 
-    // Perform the transition
-    debouncedStateChange(true);
+    // Perform the transition only if not already streaming
+    if (!isCurrentlyStreaming) {
+      smoothTransition(true);
+      isCurrentlyStreaming = true;
+    }
   }
 }
 
@@ -2631,6 +2636,7 @@ async function endStreaming() {
       logger.debug('Streaming session ended successfully');
       await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for the break to finish
       smoothTransition(false);
+      isCurrentlyStreaming = false;
     } else {
       logger.warn('Unexpected response status for stream end:', endResponseData.status);
     }
@@ -2638,6 +2644,7 @@ async function endStreaming() {
     logger.error('Error ending streaming session:', error);
   }
 }
+
 
 
 
