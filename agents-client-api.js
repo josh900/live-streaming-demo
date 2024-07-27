@@ -661,10 +661,9 @@ async function handleTextInput(text) {
     content: text,
   });
 
-  // Start the silent video immediately
+  // Start the D-ID stream with silent video
   await startSilentStream();
 
-  // Send chat to Groq in parallel
   sendChatToGroq();
 }
 
@@ -686,7 +685,7 @@ async function startSilentStream() {
       body: JSON.stringify({
         script: {
           type: 'text',
-          input: '<break time="300000ms"/>', // Increased to 5 minutes
+          input: '<break time="5000ms"/>',
           ssml: true,
           provider: {
             type: 'microsoft',
@@ -728,17 +727,21 @@ async function startSilentStream() {
 
     if (silentResponseData.status === 'started') {
       logger.debug('Silent stream started successfully');
-      if (silentResponseData.result_url) {
-        await updateVideoSource(silentResponseData.result_url);
-        smoothTransition(true);
-      }
+      // Wait for a short period to ensure the stream is ready
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      debouncedStateChange(true);
     } else {
       logger.warn('Unexpected response status for silent stream:', silentResponseData.status);
+    }
+
+    if (silentResponseData.result_url) {
+      await updateVideoSource(silentResponseData.result_url);
     }
   } catch (error) {
     logger.error('Error starting silent stream:', error);
   }
 }
+
 
 function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
@@ -2194,9 +2197,6 @@ async function startRecording() {
   interimMessageAdded = false;
 
   try {
-    // Start the silent video immediately
-    await startSilentStream();
-
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     logger.info('Microphone stream obtained');
 
@@ -2266,6 +2266,9 @@ async function startRecording() {
     const startButton = document.getElementById('start-button');
     startButton.textContent = 'Stop';
 
+    // Start the D-ID stream with silent video
+    await startSilentStream();
+
     logger.debug('Recording and transcription started successfully');
   } catch (error) {
     logger.error('Error starting recording:', error);
@@ -2276,6 +2279,7 @@ async function startRecording() {
     throw error;
   }
 }
+
 
 function handleDeepgramError(err) {
   logger.error('Deepgram error:', err);
@@ -2385,7 +2389,7 @@ async function sendChatToGroq() {
     msgHistory.appendChild(document.createElement('br'));
 
     let accumulatedContent = '';
-    const contentThreshold = 10; // Reduced threshold for more frequent updates
+    const contentThreshold = 50; // Number of characters to accumulate before sending to D-ID
 
     while (!done) {
       const { value, done: readerDone } = await reader.read();
@@ -2453,6 +2457,7 @@ async function sendChatToGroq() {
   }
 }
 
+
 async function updateStreamingContent(content) {
   logger.debug('Updating streaming content:', content);
 
@@ -2515,7 +2520,6 @@ async function updateStreamingContent(content) {
       logger.debug('Stream content updated successfully');
       if (updateResponseData.result_url) {
         await updateVideoSource(updateResponseData.result_url);
-        smoothTransition(true);
       }
     } else {
       logger.warn('Unexpected response status for stream update:', updateResponseData.status);
@@ -2524,6 +2528,7 @@ async function updateStreamingContent(content) {
     logger.error('Error updating streaming content:', error);
   }
 }
+
 
 
 function debouncedStateChange(toStreaming) {
