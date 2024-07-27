@@ -628,7 +628,7 @@ function updateTranscript(text, isFinal) {
   msgHistory.scrollTop = msgHistory.scrollHeight;
 }
 
-async function handleTextInput(text) {
+function handleTextInput(text) {
   if (text.trim() === '') return;
 
   const textInput = document.getElementById('text-input');
@@ -641,82 +641,7 @@ async function handleTextInput(text) {
     content: text,
   });
 
-  // Start preparing the stream early
-  prepareStreamEarly();
-
   sendChatToGroq();
-}
-
-async function prepareStreamEarly() {
-  logger.debug('Preparing stream early...');
-  
-  if (!persistentStreamId || !persistentSessionId) {
-    logger.debug('Persistent stream not initialized. Initializing now...');
-    try {
-      await initializePersistentStream();
-    } catch (error) {
-      logger.error('Error initializing persistent stream:', error);
-      return;
-    }
-  }
-
-  if (!currentAvatar || !avatars[currentAvatar]) {
-    logger.error('No avatar selected or avatar not found. Cannot prepare stream.');
-    return;
-  }
-
-  const streamVideoElement = document.getElementById('stream-video-element');
-  const idleVideoElement = document.getElementById('idle-video-element');
-
-  if (!streamVideoElement || !idleVideoElement) {
-    logger.error('Video elements not found');
-    return;
-  }
-
-  // Prepare silent video
-  try {
-    const silentResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: '<break time="5000ms"/>',
-          provider: {
-            type: 'microsoft',
-            voice_id: avatars[currentAvatar].voiceId,
-          },
-        },
-        config: {
-          fluent: true,
-          pad_audio: 0,
-          stitch: true,
-          ssml: true,
-        },
-        session_id: persistentSessionId,
-      }),
-    });
-
-    if (!silentResponse.ok) {
-      throw new Error(`HTTP error! status: ${silentResponse.status}`);
-    }
-
-    const silentResponseData = await silentResponse.json();
-    logger.debug('Silent video prepared:', silentResponseData);
-
-    if (silentResponseData.status === 'started') {
-      logger.debug('Silent video started successfully');
-    } else {
-      logger.warn('Unexpected response status for silent video:', silentResponseData.status);
-    }
-  } catch (error) {
-    logger.error('Error preparing silent video:', error);
-  }
-
-  logger.debug('Stream prepared early');
 }
 
 function updateAssistantReply(text) {
@@ -1924,9 +1849,9 @@ async function initializeConnection() {
 }
 
 
-async function startStreaming(initialChunk) {
+async function startStreaming(assistantReply) {
   try {
-    logger.debug('Starting streaming with initial chunk:', initialChunk);
+    logger.debug('Starting streaming with reply:', assistantReply);
     if (!persistentStreamId || !persistentSessionId) {
       logger.error('Persistent stream not initialized. Cannot start streaming.');
       await initializePersistentStream();
@@ -1945,15 +1870,96 @@ async function startStreaming(initialChunk) {
       return;
     }
 
-    isAvatarSpeaking = true;
+    // Split the reply into chunks of about 250 characters, breaking at spaces
+    const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
 
-    // Send the initial chunk
-    await sendStreamingChunk(initialChunk);
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i].trim();
+      if (chunk.length === 0) continue;
 
-    // Transition to the streaming video
-    smoothTransition(true);
+      isAvatarSpeaking = true;
+      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          script: {
+            type: 'text',
+            input: chunk,
+            provider: {
+              type: 'microsoft',
+              voice_id: avatars[currentAvatar].voiceId,
+            },
+          },
+          session_id: persistentSessionId,
+          driver_url: "bank://lively/driver-06",
+          output_resolution: 512,
+          stream_warmup: true,
+          config: {
+            fluent: true,
+            stitch: true,
+            pad_audio: 0.5,
+            auto_match: true,
+            align_driver: true,
+            normalization_factor: 0.1,
+            align_expand_factor: 0.3,
+            motion_factor: 0.55,
+            result_format: "mp4",
+            driver_expressions: {
+              expressions: [
+                {
+                  start_frame: 0,
+                  expression: "neutral",
+                  intensity: 0.5
+                }
+              ]
+            }
+          },
+        }),
+      });
+      
 
-    logger.debug('Initial streaming setup completed');
+      if (!playResponse.ok) {
+        throw new Error(`HTTP error! status: ${playResponse.status}`);
+      }
+
+      const playResponseData = await playResponse.json();
+      logger.debug('Streaming response:', playResponseData);
+
+      if (playResponseData.status === 'started') {
+        logger.debug('Stream chunk started successfully');
+
+        if (playResponseData.result_url) {
+          // Wait for the video to be ready before transitioning
+          await new Promise((resolve) => {
+            streamVideoElement.src = playResponseData.result_url;
+            streamVideoElement.oncanplay = resolve;
+          });
+
+          // Perform the transition
+          smoothTransition(true);
+
+          await new Promise(resolve => {
+            streamVideoElement.onended = resolve;
+          });
+        } else {
+          logger.debug('No result_url in playResponseData. Waiting for next chunk.');
+        }
+      } else {
+        logger.warn('Unexpected response status:', playResponseData.status);
+      }
+    }
+
+    isAvatarSpeaking = false;
+    smoothTransition(false);
+
+     // Check if we need to reconnect
+     if (shouldReconnect()) {
+      logger.info('Approaching reconnection threshold. Initiating background reconnect.');
+      await backgroundReconnect();
+    }
 
   } catch (error) {
     logger.error('Error during streaming:', error);
@@ -1963,74 +1969,6 @@ async function startStreaming(initialChunk) {
     }
   }
 }
-
-async function sendStreamingChunk(chunk) {
-  logger.debug('Sending streaming chunk:', chunk);
-
-  try {
-    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: chunk,
-          provider: {
-            type: 'microsoft',
-            voice_id: avatars[currentAvatar].voiceId,
-          },
-        },
-        session_id: persistentSessionId,
-        config: {
-          fluent: true,
-          stitch: true,
-          pad_audio: 0.5,
-          auto_match: true,
-          align_driver: true,
-          normalization_factor: 0.1,
-          align_expand_factor: 0.3,
-          motion_factor: 0.55,
-          result_format: "mp4",
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: "neutral",
-                intensity: 0.5
-              }
-            ]
-          }
-        },
-      }),
-    });
-
-    if (!playResponse.ok) {
-      throw new Error(`HTTP error! status: ${playResponse.status}`);
-    }
-
-    const playResponseData = await playResponse.json();
-    logger.debug('Streaming response:', playResponseData);
-
-    if (playResponseData.status === 'started') {
-      logger.debug('Stream chunk started successfully');
-
-      if (playResponseData.result_url) {
-        const streamVideoElement = document.getElementById('stream-video-element');
-        streamVideoElement.src = playResponseData.result_url;
-        await streamVideoElement.play();
-      }
-    } else {
-      logger.warn('Unexpected response status:', playResponseData.status);
-    }
-  } catch (error) {
-    logger.error('Error sending streaming chunk:', error);
-    throw error;
-  }
-}
-
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
@@ -2160,9 +2098,6 @@ async function startRecording() {
   interimMessageAdded = false;
 
   try {
-    // Start preparing the stream early
-    prepareStreamEarly();
-
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     logger.info('Microphone stream obtained');
 
@@ -2188,6 +2123,7 @@ async function startRecording() {
       interim_results: true,
       utterance_end_ms: 2500,
       punctuate: true,
+      // endpointing: 300,
       vad_events: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate
@@ -2350,8 +2286,6 @@ async function sendChatToGroq() {
     msgHistory.appendChild(assistantSpan);
     msgHistory.appendChild(document.createElement('br'));
 
-    let streamingStarted = false;
-
     while (!done) {
       const { value, done: readerDone } = await reader.read();
       done = readerDone;
@@ -2375,15 +2309,6 @@ async function sendChatToGroq() {
               assistantReply += content;
               assistantSpan.innerHTML += content;
               logger.debug('Parsed content:', content);
-
-              // Start streaming as soon as we have content
-              if (assistantReply.length > 0 && !streamingStarted) {
-                streamingStarted = true;
-                await startStreaming(assistantReply);
-              } else if (streamingStarted) {
-                // Send updates to the ongoing stream
-                await sendStreamingChunk(content);
-              }
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
@@ -2405,17 +2330,8 @@ async function sendChatToGroq() {
 
     logger.debug('Assistant reply:', assistantReply);
 
-    // Ensure the entire response has been streamed
-    if (streamingStarted) {
-      isAvatarSpeaking = false;
-      await sendStreamingChunk('');  // Send an empty chunk to signal the end of the stream
-      smoothTransition(false);
-    }
-
-    if (shouldReconnect()) {
-      logger.info('Approaching reconnection threshold. Initiating background reconnect.');
-      await backgroundReconnect();
-    }
+    // Start streaming the entire response
+    await startStreaming(assistantReply);
 
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
@@ -2424,7 +2340,6 @@ async function sendChatToGroq() {
     msgHistory.scrollTop = msgHistory.scrollHeight;
   }
 }
-
 
 function toggleAutoSpeak() {
   autoSpeakMode = !autoSpeakMode;
