@@ -686,7 +686,7 @@ async function startSilentStream() {
       body: JSON.stringify({
         script: {
           type: 'text',
-          input: '<break time="300000ms"/>', // Increased to 5 minutes
+          input: '<break time="300000ms"/> Please wait.',
           ssml: true,
           provider: {
             type: 'microsoft',
@@ -739,6 +739,7 @@ async function startSilentStream() {
     logger.error('Error starting silent stream:', error);
   }
 }
+
 
 function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
@@ -2461,6 +2462,12 @@ async function updateStreamingContent(content) {
     return;
   }
 
+  // Ensure content is not too short
+  if (content.trim().length < 3) {
+    logger.warn('Content too short, skipping update');
+    return;
+  }
+
   try {
     const updateResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
       method: 'POST',
@@ -2524,7 +2531,6 @@ async function updateStreamingContent(content) {
     logger.error('Error updating streaming content:', error);
   }
 }
-
 
 function debouncedStateChange(toStreaming) {
   clearTimeout(stateChangeTimeout);
