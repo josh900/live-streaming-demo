@@ -58,6 +58,8 @@ const INITIAL_RECONNECT_DELAY = 2000; // 1 second
 const MAX_RECONNECT_DELAY = 90000; // 30 seconds
 let autoSpeakInProgress = false;
 
+let currentStreamId = null;
+
 
 const ConnectionState = {
   DISCONNECTED: 'disconnected',
@@ -2285,7 +2287,9 @@ async function sendChatToGroq() {
 
     const reader = response.body.getReader();
     let assistantReply = '';
+    let accumulatedContent = '';
     let done = false;
+    let isFirstChunk = true;
 
     const msgHistory = document.getElementById('msgHistory');
     const assistantSpan = document.createElement('span');
@@ -2314,13 +2318,9 @@ async function sendChatToGroq() {
               const parsed = JSON.parse(data);
               const content = parsed.choices[0]?.delta?.content || '';
               assistantReply += content;
+              accumulatedContent += content;
               assistantSpan.innerHTML += content;
               logger.debug('Parsed content:', content);
-
-              // Start streaming as soon as we get any content
-              if (assistantReply.trim().length > 0) {
-                await sendStreamingChunk(assistantReply);
-              }
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
@@ -2328,6 +2328,13 @@ async function sendChatToGroq() {
         }
 
         msgHistory.scrollTop = msgHistory.scrollHeight;
+
+        // Send accumulated content to D-ID if it's more than 50 characters or it's the final chunk
+        if (accumulatedContent.length > 50 || done) {
+          await sendStreamingChunk(accumulatedContent, isFirstChunk, done);
+          accumulatedContent = '';
+          isFirstChunk = false;
+        }
       }
     }
 
@@ -2342,9 +2349,6 @@ async function sendChatToGroq() {
 
     logger.debug('Assistant reply:', assistantReply);
 
-    // Ensure the final chunk is sent
-    await sendStreamingChunk(assistantReply, true);
-
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
     const msgHistory = document.getElementById('msgHistory');
@@ -2352,7 +2356,6 @@ async function sendChatToGroq() {
     msgHistory.scrollTop = msgHistory.scrollHeight;
   }
 }
-
 
 async function sendStreamingChunk(text, isFirst, isFinal) {
   logger.debug(`Sending streaming chunk: ${text}, isFirst: ${isFirst}, isFinal: ${isFinal}`);
@@ -2362,8 +2365,14 @@ async function sendStreamingChunk(text, isFirst, isFinal) {
   }
 
   try {
-    const streamResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
+    const endpoint = isFirst ? 
+      `${DID_API.url}/${DID_API.service}/talks` : 
+      `${DID_API.url}/${DID_API.service}/talks/${currentStreamId}`;
+
+    const method = isFirst ? 'POST' : 'PUT';
+
+    const streamResponse = await fetchWithRetries(endpoint, {
+      method: method,
       headers: {
         Authorization: `Basic ${DID_API.key}`,
         'Content-Type': 'application/json',
@@ -2377,18 +2386,31 @@ async function sendStreamingChunk(text, isFirst, isFinal) {
             voice_id: avatars[currentAvatar].voiceId,
           },
         },
-        session_id: persistentSessionId,
-        driver_url: "bank://lively/driver-06",
+        source_url: avatars[currentAvatar].imageUrl,
         config: {
           fluent: true,
-          stitch: true,
-          pad_audio: 0.5,
-          auto_match: true,
+          pad_audio: 0,
+          driver_expressions: {
+            expressions: [
+              {
+                expression: "neutral",
+                start_frame: 0,
+                intensity: 0
+              }
+            ],
+            transition_frames: 0
+          },
           align_driver: true,
-          normalization_factor: 0.1,
-          align_expand_factor: 0.3,
-          motion_factor: 0.55,
-          result_format: "mp4",
+          align_expand_factor: 0,
+          auto_match: true,
+          motion_factor: 0.6,
+          normalization_factor: 0.25,
+          sharpen: true,
+          stitch: true,
+        },
+        driver_url: "bank://lively",
+        config: {
+          stitch: true,
         },
       }),
     });
@@ -2400,7 +2422,11 @@ async function sendStreamingChunk(text, isFirst, isFinal) {
     const streamResponseData = await streamResponse.json();
     logger.debug('Streaming response:', streamResponseData);
 
-    if (streamResponseData.status === 'started') {
+    if (isFirst) {
+      currentStreamId = streamResponseData.id;
+    }
+
+    if (streamResponseData.status === 'created' || streamResponseData.status === 'modified') {
       logger.debug('Stream chunk sent successfully');
       if (streamResponseData.result_url) {
         await updateStreamVideo(streamResponseData.result_url, isFirst);
@@ -2413,6 +2439,7 @@ async function sendStreamingChunk(text, isFirst, isFinal) {
       logger.debug('Final chunk sent, transitioning to idle state');
       await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second
       smoothTransition(false);
+      currentStreamId = null;
     }
   } catch (error) {
     logger.error('Error sending streaming chunk:', error);
