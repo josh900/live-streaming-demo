@@ -685,7 +685,7 @@ async function startSilentStream() {
       body: JSON.stringify({
         script: {
           type: 'text',
-          input: '<break time="5000ms"/>',
+          input: '<break time="60000ms"/>',  // Increased silent time
           ssml: true,
           provider: {
             type: 'microsoft',
@@ -727,15 +727,11 @@ async function startSilentStream() {
 
     if (silentResponseData.status === 'started') {
       logger.debug('Silent stream started successfully');
-      // Wait for a short period to ensure the stream is ready
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      debouncedStateChange(true);
+      if (silentResponseData.result_url) {
+        await updateVideoSource(silentResponseData.result_url);
+      }
     } else {
       logger.warn('Unexpected response status for silent stream:', silentResponseData.status);
-    }
-
-    if (silentResponseData.result_url) {
-      await updateVideoSource(silentResponseData.result_url);
     }
   } catch (error) {
     logger.error('Error starting silent stream:', error);
@@ -2389,7 +2385,7 @@ async function sendChatToGroq() {
     msgHistory.appendChild(document.createElement('br'));
 
     let accumulatedContent = '';
-    const contentThreshold = 50; // Number of characters to accumulate before sending to D-ID
+    const contentThreshold = 25; // Reduced threshold for more frequent updates
 
     while (!done) {
       const { value, done: readerDone } = await reader.read();
@@ -2454,6 +2450,13 @@ async function sendChatToGroq() {
     const msgHistory = document.getElementById('msgHistory');
     msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
     msgHistory.scrollTop = msgHistory.scrollHeight;
+    
+    // End the streaming session in case of an error
+    await endStreaming();
+  } finally {
+    // Reset any UI elements or states as needed
+    isAvatarSpeaking = false;
+    // You might want to add more cleanup or UI reset logic here
   }
 }
 
@@ -2531,6 +2534,7 @@ async function updateStreamingContent(content) {
 
 
 
+
 function debouncedStateChange(toStreaming) {
   clearTimeout(stateChangeTimeout);
   stateChangeTimeout = setTimeout(() => {
@@ -2554,20 +2558,16 @@ async function updateVideoSource(resultUrl) {
 
     // Wait for the video to be ready before transitioning
     await new Promise((resolve) => {
-      const checkReady = () => {
-        if (streamVideoElement.readyState >= 3) {
-          resolve();
-        } else {
-          setTimeout(checkReady, 100);
-        }
-      };
-      checkReady();
+      streamVideoElement.oncanplay = resolve;
     });
 
-    // Perform the transition
-    debouncedStateChange(true);
+    // Perform the transition only if not already streaming
+    if (!isCurrentlyStreaming) {
+      smoothTransition(true);
+    }
   }
 }
+
 
 async function endStreaming() {
   logger.debug('Ending streaming session...');
