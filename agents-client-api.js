@@ -492,8 +492,9 @@ function initializeTransitionCanvas() {
 function smoothTransition(toStreaming, duration = 250) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
+  const preloadVideoElement = document.getElementById('preload-video-element');
 
-  if (!idleVideoElement || !streamVideoElement) {
+  if (!idleVideoElement || !streamVideoElement || !preloadVideoElement) {
     logger.warn('Video elements not found for transition');
     return;
   }
@@ -512,19 +513,51 @@ function smoothTransition(toStreaming, duration = 250) {
   isTransitioning = true;
   logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
 
-  if (toStreaming) {
-    streamVideoElement.style.display = 'block';
-    idleVideoElement.style.display = 'none';
-  } else {
-    streamVideoElement.style.display = 'none';
-    idleVideoElement.style.display = 'block';
-    idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e));
+  let startTime = null;
+
+  function animate(currentTime) {
+    if (!startTime) startTime = currentTime;
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+
+    transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
+    
+    // Draw the fading out video
+    transitionCtx.globalAlpha = 1 - progress;
+    transitionCtx.drawImage(toStreaming ? idleVideoElement : streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+    
+    // Draw the fading in video
+    transitionCtx.globalAlpha = progress;
+    transitionCtx.drawImage(toStreaming ? preloadVideoElement : idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+
+    if (progress < 1) {
+      requestAnimationFrame(animate);
+    } else {
+      // Ensure final state is set correctly
+      if (toStreaming) {
+        streamVideoElement.style.display = 'block';
+        idleVideoElement.style.display = 'none';
+        streamVideoElement.src = preloadVideoElement.src;
+        streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
+      } else {
+        streamVideoElement.style.display = 'none';
+        idleVideoElement.style.display = 'block';
+        idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e));
+      }
+      isTransitioning = false;
+      isCurrentlyStreaming = toStreaming;
+      transitionCanvas.style.display = 'none';
+      logger.debug('Smooth transition completed');
+    }
   }
 
-  isTransitioning = false;
-  isCurrentlyStreaming = toStreaming;
-  logger.debug('Smooth transition completed');
+  // Show the transition canvas
+  transitionCanvas.style.display = 'block';
+  
+  // Start the animation
+  requestAnimationFrame(animate);
 }
+
 
 
 
@@ -2333,8 +2366,8 @@ async function sendStreamingChunk(text, isFirst, isFinal) {
 
   try {
     const endpoint = isFirst ? 
-      `${DID_API.url}/talks` : 
-      `${DID_API.url}/talks/${currentStreamId}`;
+      `${DID_API.url}/${DID_API.service}/talks` : 
+      `${DID_API.url}/${DID_API.service}/talks/${currentStreamId}`;
 
     const method = isFirst ? 'POST' : 'PUT';
 
@@ -2376,6 +2409,9 @@ async function sendStreamingChunk(text, isFirst, isFinal) {
           stitch: true,
         },
         driver_url: "bank://lively",
+        config: {
+          stitch: true,
+        },
       }),
     });
 
@@ -2430,12 +2466,11 @@ async function updateStreamVideo(videoUrl, isFirst) {
   }
 
   // Swap the video sources
-  streamVideoElement.src = preloadVideoElement.src;
+  [streamVideoElement.src, preloadVideoElement.src] = [preloadVideoElement.src, streamVideoElement.src];
 
   // Play the new video
   try {
     await streamVideoElement.play();
-    logger.debug('Started playing new video chunk');
   } catch (error) {
     logger.error('Error playing stream video:', error);
   }
