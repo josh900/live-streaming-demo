@@ -57,6 +57,8 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 const INITIAL_RECONNECT_DELAY = 2000; // 1 second
 const MAX_RECONNECT_DELAY = 90000; // 30 seconds
 let autoSpeakInProgress = false;
+let stateChangeTimeout;
+
 
 
 const ConnectionState = {
@@ -563,6 +565,7 @@ function smoothTransition(toStreaming, duration = 250) {
 
 
 
+
 function getVideoElements() {
   const idle = document.getElementById('idle-video-element');
   const stream = document.getElementById('stream-video-element');
@@ -724,15 +727,20 @@ async function startSilentStream() {
 
     if (silentResponseData.status === 'started') {
       logger.debug('Silent stream started successfully');
-      // We don't transition here, we'll wait for the actual content
+      // Wait for a short period to ensure the stream is ready
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      debouncedStateChange(true);
     } else {
       logger.warn('Unexpected response status for silent stream:', silentResponseData.status);
+    }
+
+    if (silentResponseData.result_url) {
+      await updateVideoSource(silentResponseData.result_url);
     }
   } catch (error) {
     logger.error('Error starting silent stream:', error);
   }
 }
-
 
 
 function updateAssistantReply(text) {
@@ -1595,7 +1603,7 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   if (status === 'streaming') {
     setStreamVideoElement(stream);
   } else {
-    smoothTransition(false);
+    debouncedStateChange(false);
   }
 
   lastVideoStatus = status;
@@ -2522,6 +2530,16 @@ async function updateStreamingContent(content) {
 }
 
 
+
+function debouncedStateChange(toStreaming) {
+  clearTimeout(stateChangeTimeout);
+  stateChangeTimeout = setTimeout(() => {
+    smoothTransition(toStreaming);
+  }, 500); // 500ms debounce time
+}
+
+
+
 async function updateVideoSource(resultUrl) {
   const streamVideoElement = document.getElementById('stream-video-element');
   if (!streamVideoElement) {
@@ -2536,14 +2554,20 @@ async function updateVideoSource(resultUrl) {
 
     // Wait for the video to be ready before transitioning
     await new Promise((resolve) => {
-      streamVideoElement.oncanplay = resolve;
+      const checkReady = () => {
+        if (streamVideoElement.readyState >= 3) {
+          resolve();
+        } else {
+          setTimeout(checkReady, 100);
+        }
+      };
+      checkReady();
     });
 
     // Perform the transition
-    smoothTransition(true);
+    debouncedStateChange(true);
   }
 }
-
 
 async function endStreaming() {
   logger.debug('Ending streaming session...');
