@@ -546,78 +546,6 @@ function smoothTransition(toStreaming, duration = 250) {
   requestAnimationFrame(animate);
 }
 
-
-
-async function sendStreamingChunk(chunk) {
-  if (!persistentStreamId || !persistentSessionId || !currentAvatar || !avatars[currentAvatar]) {
-    logger.error('Cannot send streaming chunk. Missing necessary information.');
-    return;
-  }
-
-  try {
-    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          ssml: true,
-          input: chunk,
-          provider: {
-            type: 'microsoft',
-            voice_id: avatars[currentAvatar].voiceId,
-          },
-        },
-        session_id: persistentSessionId,
-        driver_url: "bank://lively/driver-06",
-        output_resolution: 512,
-        stream_warmup: true,
-        config: {
-          fluent: true,
-          stitch: true,
-          pad_audio: 0.5,
-          auto_match: true,
-          align_driver: true,
-          normalization_factor: 0.1,
-          align_expand_factor: 0.3,
-          motion_factor: 0.55,
-          result_format: "mp4",
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: "neutral",
-                intensity: 0.5
-              }
-            ]
-          }
-        },
-      }),
-    });
-
-    if (!playResponse.ok) {
-      throw new Error(`HTTP error! status: ${playResponse.status}`);
-    }
-
-    const playResponseData = await playResponse.json();
-    logger.debug('Streaming chunk response:', playResponseData);
-
-    if (playResponseData.status === 'started') {
-      logger.debug('Stream chunk started successfully');
-    } else {
-      logger.warn('Unexpected response status:', playResponseData.status);
-    }
-  } catch (error) {
-    logger.error('Error sending streaming chunk:', error);
-  }
-}
-
-
-
-
 function getVideoElements() {
   const idle = document.getElementById('idle-video-element');
   const stream = document.getElementById('stream-video-element');
@@ -713,12 +641,8 @@ function handleTextInput(text) {
     content: text,
   });
 
-  // Prepare for streaming before sending the text to Groq
-  prepareForStreaming().then(() => {
-    sendChatToGroq();
-  });
+  sendChatToGroq();
 }
-
 
 function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
@@ -1963,7 +1887,6 @@ async function startStreaming(assistantReply) {
         body: JSON.stringify({
           script: {
             type: 'text',
-            ssml: true,
             input: chunk,
             provider: {
               type: 'microsoft',
@@ -2170,10 +2093,6 @@ async function startRecording() {
   }
 
   logger.debug('Starting recording process...');
-
-
-  // Prepare for streaming as soon as the user clicks the speak button
-  await prepareForStreaming();
 
   currentUtterance = '';
   interimMessageAdded = false;
@@ -2390,11 +2309,6 @@ async function sendChatToGroq() {
               assistantReply += content;
               assistantSpan.innerHTML += content;
               logger.debug('Parsed content:', content);
-
-              if (content.trim() !== '') {
-                // Send the chunk to D-ID as soon as it's received
-                await sendStreamingChunk(content);
-              }
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
@@ -2426,7 +2340,6 @@ async function sendChatToGroq() {
     msgHistory.scrollTop = msgHistory.scrollHeight;
   }
 }
-
 
 function toggleAutoSpeak() {
   autoSpeakMode = !autoSpeakMode;
