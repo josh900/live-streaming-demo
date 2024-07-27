@@ -2287,6 +2287,7 @@ async function sendChatToGroq() {
     const reader = response.body.getReader();
     let assistantReply = '';
     let done = false;
+    let isFirstChunk = true;
 
     const msgHistory = document.getElementById('msgHistory');
     const assistantSpan = document.createElement('span');
@@ -2303,6 +2304,8 @@ async function sendChatToGroq() {
         logger.debug('Received chunk:', chunk);
         const lines = chunk.split('\n');
 
+        let chunkContent = '';
+
         for (const line of lines) {
           if (line.startsWith('data:')) {
             const data = line.substring(5).trim();
@@ -2315,13 +2318,9 @@ async function sendChatToGroq() {
               const parsed = JSON.parse(data);
               const content = parsed.choices[0]?.delta?.content || '';
               assistantReply += content;
+              chunkContent += content;
               assistantSpan.innerHTML += content;
               logger.debug('Parsed content:', content);
-
-              // Start streaming as soon as we get any content
-              if (assistantReply.trim().length > 0) {
-                await sendStreamingChunk(assistantReply);
-              }
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
@@ -2329,6 +2328,12 @@ async function sendChatToGroq() {
         }
 
         msgHistory.scrollTop = msgHistory.scrollHeight;
+
+        // Send chunk to D-ID if it's not empty
+        if (chunkContent.trim()) {
+          await sendStreamingChunk(chunkContent, isFirstChunk, done);
+          isFirstChunk = false;
+        }
       }
     }
 
@@ -2343,9 +2348,6 @@ async function sendChatToGroq() {
 
     logger.debug('Assistant reply:', assistantReply);
 
-    // Ensure the final chunk is sent
-    await sendStreamingChunk(assistantReply, true);
-
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
     const msgHistory = document.getElementById('msgHistory');
@@ -2355,8 +2357,8 @@ async function sendChatToGroq() {
 }
 
 
-async function sendStreamingChunk(text, isFinal = false) {
-  logger.debug(`Sending streaming chunk: ${text}, isFinal: ${isFinal}`);
+async function sendStreamingChunk(text, isFirst, isFinal) {
+  logger.debug(`Sending streaming chunk: ${text}, isFirst: ${isFirst}, isFinal: ${isFinal}`);
   if (!persistentStreamId || !persistentSessionId) {
     logger.error('Persistent stream not initialized. Cannot send streaming chunk.');
     return;
@@ -2404,7 +2406,7 @@ async function sendStreamingChunk(text, isFinal = false) {
     if (streamResponseData.status === 'started') {
       logger.debug('Stream chunk sent successfully');
       if (streamResponseData.result_url) {
-        await updateStreamVideo(streamResponseData.result_url);
+        await updateStreamVideo(streamResponseData.result_url, isFirst);
       }
     } else {
       logger.warn('Unexpected response status:', streamResponseData.status);
@@ -2412,14 +2414,15 @@ async function sendStreamingChunk(text, isFinal = false) {
 
     if (isFinal) {
       logger.debug('Final chunk sent, transitioning to idle state');
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second
       smoothTransition(false);
     }
   } catch (error) {
     logger.error('Error sending streaming chunk:', error);
   }
-}
-
-async function updateStreamVideo(videoUrl) {
+}'
+'
+async function updateStreamVideo(videoUrl, isFirst) {
   const streamVideoElement = document.getElementById('stream-video-element');
   const preloadVideoElement = document.getElementById('preload-video-element');
 
@@ -2432,8 +2435,8 @@ async function updateStreamVideo(videoUrl) {
   preloadVideoElement.src = videoUrl;
   await preloadVideoElement.load();
 
-  // If this is the first chunk, transition from idle to streaming
-  if (!isCurrentlyStreaming) {
+  if (isFirst) {
+    // If this is the first chunk, transition from idle to streaming
     smoothTransition(true);
     isCurrentlyStreaming = true;
   }
