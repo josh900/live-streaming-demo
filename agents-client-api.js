@@ -482,6 +482,7 @@ function initializeTransitionCanvas() {
 
 
 
+
 function smoothTransition(toStreaming, duration = 250) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
@@ -505,18 +506,63 @@ function smoothTransition(toStreaming, duration = 250) {
   isTransitioning = true;
   logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
 
-  if (toStreaming) {
-    streamVideoElement.style.display = 'block';
-    idleVideoElement.style.display = 'none';
-  } else {
-    streamVideoElement.style.display = 'none';
-    idleVideoElement.style.display = 'block';
+  let startTime = null;
+
+  function animate(currentTime) {
+    if (!startTime) startTime = currentTime;
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+
+    transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
+    
+    // Draw the fading out video
+    transitionCtx.globalAlpha = 1 - progress;
+    transitionCtx.drawImage(toStreaming ? idleVideoElement : streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+    
+    // Draw the fading in video
+    transitionCtx.globalAlpha = progress;
+    transitionCtx.drawImage(toStreaming ? streamVideoElement : idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
+
+    if (progress < 1) {
+      requestAnimationFrame(animate);
+    } else {
+      // Ensure final state is set correctly
+      if (toStreaming) {
+        streamVideoElement.style.display = 'block';
+        idleVideoElement.style.display = 'none';
+      } else {
+        streamVideoElement.style.display = 'none';
+        idleVideoElement.style.display = 'block';
+      }
+      isTransitioning = false;
+      isCurrentlyStreaming = toStreaming;
+      transitionCanvas.style.display = 'none';
+      logger.debug('Smooth transition completed');
+    }
   }
 
-  isTransitioning = false;
-  isCurrentlyStreaming = toStreaming;
-  logger.debug('Smooth transition completed');
+  // Ensure both videos are loaded before starting the transition
+  Promise.all([
+    new Promise(resolve => {
+      if (idleVideoElement.readyState >= 3) resolve();
+      else idleVideoElement.oncanplay = resolve;
+    }),
+    new Promise(resolve => {
+      if (streamVideoElement.readyState >= 3) resolve();
+      else streamVideoElement.oncanplay = resolve;
+    })
+  ]).then(() => {
+    // Show the transition canvas
+    transitionCanvas.style.display = 'block';
+    
+    // Start the animation
+    requestAnimationFrame(animate);
+  }).catch(error => {
+    logger.error('Error during video loading for transition:', error);
+    isTransitioning = false;
+  });
 }
+
 
 
 
@@ -602,7 +648,6 @@ function updateTranscript(text, isFinal) {
   msgHistory.scrollTop = msgHistory.scrollHeight;
 }
 
-
 async function handleTextInput(text) {
   if (text.trim() === '') return;
 
@@ -616,10 +661,10 @@ async function handleTextInput(text) {
     content: text,
   });
 
-  // Start the silent video immediately and wait for it to be ready
+  // Start the silent video immediately
   await startSilentStream();
 
-  // Send chat to Groq
+  // Send chat to Groq in parallel
   sendChatToGroq();
 }
 
@@ -694,7 +739,6 @@ async function startSilentStream() {
     logger.error('Error starting silent stream:', error);
   }
 }
-
 
 
 function updateAssistantReply(text) {
@@ -825,9 +869,9 @@ function startKeepAlive() {
         logger.warn('Error sending keepalive message:', error);
       }
     } else {
-      logger.debug('Conditions not met for sending keepalive. isPersistentStreamActive:', isPersistentStreamActive,
-        'peerConnection state:', peerConnection ? peerConnection.connectionState : 'null',
-        'pcDataChannel:', pcDataChannel ? 'exists' : 'null');
+      logger.debug('Conditions not met for sending keepalive. isPersistentStreamActive:', isPersistentStreamActive, 
+                   'peerConnection state:', peerConnection ? peerConnection.connectionState : 'null', 
+                   'pcDataChannel:', pcDataChannel ? 'exists' : 'null');
     }
   }, 30000); // Send keepalive every 30 seconds
 }
@@ -1401,7 +1445,7 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
     peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
     peerConnection.addEventListener('track', onTrack, true);
-
+    
     pcDataChannel.onopen = () => {
       logger.debug('Data channel opened');
     };
@@ -1676,7 +1720,7 @@ function onTrack(event) {
             //  videoStatusChanged
             // });
 
-
+            
             if (videoStatusChanged) {
               videoIsPlaying = report.bytesReceived > lastBytesReceived;
               logger.debug('Video status changed:', videoIsPlaying);
@@ -1972,7 +2016,7 @@ async function startStreaming(assistantReply) {
           },
         }),
       });
-
+      
 
       if (!playResponse.ok) {
         throw new Error(`HTTP error! status: ${playResponse.status}`);
@@ -2008,8 +2052,8 @@ async function startStreaming(assistantReply) {
     isAvatarSpeaking = false;
     smoothTransition(false);
 
-    // Check if we need to reconnect
-    if (shouldReconnect()) {
+     // Check if we need to reconnect
+     if (shouldReconnect()) {
       logger.info('Approaching reconnection threshold. Initiating background reconnect.');
       await backgroundReconnect();
     }
@@ -2151,7 +2195,7 @@ async function startRecording() {
   interimMessageAdded = false;
 
   try {
-    // Start the silent video immediately and wait for it to be ready
+    // Start the silent video immediately
     await startSilentStream();
 
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -2342,7 +2386,7 @@ async function sendChatToGroq() {
     msgHistory.appendChild(document.createElement('br'));
 
     let accumulatedContent = '';
-    const contentThreshold = 50; // Increased threshold for less frequent updates
+    const contentThreshold = 10; // Reduced threshold for more frequent updates
 
     while (!done) {
       const { value, done: readerDone } = await reader.read();
@@ -2407,9 +2451,6 @@ async function sendChatToGroq() {
     const msgHistory = document.getElementById('msgHistory');
     msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
     msgHistory.scrollTop = msgHistory.scrollHeight;
-  } finally {
-    // Reset the avatar to idle state
-    smoothTransition(false);
   }
 }
 
@@ -2481,6 +2522,7 @@ async function updateStreamingContent(content) {
       logger.debug('Stream content updated successfully');
       if (updateResponseData.result_url) {
         await updateVideoSource(updateResponseData.result_url);
+        smoothTransition(true);
       }
     } else {
       logger.warn('Unexpected response status for stream update:', updateResponseData.status);
@@ -2511,7 +2553,7 @@ async function updateVideoSource(resultUrl) {
     logger.debug('Updating video source to:', resultUrl);
     streamVideoElement.src = resultUrl;
 
-    // Wait for the video to be ready before playing
+    // Wait for the video to be ready before transitioning
     await new Promise((resolve) => {
       const checkReady = () => {
         if (streamVideoElement.readyState >= 3) {
@@ -2523,10 +2565,10 @@ async function updateVideoSource(resultUrl) {
       checkReady();
     });
 
-    streamVideoElement.play();
+    // Perform the transition
+    debouncedStateChange(true);
   }
 }
-
 
 async function endStreaming() {
   logger.debug('Ending streaming session...');
