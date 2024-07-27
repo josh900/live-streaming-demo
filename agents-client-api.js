@@ -1899,6 +1899,117 @@ async function startStreaming(assistantReply) {
   }
 }
 
+
+
+async function sendChatToGroq() {
+  if (chatHistory.length === 0 || chatHistory[chatHistory.length - 1].content.trim() === '') {
+    logger.debug('No new content to send to Groq. Skipping request.');
+    return;
+  }
+
+  logger.debug('Sending chat to Groq...');
+  try {
+    const startTime = Date.now();
+    const currentContext = document.getElementById('context-input').value.trim();
+    const requestBody = {
+      messages: [
+        {
+          role: 'system',
+          content: currentContext || context,
+        },
+        ...chatHistory,
+      ],
+      model: 'llama3-8b-8192',
+    };
+    logger.debug('Request body:', JSON.stringify(requestBody));
+
+    const response = await fetch('/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    logger.debug('Groq response status:', response.status);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error ${response.status}`);
+    }
+
+    const reader = response.body.getReader();
+    let assistantReply = '';
+    let done = false;
+    let isFirstChunk = true;
+
+    const msgHistory = document.getElementById('msgHistory');
+    const assistantSpan = document.createElement('span');
+    assistantSpan.innerHTML = '<u>Assistant:</u> ';
+    msgHistory.appendChild(assistantSpan);
+    msgHistory.appendChild(document.createElement('br'));
+
+    while (!done) {
+      const { value, done: readerDone } = await reader.read();
+      done = readerDone;
+
+      if (value) {
+        const chunk = new TextDecoder().decode(value);
+        logger.debug('Received chunk:', chunk);
+        const lines = chunk.split('\n');
+
+        let chunkContent = '';
+
+        for (const line of lines) {
+          if (line.startsWith('data:')) {
+            const data = line.substring(5).trim();
+            if (data === '[DONE]') {
+              done = true;
+              break;
+            }
+
+            try {
+              const parsed = JSON.parse(data);
+              const content = parsed.choices[0]?.delta?.content || '';
+              assistantReply += content;
+              chunkContent += content;
+              assistantSpan.innerHTML += content;
+              logger.debug('Parsed content:', content);
+            } catch (error) {
+              logger.error('Error parsing JSON:', error);
+            }
+          }
+        }
+
+        msgHistory.scrollTop = msgHistory.scrollHeight;
+
+        // Send chunk to D-ID if it's not empty
+        if (chunkContent.trim()) {
+          await sendStreamingChunk(chunkContent, isFirstChunk, done);
+          isFirstChunk = false;
+        }
+      }
+    }
+
+    const endTime = Date.now();
+    const processingTime = endTime - startTime;
+    logger.debug(`Groq processing completed in ${processingTime}ms`);
+
+    chatHistory.push({
+      role: 'assistant',
+      content: assistantReply,
+    });
+
+    logger.debug('Assistant reply:', assistantReply);
+
+  } catch (error) {
+    logger.error('Error in sendChatToGroq:', error);
+    const msgHistory = document.getElementById('msgHistory');
+    msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
+    msgHistory.scrollTop = msgHistory.scrollHeight;
+  }
+}
+
+
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
   const videoWrapper = document.getElementById('video-wrapper');
