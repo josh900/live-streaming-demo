@@ -1,4 +1,5 @@
 
+
 'use strict';
 import DID_API from './api.js';
 import logger from './logger.js';
@@ -57,8 +58,6 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 const INITIAL_RECONNECT_DELAY = 2000; // 1 second
 const MAX_RECONNECT_DELAY = 90000; // 30 seconds
 let autoSpeakInProgress = false;
-let stateChangeTimeout;
-
 
 
 const ConnectionState = {
@@ -465,13 +464,13 @@ function initializeTransitionCanvas() {
     maxHeight: '550px',
     zIndex: '3',
     borderRadius: '13%',
-    objectFit: 'cover',
-    display: 'none'
+    objectFit: 'cover'
   });
 
   videoWrapper.appendChild(transitionCanvas);
 
   window.addEventListener('resize', () => {
+    const videoWrapper = document.querySelector('#video-wrapper');
     const rect = videoWrapper.getBoundingClientRect();
     const size = Math.min(rect.width, rect.height, 550);
 
@@ -541,30 +540,12 @@ function smoothTransition(toStreaming, duration = 250) {
     }
   }
 
-  // Ensure both videos are loaded before starting the transition
-  Promise.all([
-    new Promise(resolve => {
-      if (idleVideoElement.readyState >= 3) resolve();
-      else idleVideoElement.oncanplay = resolve;
-    }),
-    new Promise(resolve => {
-      if (streamVideoElement.readyState >= 3) resolve();
-      else streamVideoElement.oncanplay = resolve;
-    })
-  ]).then(() => {
-    // Show the transition canvas
-    transitionCanvas.style.display = 'block';
-    
-    // Start the animation
-    requestAnimationFrame(animate);
-  }).catch(error => {
-    logger.error('Error during video loading for transition:', error);
-    isTransitioning = false;
-  });
+  // Show the transition canvas
+  transitionCanvas.style.display = 'block';
+  
+  // Start the animation
+  requestAnimationFrame(animate);
 }
-
-
-
 
 function getVideoElements() {
   const idle = document.getElementById('idle-video-element');
@@ -648,7 +629,7 @@ function updateTranscript(text, isFinal) {
   msgHistory.scrollTop = msgHistory.scrollHeight;
 }
 
-async function handleTextInput(text) {
+function handleTextInput(text) {
   if (text.trim() === '') return;
 
   const textInput = document.getElementById('text-input');
@@ -661,87 +642,8 @@ async function handleTextInput(text) {
     content: text,
   });
 
-  // Start the D-ID stream with silent video
-  await startSilentStream();
-
   sendChatToGroq();
 }
-
-async function startSilentStream() {
-  logger.debug('Starting silent stream...');
-
-  if (!persistentStreamId || !persistentSessionId) {
-    logger.warn('Persistent stream not initialized. Initializing now...');
-    await initializePersistentStream();
-  }
-
-  try {
-    const silentResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: '<break time="5000ms"/>',
-          ssml: true,
-          provider: {
-            type: 'microsoft',
-            voice_id: avatars[currentAvatar].voiceId,
-          },
-        },
-        session_id: persistentSessionId,
-        driver_url: "bank://lively/driver-06",
-        output_resolution: 512,
-        config: {
-          fluent: true,
-          stitch: true,
-          pad_audio: 0.5,
-          auto_match: true,
-          align_driver: true,
-          normalization_factor: 0.1,
-          align_expand_factor: 0.3,
-          motion_factor: 0.55,
-          result_format: "mp4",
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: "neutral",
-                intensity: 0.5
-              }
-            ]
-          }
-        },
-      }),
-    });
-
-    if (!silentResponse.ok) {
-      throw new Error(`HTTP error! status: ${silentResponse.status}`);
-    }
-
-    const silentResponseData = await silentResponse.json();
-    logger.debug('Silent stream response:', silentResponseData);
-
-    if (silentResponseData.status === 'started') {
-      logger.debug('Silent stream started successfully');
-      // Wait for a short period to ensure the stream is ready
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      debouncedStateChange(true);
-    } else {
-      logger.warn('Unexpected response status for silent stream:', silentResponseData.status);
-    }
-
-    if (silentResponseData.result_url) {
-      await updateVideoSource(silentResponseData.result_url);
-    }
-  } catch (error) {
-    logger.error('Error starting silent stream:', error);
-  }
-}
-
 
 function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
@@ -1603,7 +1505,7 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   if (status === 'streaming') {
     setStreamVideoElement(stream);
   } else {
-    debouncedStateChange(false);
+    smoothTransition(false);
   }
 
   lastVideoStatus = status;
@@ -1722,7 +1624,6 @@ function onTrack(event) {
             //  videoStatusChanged
             // });
 
-            
             if (videoStatusChanged) {
               videoIsPlaying = report.bytesReceived > lastBytesReceived;
               logger.debug('Video status changed:', videoIsPlaying);
@@ -2222,6 +2123,7 @@ async function startRecording() {
       interim_results: true,
       utterance_end_ms: 2500,
       punctuate: true,
+      // endpointing: 300,
       vad_events: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate
@@ -2266,9 +2168,6 @@ async function startRecording() {
     const startButton = document.getElementById('start-button');
     startButton.textContent = 'Stop';
 
-    // Start the D-ID stream with silent video
-    await startSilentStream();
-
     logger.debug('Recording and transcription started successfully');
   } catch (error) {
     logger.error('Error starting recording:', error);
@@ -2279,7 +2178,6 @@ async function startRecording() {
     throw error;
   }
 }
-
 
 function handleDeepgramError(err) {
   logger.error('Deepgram error:', err);
@@ -2388,9 +2286,6 @@ async function sendChatToGroq() {
     msgHistory.appendChild(assistantSpan);
     msgHistory.appendChild(document.createElement('br'));
 
-    let accumulatedContent = '';
-    const contentThreshold = 50; // Number of characters to accumulate before sending to D-ID
-
     while (!done) {
       const { value, done: readerDone } = await reader.read();
       done = readerDone;
@@ -2412,14 +2307,8 @@ async function sendChatToGroq() {
               const parsed = JSON.parse(data);
               const content = parsed.choices[0]?.delta?.content || '';
               assistantReply += content;
-              accumulatedContent += content;
               assistantSpan.innerHTML += content;
               logger.debug('Parsed content:', content);
-
-              if (accumulatedContent.length >= contentThreshold) {
-                await updateStreamingContent(accumulatedContent);
-                accumulatedContent = '';
-              }
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
@@ -2428,11 +2317,6 @@ async function sendChatToGroq() {
 
         msgHistory.scrollTop = msgHistory.scrollHeight;
       }
-    }
-
-    // Send any remaining content
-    if (accumulatedContent.length > 0) {
-      await updateStreamingContent(accumulatedContent);
     }
 
     const endTime = Date.now();
@@ -2446,8 +2330,8 @@ async function sendChatToGroq() {
 
     logger.debug('Assistant reply:', assistantReply);
 
-    // Ensure the stream ends properly
-    await endStreaming();
+    // Start streaming the entire response
+    await startStreaming(assistantReply);
 
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
@@ -2456,190 +2340,6 @@ async function sendChatToGroq() {
     msgHistory.scrollTop = msgHistory.scrollHeight;
   }
 }
-
-
-async function updateStreamingContent(content) {
-  logger.debug('Updating streaming content:', content);
-
-  if (!persistentStreamId || !persistentSessionId) {
-    logger.error('Persistent stream not initialized. Cannot update streaming content.');
-    return;
-  }
-
-  try {
-    const updateResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: content,
-          ssml: false,
-          provider: {
-            type: 'microsoft',
-            voice_id: avatars[currentAvatar].voiceId,
-          },
-        },
-        session_id: persistentSessionId,
-        driver_url: "bank://lively/driver-06",
-        output_resolution: 512,
-        config: {
-          fluent: true,
-          stitch: true,
-          pad_audio: 0.5,
-          auto_match: true,
-          align_driver: true,
-          normalization_factor: 0.1,
-          align_expand_factor: 0.3,
-          motion_factor: 0.55,
-          result_format: "mp4",
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: "neutral",
-                intensity: 0.5
-              }
-            ]
-          }
-        },
-      }),
-    });
-
-    if (!updateResponse.ok) {
-      throw new Error(`HTTP error! status: ${updateResponse.status}`);
-    }
-
-    const updateResponseData = await updateResponse.json();
-    logger.debug('Stream update response:', updateResponseData);
-
-    if (updateResponseData.status === 'started') {
-      logger.debug('Stream content updated successfully');
-      if (updateResponseData.result_url) {
-        await updateVideoSource(updateResponseData.result_url);
-      }
-    } else {
-      logger.warn('Unexpected response status for stream update:', updateResponseData.status);
-    }
-  } catch (error) {
-    logger.error('Error updating streaming content:', error);
-  }
-}
-
-
-
-function debouncedStateChange(toStreaming) {
-  clearTimeout(stateChangeTimeout);
-  stateChangeTimeout = setTimeout(() => {
-    smoothTransition(toStreaming);
-  }, 500); // 500ms debounce time
-}
-
-
-
-async function updateVideoSource(resultUrl) {
-  const streamVideoElement = document.getElementById('stream-video-element');
-  if (!streamVideoElement) {
-    logger.error('Stream video element not found');
-    return;
-  }
-
-  // Only update if the video source has changed
-  if (streamVideoElement.src !== resultUrl) {
-    logger.debug('Updating video source to:', resultUrl);
-    streamVideoElement.src = resultUrl;
-
-    // Wait for the video to be ready before transitioning
-    await new Promise((resolve) => {
-      const checkReady = () => {
-        if (streamVideoElement.readyState >= 3) {
-          resolve();
-        } else {
-          setTimeout(checkReady, 100);
-        }
-      };
-      checkReady();
-    });
-
-    // Perform the transition
-    debouncedStateChange(true);
-  }
-}
-
-async function endStreaming() {
-  logger.debug('Ending streaming session...');
-
-  if (!persistentStreamId || !persistentSessionId) {
-    logger.warn('No active streaming session to end.');
-    return;
-  }
-
-  try {
-    const endResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: '<break time="1000ms"/>',
-          ssml: true,
-          provider: {
-            type: 'microsoft',
-            voice_id: avatars[currentAvatar].voiceId,
-          },
-        },
-        session_id: persistentSessionId,
-        driver_url: "bank://lively/driver-06",
-        output_resolution: 512,
-        config: {
-          fluent: true,
-          stitch: true,
-          pad_audio: 0.5,
-          auto_match: true,
-          align_driver: true,
-          normalization_factor: 0.1,
-          align_expand_factor: 0.3,
-          motion_factor: 0.55,
-          result_format: "mp4",
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: "neutral",
-                intensity: 0.5
-              }
-            ]
-          }
-        },
-      }),
-    });
-
-    if (!endResponse.ok) {
-      throw new Error(`HTTP error! status: ${endResponse.status}`);
-    }
-
-    const endResponseData = await endResponse.json();
-    logger.debug('Stream end response:', endResponseData);
-
-    if (endResponseData.status === 'started') {
-      logger.debug('Streaming session ended successfully');
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for the break to finish
-      smoothTransition(false);
-    } else {
-      logger.warn('Unexpected response status for stream end:', endResponseData.status);
-    }
-  } catch (error) {
-    logger.error('Error ending streaming session:', error);
-  }
-}
-
-
 
 function toggleAutoSpeak() {
   autoSpeakMode = !autoSpeakMode;
@@ -2816,7 +2516,3 @@ export {
   initializePersistentStream,
   destroyPersistentStream,
 };
-
-
-
-
