@@ -1874,7 +1874,7 @@ async function startStreaming(assistantReply) {
       return;
     }
 
-    // Start with a silent video
+    // Start with a silent video, but don't transition yet
     const silentResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
       method: 'POST',
       headers: {
@@ -1915,18 +1915,21 @@ async function startStreaming(assistantReply) {
 
     if (silentResponseData.status === 'started') {
       logger.debug('Silent video started successfully');
-      smoothTransition(true);
+      // Only transition once, from idle to streaming
+      if (!isCurrentlyStreaming) {
+        smoothTransition(true);
+        isCurrentlyStreaming = true;
+      }
     }
 
-    // Split the reply into chunks of about 250 characters, breaking at spaces
-    const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
+    // Function to update the stream with new content
+    async function updateStream(content) {
+      if (content.length < 3) {
+        logger.debug('Content too short, skipping update');
+        return;
+      }
 
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i].trim();
-      if (chunk.length === 0) continue;
-
-      isAvatarSpeaking = true;
-      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      const updateResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
         method: 'POST',
         headers: {
           Authorization: `Basic ${DID_API.key}`,
@@ -1935,7 +1938,7 @@ async function startStreaming(assistantReply) {
         body: JSON.stringify({
           script: {
             type: 'text',
-            input: chunk,
+            input: content,
             ssml: true,
             provider: {
               type: 'microsoft',
@@ -1957,17 +1960,31 @@ async function startStreaming(assistantReply) {
         }),
       });
 
-      if (!playResponse.ok) {
-        throw new Error(`HTTP error! status: ${playResponse.status}`);
+      if (!updateResponse.ok) {
+        throw new Error(`HTTP error! status: ${updateResponse.status}`);
       }
 
-      const playResponseData = await playResponse.json();
-      logger.debug('Streaming response:', playResponseData);
+      const updateResponseData = await updateResponse.json();
+      logger.debug('Stream update response:', updateResponseData);
 
-      if (playResponseData.status === 'started') {
-        logger.debug('Stream chunk started successfully');
+      if (updateResponseData.status === 'started') {
+        logger.debug('Stream update started successfully');
       } else {
-        logger.warn('Unexpected response status:', playResponseData.status);
+        logger.warn('Unexpected response status:', updateResponseData.status);
+      }
+    }
+
+    // If we have an assistant reply, update the stream with it
+    if (assistantReply) {
+      // Split the reply into chunks of about 250 characters, breaking at spaces
+      const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
+
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i].trim();
+        if (chunk.length === 0) continue;
+
+        isAvatarSpeaking = true;
+        await updateStream(chunk);
       }
     }
 
@@ -1982,6 +1999,7 @@ async function startStreaming(assistantReply) {
     }
   }
 }
+
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
@@ -2375,54 +2393,11 @@ async function updateStreamingContent(content) {
   }
 
   try {
-    const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: content,
-          ssml: true,
-          provider: {
-            type: 'microsoft',
-            voice_id: avatars[currentAvatar].voiceId,
-          },
-        },
-        session_id: persistentSessionId,
-        driver_url: "bank://lively/driver-06",
-        config: {
-          fluent: true,
-          stitch: true,
-          pad_audio: 0.5,
-          auto_match: true,
-          align_driver: true,
-          normalization_factor: 0.1,
-          align_expand_factor: 0.3,
-          motion_factor: 0.55,
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const responseData = await response.json();
-    logger.debug('Streaming update response:', responseData);
-
-    if (responseData.status === 'started') {
-      logger.debug('Stream update started successfully');
-    } else {
-      logger.warn('Unexpected response status:', responseData.status);
-    }
+    await updateStream(content);
   } catch (error) {
     logger.error('Error updating streaming content:', error);
   }
 }
-
 
 
 function toggleAutoSpeak() {
