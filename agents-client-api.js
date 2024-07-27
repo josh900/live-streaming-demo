@@ -685,7 +685,6 @@ async function prepareStreamEarly() {
         script: {
           type: 'text',
           input: '<break time="5000ms"/>',
-          ssml: true,
           provider: {
             type: 'microsoft',
             voice_id: avatars[currentAvatar].voiceId,
@@ -695,6 +694,7 @@ async function prepareStreamEarly() {
           fluent: true,
           pad_audio: 0,
           stitch: true,
+          ssml: true,
         },
         session_id: persistentSessionId,
       }),
@@ -1964,7 +1964,7 @@ async function startStreaming(initialChunk) {
   }
 }
 
-async function sendStreamingChunk(chunk, useSSML = false) {
+async function sendStreamingChunk(chunk) {
   logger.debug('Sending streaming chunk:', chunk);
 
   try {
@@ -1978,7 +1978,6 @@ async function sendStreamingChunk(chunk, useSSML = false) {
         script: {
           type: 'text',
           input: chunk,
-          ssml: useSSML,
           provider: {
             type: 'microsoft',
             voice_id: avatars[currentAvatar].voiceId,
