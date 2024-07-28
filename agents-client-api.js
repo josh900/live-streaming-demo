@@ -547,7 +547,6 @@ function smoothTransition(toStreaming, duration = 250) {
   requestAnimationFrame(animate);
 }
 
-
 function getVideoElements() {
   const idle = document.getElementById('idle-video-element');
   const stream = document.getElementById('stream-video-element');
@@ -2099,9 +2098,6 @@ async function startRecording() {
   interimMessageAdded = false;
 
   try {
-    // Initiate silent stream
-    await initiateSilentStream();
-
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     logger.info('Microphone stream obtained');
 
@@ -2127,6 +2123,7 @@ async function startRecording() {
       interim_results: true,
       utterance_end_ms: 2500,
       punctuate: true,
+      // endpointing: 300,
       vad_events: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate
@@ -2181,7 +2178,6 @@ async function startRecording() {
     throw error;
   }
 }
-
 
 function handleDeepgramError(err) {
   logger.error('Deepgram error:', err);
@@ -2244,14 +2240,13 @@ async function stopRecording() {
   }
 }
 
-
 async function sendChatToGroq() {
   if (chatHistory.length === 0 || chatHistory[chatHistory.length - 1].content.trim() === '') {
     logger.debug('No new content to send to Groq. Skipping request.');
     return;
   }
 
-  logger.debug('Sending chat to Groq and initiating silent video stream...');
+  logger.debug('Sending chat to Groq...');
   try {
     const startTime = Date.now();
     const currentContext = document.getElementById('context-input').value.trim();
@@ -2266,9 +2261,6 @@ async function sendChatToGroq() {
       model: 'llama3-8b-8192',
     };
     logger.debug('Request body:', JSON.stringify(requestBody));
-
-    // Initiate silent video stream
-    initiateSilentStream();
 
     const response = await fetch('/chat', {
       method: 'POST',
@@ -2317,9 +2309,6 @@ async function sendChatToGroq() {
               assistantReply += content;
               assistantSpan.innerHTML += content;
               logger.debug('Parsed content:', content);
-
-              // Update streaming content with accumulated text
-              await updateStreamingContent(assistantReply);
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
@@ -2341,177 +2330,14 @@ async function sendChatToGroq() {
 
     logger.debug('Assistant reply:', assistantReply);
 
-    // Ensure the full response is spoken
-    await updateStreamingContent(assistantReply, true);
+    // Start streaming the entire response
+    await startStreaming(assistantReply);
 
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
     const msgHistory = document.getElementById('msgHistory');
     msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
     msgHistory.scrollTop = msgHistory.scrollHeight;
-  } finally {
-    // Transition back to idle video
-    smoothTransition(false);
-  }
-}
-
-async function initiateSilentStream() {
-  logger.debug('Initiating silent video stream...');
-  try {
-    if (!persistentStreamId || !persistentSessionId) {
-      logger.error('Persistent stream not initialized. Cannot start streaming.');
-      await initializePersistentStream();
-    }
-
-    const silentStreamResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          ssml: true,
-          input: '<break time="5000ms"/>', // 5 seconds of silence
-        },
-        session_id: persistentSessionId,
-        driver_url: "bank://lively/driver-06",
-        output_resolution: 512,
-        config: {
-          fluent: true,
-          stitch: true,
-          pad_audio: 0.5,
-          auto_match: true,
-          align_driver: true,
-          normalization_factor: 0.1,
-          align_expand_factor: 0.3,
-          motion_factor: 0.55,
-          result_format: "mp4",
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: "neutral",
-                intensity: 0.5
-              }
-            ]
-          }
-        },
-      }),
-    });
-
-    if (!silentStreamResponse.ok) {
-      throw new Error(`HTTP error! status: ${silentStreamResponse.status}`);
-    }
-
-    const silentStreamData = await silentStreamResponse.json();
-    logger.debug('Silent stream initiated:', silentStreamData);
-
-    // Transition to the silent video immediately
-    if (silentStreamData.result_url) {
-      await transitionToVideo(silentStreamData.result_url);
-    }
-  } catch (error) {
-    logger.error('Error initiating silent stream:', error);
-  }
-}
-
-
-async function updateStreamingContent(content, isFinal = false) {
-  logger.debug(`Updating streaming content. Is final: ${isFinal}`);
-  try {
-    if (!persistentStreamId || !persistentSessionId) {
-      logger.error('Persistent stream not initialized. Cannot update content.');
-      return;
-    }
-
-    if (content.trim().length < 3) {
-      logger.debug('Content too short. Skipping update.');
-      return;
-    }
-
-    const updateResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          ssml: true,
-          input: content,
-        },
-        session_id: persistentSessionId,
-        driver_url: "bank://lively/driver-06",
-        output_resolution: 512,
-        config: {
-          fluent: true,
-          stitch: true,
-          pad_audio: 0.5,
-          auto_match: true,
-          align_driver: true,
-          normalization_factor: 0.1,
-          align_expand_factor: 0.3,
-          motion_factor: 0.55,
-          result_format: "mp4",
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: "neutral",
-                intensity: 0.5
-              }
-            ]
-          }
-        },
-      }),
-    });
-
-    if (!updateResponse.ok) {
-      throw new Error(`HTTP error! status: ${updateResponse.status}`);
-    }
-
-    const updateData = await updateResponse.json();
-    logger.debug('Stream update response:', updateData);
-
-    if (updateData.result_url) {
-      await transitionToVideo(updateData.result_url);
-    }
-
-    if (isFinal) {
-      logger.debug('Final content update. Waiting for video to finish...');
-      await waitForVideoToFinish();
-    }
-  } catch (error) {
-    logger.error('Error updating streaming content:', error);
-  }
-}
-
-async function transitionToVideo(videoUrl) {
-  logger.debug('Transitioning to new video:', videoUrl);
-  const streamVideoElement = document.getElementById('stream-video-element');
-  const idleVideoElement = document.getElementById('idle-video-element');
-
-  if (!streamVideoElement || !idleVideoElement) {
-    logger.error('Video elements not found');
-    return;
-  }
-
-  // Preload the new video
-  streamVideoElement.src = videoUrl;
-  await streamVideoElement.load();
-
-  // Perform the transition
-  smoothTransition(true);
-
-  // Play the new video
-  try {
-    await streamVideoElement.play();
-    logger.debug('New video started playing');
-  } catch (error) {
-    logger.error('Error playing new video:', error);
   }
 }
 
