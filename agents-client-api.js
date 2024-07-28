@@ -58,7 +58,6 @@ const INITIAL_RECONNECT_DELAY = 2000; // 1 second
 const MAX_RECONNECT_DELAY = 90000; // 30 seconds
 let isAvatarSpeaking = false;
 let autoSpeakInProgress = false;
-let isSilentStreamActive = false;
 
 
 
@@ -661,83 +660,67 @@ async function startSilentStream() {
     return;
   }
 
-  isSilentStreamActive = true;
-
-  async function sendSilentBreak() {
-    if (!isSilentStreamActive) return;
-
-    try {
-      const silentStreamResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${DID_API.key}`,
-          'Content-Type': 'application/json',
+  try {
+    const silentStreamResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: '<break time="2s"/>', // Reduced from 10s to 2s
+          ssml: true,
+          provider: {
+            type: 'microsoft',
+            voice_id: avatars[currentAvatar].voiceId,
+          },
         },
-        body: JSON.stringify({
-          script: {
-            type: 'text',
-            input: '<break time="1s"/>', // 1-second break
-            ssml: true,
-            provider: {
-              type: 'microsoft',
-              voice_id: avatars[currentAvatar].voiceId,
-            },
-          },
-          session_id: persistentSessionId,
-          driver_url: "bank://lively/driver-06",
-          output_resolution: 512,
-          config: {
-            fluent: true,
-            stitch: true,
-            pad_audio: 0.5,
-            auto_match: true,
-            align_driver: true,
-            normalization_factor: 0.1,
-            align_expand_factor: 0.3,
-            motion_factor: 0.55,
-            result_format: "mp4",
-            driver_expressions: {
-              expressions: [
-                {
-                  start_frame: 0,
-                  expression: "neutral",
-                  intensity: 0.5
-                }
-              ]
-            }
-          },
-        }),
-      });
+        session_id: persistentSessionId,
+        driver_url: "bank://lively/driver-06",
+        output_resolution: 512,
+        config: {
+          fluent: true,
+          stitch: true,
+          pad_audio: 0.5,
+          auto_match: true,
+          align_driver: true,
+          normalization_factor: 0.1,
+          align_expand_factor: 0.3,
+          motion_factor: 0.55,
+          result_format: "mp4",
+          driver_expressions: {
+            expressions: [
+              {
+                start_frame: 0,
+                expression: "neutral",
+                intensity: 0.5
+              }
+            ]
+          }
+        },
+      }),
+    });
 
-      if (!silentStreamResponse.ok) {
-        throw new Error(`HTTP error! status: ${silentStreamResponse.status}`);
-      }
-
-      const silentStreamData = await silentStreamResponse.json();
-      logger.debug('Silent stream response:', silentStreamData);
-
-      if (silentStreamData.status === 'started') {
-        logger.debug('Silent stream chunk sent successfully');
-        if (!isCurrentlyStreaming) {
-          smoothTransition(true);
-          isCurrentlyStreaming = true;
-        }
-      } else {
-        logger.warn('Unexpected response status for silent stream:', silentStreamData.status);
-      }
-
-      // Schedule the next silent break
-      setTimeout(sendSilentBreak, 900); // Send next break slightly before the current one ends
-    } catch (error) {
-      logger.error('Error sending silent stream chunk:', error);
-      isSilentStreamActive = false;
+    if (!silentStreamResponse.ok) {
+      throw new Error(`HTTP error! status: ${silentStreamResponse.status}`);
     }
+
+    const silentStreamData = await silentStreamResponse.json();
+    logger.debug('Silent stream response:', silentStreamData);
+
+    if (silentStreamData.status === 'started') {
+      logger.debug('Silent stream started successfully');
+      // Transition to the silent video immediately
+      smoothTransition(true);
+    } else {
+      logger.warn('Unexpected response status for silent stream:', silentStreamData.status);
+    }
+  } catch (error) {
+    logger.error('Error starting silent stream:', error);
   }
-
-  // Start sending silent breaks
-  sendSilentBreak();
 }
-
 
 function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
@@ -2288,12 +2271,8 @@ async function sendChatToGroq() {
 
               if (isFirstChunk && content.trim() !== '') {
                 isFirstChunk = false;
-                // Stop the silent stream and start the talking stream
-                isSilentStreamActive = false;
+                // Start the talking stream with the first non-empty chunk
                 await startStreaming(content);
-              } else if (!isFirstChunk) {
-                // Update the existing stream with new content
-                await updateStreamingContent(content);
               }
             } catch (error) {
               logger.error('Error parsing JSON:', error);
@@ -2316,16 +2295,17 @@ async function sendChatToGroq() {
 
     logger.debug('Assistant reply:', assistantReply);
 
+    // Update the existing stream with the rest of the response
+    await updateStreamingContent(assistantReply);
+
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
     const msgHistory = document.getElementById('msgHistory');
     msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
     msgHistory.scrollTop = msgHistory.scrollHeight;
-  } finally {
-    // Ensure silent stream is stopped
-    isSilentStreamActive = false;
   }
 }
+
 
 async function updateStreamingContent(content) {
   try {
