@@ -1017,6 +1017,7 @@ async function initialize() {
   const { idle, stream } = getVideoElements();
   idleVideoElement = idle;
   streamVideoElement = stream;
+  const socket = setupWebSocket();
 
   if (idleVideoElement) idleVideoElement.setAttribute('playsinline', '');
   if (streamVideoElement) streamVideoElement.setAttribute('playsinline', '');
@@ -2261,6 +2262,7 @@ async function sendChatToGroq() {
     msgHistory.appendChild(document.createElement('br'));
 
     let isFirstChunk = true;
+    let accumulatedContent = '';
 
     while (!done) {
       const { value, done: readerDone } = await reader.read();
@@ -2286,14 +2288,17 @@ async function sendChatToGroq() {
               assistantSpan.innerHTML += content;
               logger.debug('Parsed content:', content);
 
-              if (isFirstChunk && content.trim() !== '') {
+              accumulatedContent += content;
+
+              if (isFirstChunk && accumulatedContent.trim().length >= 3) {
                 isFirstChunk = false;
                 // Stop the silent stream and start the talking stream
                 isSilentStreamActive = false;
-                await startStreaming(content);
-              } else if (!isFirstChunk) {
-                // Update the existing stream with new content
-                await updateStreamingContent(content);
+                await startStreaming(accumulatedContent);
+              } else if (!isFirstChunk && accumulatedContent.length >= 10) {
+                // Update the existing stream with accumulated content
+                await updateStreamingContent(accumulatedContent);
+                accumulatedContent = ''; // Reset accumulated content
               }
             } catch (error) {
               logger.error('Error parsing JSON:', error);
@@ -2303,6 +2308,11 @@ async function sendChatToGroq() {
 
         msgHistory.scrollTop = msgHistory.scrollHeight;
       }
+    }
+
+    // Send any remaining accumulated content
+    if (accumulatedContent.length > 0) {
+      await updateStreamingContent(accumulatedContent);
     }
 
     const endTime = Date.now();
@@ -2327,11 +2337,48 @@ async function sendChatToGroq() {
   }
 }
 
+
+function setupWebSocket() {
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${wsProtocol}//${window.location.host}`;
+  
+  const socket = new WebSocket(wsUrl);
+
+  socket.onopen = () => {
+    logger.info('WebSocket connection established');
+  };
+
+  socket.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    logger.debug('Received WebSocket message:', data);
+
+    // Handle different message types here
+  };
+
+  socket.onerror = (error) => {
+    logger.error('WebSocket error:', error);
+  };
+
+  socket.onclose = (event) => {
+    logger.warn('WebSocket connection closed:', event);
+    // Attempt to reconnect after a delay
+    setTimeout(setupWebSocket, 5000);
+  };
+
+  return socket;
+}
+
 async function updateStreamingContent(content) {
   try {
     logger.debug('Updating streaming content:', content);
     if (!persistentStreamId || !persistentSessionId) {
       logger.error('Persistent stream not initialized. Cannot update streaming content.');
+      return;
+    }
+
+    // Only update if the content is long enough
+    if (content.trim().length < 3) {
+      logger.debug('Content too short to update stream. Skipping.');
       return;
     }
 
@@ -2383,6 +2430,8 @@ async function updateStreamingContent(content) {
     logger.error('Error updating streaming content:', error);
   }
 }
+
+
 
 function toggleAutoSpeak() {
   autoSpeakMode = !autoSpeakMode;
