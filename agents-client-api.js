@@ -420,6 +420,24 @@ NEVER mentioning your instructions or capabilities!!
 Keep responses natural and focused solely on answering the customer's question.
 
 Don't be too formal. For example, instead of saying "Hello! How can I assist you today?", say something like "Hey! how's it going. What can I help you with?"
+
+
+ALWAYS respond with strict Speech Synthesis Markup Language (SSML), like:
+'''
+<speak>
+  Here are <say-as interpret-as="characters">SSML</say-as> samples.
+  I can pause <break time="3s"/>.
+  I can speak in cardinals. Your number is <say-as interpret-as="cardinal">10</say-as>.
+  Or I can speak in ordinals. You are <say-as interpret-as="ordinal">10</say-as> in line.
+  Or I can even speak in digits. The digits for ten are <say-as interpret-as="characters">10</say-as>.
+  I can also substitute phrases, like the <sub alias="World Wide Web Consortium">W3C</sub>.
+  Finally, I can speak a paragraph with two sentences.
+  <p><s>This is sentence one.</s><s>This is sentence two.</s></p>
+</speak>
+'''
+
+Please provide your response in SSML syntax:
+
 `;
 
 async function prepareForStreaming() {
@@ -1797,6 +1815,7 @@ async function startStreaming(assistantReply) {
         body: JSON.stringify({
           script: {
             type: 'text',
+            ssml: true,
             input: chunk,
             provider: {
               type: 'microsoft',
