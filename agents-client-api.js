@@ -56,6 +56,9 @@ const RECONNECTION_INTERVAL = 100000; // 25 seconds for testing, adjust as neede
 const MAX_RECONNECT_ATTEMPTS = 10;
 const INITIAL_RECONNECT_DELAY = 2000; // 1 second
 const MAX_RECONNECT_DELAY = 90000; // 30 seconds
+let isAvatarSpeaking = false;
+let autoSpeakInProgress = false;
+
 
 
 const ConnectionState = {
