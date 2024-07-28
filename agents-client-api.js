@@ -58,6 +58,7 @@ const INITIAL_RECONNECT_DELAY = 2000; // 1 second
 const MAX_RECONNECT_DELAY = 90000; // 30 seconds
 let isAvatarSpeaking = false;
 let autoSpeakInProgress = false;
+let isSilentStreamActive = false;
 
 
 
@@ -660,157 +661,84 @@ async function startSilentStream() {
     return;
   }
 
-  try {
-    const silentStreamResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: '<break time="2s"/>', // Reduced from 10s to 2s
-          ssml: true,
-          provider: {
-            type: 'microsoft',
-            voice_id: avatars[currentAvatar].voiceId,
-          },
-        },
-        session_id: persistentSessionId,
-        driver_url: "bank://lively/driver-06",
-        output_resolution: 512,
-        config: {
-          fluent: true,
-          stitch: true,
-          pad_audio: 0.5,
-          auto_match: true,
-          align_driver: true,
-          normalization_factor: 0.1,
-          align_expand_factor: 0.3,
-          motion_factor: 0.55,
-          result_format: "mp4",
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: "neutral",
-                intensity: 0.5
-              }
-            ]
-          }
-        },
-      }),
-    });
+  isSilentStreamActive = true;
 
-    if (!silentStreamResponse.ok) {
-      throw new Error(`HTTP error! status: ${silentStreamResponse.status}`);
-    }
-
-    const silentStreamData = await silentStreamResponse.json();
-    logger.debug('Silent stream response:', silentStreamData);
-
-    if (silentStreamData.status === 'started') {
-      logger.debug('Silent stream started successfully');
-      // Transition to the silent video immediately
-      smoothTransition(true);
-    } else {
-      logger.warn('Unexpected response status for silent stream:', silentStreamData.status);
-    }
-  } catch (error) {
-    logger.error('Error starting silent stream:', error);
-  }
-}
-
-function updateAssistantReply(text) {
-  document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
-}
-
-async function initializePersistentStream() {
-  logger.info('Initializing persistent stream...');
-  connectionState = ConnectionState.CONNECTING;
-
-  try {
-    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        source_url: avatars[currentAvatar].imageUrl,
-        driver_url: "bank://lively/driver-06",
-        output_resolution: 512,
-        stream_warmup: true,
-        config: {
-          stitch: true,
-          fluent: true,
-          auto_match: true,
-          pad_audio: 0.5,
-          normalization_factor: 0.1,
-          align_driver: true,
-          motion_factor: 0.55,
-          align_expand_factor: 0.3,
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: "neutral",
-                intensity: 0.5
-              }
-            ]
-          }
-        }
-      }),
-    });
-
-    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
-
-    persistentStreamId = newStreamId;
-    persistentSessionId = newSessionId;
-
-    logger.info('Persistent stream created:', { persistentStreamId, persistentSessionId });
+  async function sendSilentBreak() {
+    if (!isSilentStreamActive) return;
 
     try {
-      sessionClientAnswer = await createPeerConnection(offer, iceServers);
-    } catch (e) {
-      logger.error('Error during streaming setup:', e);
-      stopAllStreams();
-      closePC();
-      throw e;
+      const silentStreamResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          script: {
+            type: 'text',
+            input: '<break time="1s"/>', // 1-second break
+            ssml: true,
+            provider: {
+              type: 'microsoft',
+              voice_id: avatars[currentAvatar].voiceId,
+            },
+          },
+          session_id: persistentSessionId,
+          driver_url: "bank://lively/driver-06",
+          output_resolution: 512,
+          config: {
+            fluent: true,
+            stitch: true,
+            pad_audio: 0.5,
+            auto_match: true,
+            align_driver: true,
+            normalization_factor: 0.1,
+            align_expand_factor: 0.3,
+            motion_factor: 0.55,
+            result_format: "mp4",
+            driver_expressions: {
+              expressions: [
+                {
+                  start_frame: 0,
+                  expression: "neutral",
+                  intensity: 0.5
+                }
+              ]
+            }
+          },
+        }),
+      });
+
+      if (!silentStreamResponse.ok) {
+        throw new Error(`HTTP error! status: ${silentStreamResponse.status}`);
+      }
+
+      const silentStreamData = await silentStreamResponse.json();
+      logger.debug('Silent stream response:', silentStreamData);
+
+      if (silentStreamData.status === 'started') {
+        logger.debug('Silent stream chunk sent successfully');
+        if (!isCurrentlyStreaming) {
+          smoothTransition(true);
+          isCurrentlyStreaming = true;
+        }
+      } else {
+        logger.warn('Unexpected response status for silent stream:', silentStreamData.status);
+      }
+
+      // Schedule the next silent break
+      setTimeout(sendSilentBreak, 900); // Send next break slightly before the current one ends
+    } catch (error) {
+      logger.error('Error sending silent stream chunk:', error);
+      isSilentStreamActive = false;
     }
-
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/sdp`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        answer: sessionClientAnswer,
-        session_id: persistentSessionId,
-      }),
-    });
-
-    if (!sdpResponse.ok) {
-      throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
-    }
-    isPersistentStreamActive = true;
-    startKeepAlive();
-    lastConnectionTime = Date.now(); // Update the last connection time
-    logger.info('Persistent stream initialized successfully');
-    connectionState = ConnectionState.CONNECTED;
-  } catch (error) {
-    logger.error('Failed to initialize persistent stream:', error);
-    isPersistentStreamActive = false;
-    persistentStreamId = null;
-    persistentSessionId = null;
-    connectionState = ConnectionState.DISCONNECTED;
-    throw error;
   }
+
+  // Start sending silent breaks
+  sendSilentBreak();
 }
+
+
 
 
 
@@ -2040,6 +1968,7 @@ function handleTranscription(data) {
 }
 
 
+
 async function startRecording() {
   if (isRecording) {
     logger.warn('Recording is already in progress. Stopping current recording.');
@@ -2136,6 +2065,7 @@ async function startRecording() {
   }
 }
 
+
 function handleDeepgramError(err) {
   logger.error('Deepgram error:', err);
   isRecording = false;
@@ -2196,6 +2126,7 @@ async function stopRecording() {
     logger.debug('Recording and transcription stopped');
   }
 }
+
 
 async function sendChatToGroq() {
   if (chatHistory.length === 0 || chatHistory[chatHistory.length - 1].content.trim() === '') {
@@ -2271,8 +2202,12 @@ async function sendChatToGroq() {
 
               if (isFirstChunk && content.trim() !== '') {
                 isFirstChunk = false;
-                // Start the talking stream with the first non-empty chunk
+                // Stop the silent stream and start the talking stream
+                isSilentStreamActive = false;
                 await startStreaming(content);
+              } else if (!isFirstChunk) {
+                // Update the existing stream with new content
+                await updateStreamingContent(content);
               }
             } catch (error) {
               logger.error('Error parsing JSON:', error);
@@ -2295,16 +2230,18 @@ async function sendChatToGroq() {
 
     logger.debug('Assistant reply:', assistantReply);
 
-    // Update the existing stream with the rest of the response
-    await updateStreamingContent(assistantReply);
-
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
     const msgHistory = document.getElementById('msgHistory');
     msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
     msgHistory.scrollTop = msgHistory.scrollHeight;
+  } finally {
+    // Ensure silent stream is stopped
+    isSilentStreamActive = false;
   }
 }
+
+
 
 
 async function updateStreamingContent(content) {
