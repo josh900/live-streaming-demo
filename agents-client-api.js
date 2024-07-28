@@ -994,7 +994,7 @@ async function backgroundReconnect() {
 
 
 async function initialize() {
-  setLogLevel('DEBUG');
+  setLogLevel('INFO');
   connectionState = ConnectionState.DISCONNECTED;
 
   const { idle, stream } = getVideoElements();
