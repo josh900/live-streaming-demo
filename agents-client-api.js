@@ -59,7 +59,8 @@ const MAX_RECONNECT_DELAY = 90000; // 30 seconds
 let isAvatarSpeaking = false;
 let autoSpeakInProgress = false;
 let isSilentStreamActive = false;
-
+let isStreamingActive = false;
+let currentStreamId = null;
 
 
 const ConnectionState = {
@@ -482,27 +483,21 @@ function initializeTransitionCanvas() {
 }
 
 function smoothTransition(toStreaming, duration = 250) {
-  const idleVideoElement = document.getElementById('idle-video-element');
-  const streamVideoElement = document.getElementById('stream-video-element');
-
-  if (!idleVideoElement || !streamVideoElement) {
-    logger.warn('Video elements not found for transition');
-    return;
-  }
-
   if (isTransitioning) {
     logger.debug('Transition already in progress, skipping');
     return;
   }
 
-  // Don't transition if we're already in the desired state
-  if ((toStreaming && isCurrentlyStreaming) || (!toStreaming && !isCurrentlyStreaming)) {
+  if ((toStreaming && isStreamingActive) || (!toStreaming && !isStreamingActive)) {
     logger.debug('Already in desired state, skipping transition');
     return;
   }
 
   isTransitioning = true;
   logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
+
+  const idleVideoElement = document.getElementById('idle-video-element');
+  const streamVideoElement = document.getElementById('stream-video-element');
 
   let startTime = null;
 
@@ -513,18 +508,15 @@ function smoothTransition(toStreaming, duration = 250) {
 
     transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
     
-    // Draw the fading out video
     transitionCtx.globalAlpha = 1 - progress;
     transitionCtx.drawImage(toStreaming ? idleVideoElement : streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
     
-    // Draw the fading in video
     transitionCtx.globalAlpha = progress;
     transitionCtx.drawImage(toStreaming ? streamVideoElement : idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
 
     if (progress < 1) {
       requestAnimationFrame(animate);
     } else {
-      // Ensure final state is set correctly
       if (toStreaming) {
         streamVideoElement.style.display = 'block';
         idleVideoElement.style.display = 'none';
@@ -533,18 +525,16 @@ function smoothTransition(toStreaming, duration = 250) {
         idleVideoElement.style.display = 'block';
       }
       isTransitioning = false;
-      isCurrentlyStreaming = toStreaming;
+      isStreamingActive = toStreaming;
       transitionCanvas.style.display = 'none';
       logger.debug('Smooth transition completed');
     }
   }
 
-  // Show the transition canvas
   transitionCanvas.style.display = 'block';
-  
-  // Start the animation
   requestAnimationFrame(animate);
 }
+
 
 
 function getVideoElements() {
@@ -629,7 +619,7 @@ function updateTranscript(text, isFinal) {
   msgHistory.scrollTop = msgHistory.scrollHeight;
 }
 
-function handleTextInput(text) {
+async function handleTextInput(text) {
   if (text.trim() === '') return;
 
   const textInput = document.getElementById('text-input');
@@ -642,11 +632,71 @@ function handleTextInput(text) {
     content: text,
   });
 
-  // Start the silent video stream immediately
-  startSilentStream();
+  // Start silent stream
+  await startStreamWithSilence();
 
-  sendChatToGroq();
+  // Send chat to Groq
+  await sendChatToGroq();
 }
+
+async function startStreamWithSilence() {
+  if (isStreamingActive) return;
+
+  logger.debug('Starting stream with silence...');
+
+  try {
+    const streamResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: '<break time="60s"/>', // 60-second break
+          ssml: true,
+          provider: {
+            type: 'microsoft',
+            voice_id: avatars[currentAvatar].voiceId,
+          },
+        },
+        session_id: persistentSessionId,
+        driver_url: "bank://lively/driver-06",
+        config: {
+          fluent: true,
+          stitch: true,
+          pad_audio: 0.5,
+          auto_match: true,
+          align_driver: true,
+          normalization_factor: 0.1,
+          align_expand_factor: 0.3,
+          motion_factor: 0.55,
+          result_format: "mp4",
+        },
+      }),
+    });
+
+    if (!streamResponse.ok) {
+      throw new Error(`HTTP error! status: ${streamResponse.status}`);
+    }
+
+    const streamData = await streamResponse.json();
+    logger.debug('Stream response:', streamData);
+
+    if (streamData.status === 'started') {
+      logger.debug('Stream started successfully');
+      isStreamingActive = true;
+      currentStreamId = streamData.id;
+      smoothTransition(true);
+    } else {
+      logger.warn('Unexpected response status for stream:', streamData.status);
+    }
+  } catch (error) {
+    logger.error('Error starting stream:', error);
+  }
+}
+
 
 async function startSilentStream() {
   logger.debug('Starting silent stream...');
@@ -2216,36 +2266,24 @@ async function stopRecording() {
 }
 
 async function sendChatToGroq() {
-  if (chatHistory.length === 0 || chatHistory[chatHistory.length - 1].content.trim() === '') {
-    logger.debug('No new content to send to Groq. Skipping request.');
-    return;
-  }
-
   logger.debug('Sending chat to Groq...');
   try {
-    const startTime = Date.now();
-    const currentContext = document.getElementById('context-input').value.trim();
-    const requestBody = {
-      messages: [
-        {
-          role: 'system',
-          content: currentContext || context,
-        },
-        ...chatHistory,
-      ],
-      model: 'llama3-8b-8192',
-    };
-    logger.debug('Request body:', JSON.stringify(requestBody));
-
     const response = await fetch('/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(requestBody),
+      body: JSON.stringify({
+        messages: [
+          {
+            role: 'system',
+            content: context,
+          },
+          ...chatHistory,
+        ],
+        model: 'llama3-8b-8192',
+      }),
     });
-
-    logger.debug('Groq response status:', response.status);
 
     if (!response.ok) {
       throw new Error(`HTTP error ${response.status}`);
@@ -2255,22 +2293,12 @@ async function sendChatToGroq() {
     let assistantReply = '';
     let done = false;
 
-    const msgHistory = document.getElementById('msgHistory');
-    const assistantSpan = document.createElement('span');
-    assistantSpan.innerHTML = '<u>Assistant:</u> ';
-    msgHistory.appendChild(assistantSpan);
-    msgHistory.appendChild(document.createElement('br'));
-
-    let isFirstChunk = true;
-    let accumulatedContent = '';
-
     while (!done) {
       const { value, done: readerDone } = await reader.read();
       done = readerDone;
 
       if (value) {
         const chunk = new TextDecoder().decode(value);
-        logger.debug('Received chunk:', chunk);
         const lines = chunk.split('\n');
 
         for (const line of lines) {
@@ -2285,46 +2313,22 @@ async function sendChatToGroq() {
               const parsed = JSON.parse(data);
               const content = parsed.choices[0]?.delta?.content || '';
               assistantReply += content;
-              assistantSpan.innerHTML += content;
-              logger.debug('Parsed content:', content);
-
-              accumulatedContent += content;
-
-              if (isFirstChunk && accumulatedContent.trim().length >= 3) {
-                isFirstChunk = false;
-                // Stop the silent stream and start the talking stream
-                isSilentStreamActive = false;
-                await startStreaming(accumulatedContent);
-              } else if (!isFirstChunk && accumulatedContent.length >= 10) {
-                // Update the existing stream with accumulated content
-                await updateStreamingContent(accumulatedContent);
-                accumulatedContent = ''; // Reset accumulated content
-              }
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
           }
         }
-
-        msgHistory.scrollTop = msgHistory.scrollHeight;
       }
     }
 
-    // Send any remaining accumulated content
-    if (accumulatedContent.length > 0) {
-      await updateStreamingContent(accumulatedContent);
-    }
-
-    const endTime = Date.now();
-    const processingTime = endTime - startTime;
-    logger.debug(`Groq processing completed in ${processingTime}ms`);
-
+    logger.debug('Assistant reply:', assistantReply);
     chatHistory.push({
       role: 'assistant',
       content: assistantReply,
     });
 
-    logger.debug('Assistant reply:', assistantReply);
+    // Update the stream with the full assistant reply
+    await updateStreamWithReply(assistantReply);
 
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
@@ -2332,8 +2336,8 @@ async function sendChatToGroq() {
     msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
     msgHistory.scrollTop = msgHistory.scrollHeight;
   } finally {
-    // Ensure silent stream is stopped
-    isSilentStreamActive = false;
+    // Transition back to idle after the response is complete
+    await endStreamAndTransitionToIdle();
   }
 }
 
@@ -2367,6 +2371,86 @@ function setupWebSocket() {
 
   return socket;
 }
+
+
+async function updateStreamWithReply(reply) {
+  if (!isStreamingActive || !currentStreamId) {
+    logger.warn('No active stream to update');
+    return;
+  }
+
+  try {
+    const updateResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: reply,
+          provider: {
+            type: 'microsoft',
+            voice_id: avatars[currentAvatar].voiceId,
+          },
+        },
+        session_id: persistentSessionId,
+        id: currentStreamId,
+      }),
+    });
+
+    if (!updateResponse.ok) {
+      throw new Error(`HTTP error! status: ${updateResponse.status}`);
+    }
+
+    const updateResponseData = await updateResponse.json();
+    logger.debug('Stream update response:', updateResponseData);
+
+    if (updateResponseData.status === 'started') {
+      logger.debug('Stream content updated successfully');
+    } else {
+      logger.warn('Unexpected response status for stream update:', updateResponseData.status);
+    }
+  } catch (error) {
+    logger.error('Error updating streaming content:', error);
+  }
+}
+
+async function endStreamAndTransitionToIdle() {
+  if (!isStreamingActive || !currentStreamId) {
+    logger.warn('No active stream to end');
+    return;
+  }
+
+  try {
+    const endResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        session_id: persistentSessionId,
+      }),
+    });
+
+    if (!endResponse.ok) {
+      throw new Error(`HTTP error! status: ${endResponse.status}`);
+    }
+
+    logger.debug('Stream ended successfully');
+  } catch (error) {
+    logger.error('Error ending stream:', error);
+  } finally {
+    isStreamingActive = false;
+    currentStreamId = null;
+    smoothTransition(false);
+  }
+}
+
+
+
 
 async function updateStreamingContent(content) {
   try {
