@@ -642,11 +642,12 @@ function handleTextInput(text) {
     content: text,
   });
 
-  // Start streaming immediately with silent video
+  // Start streaming immediately
   startStreaming('');
 
   sendChatToGroq();
 }
+
 
 function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
@@ -1852,7 +1853,6 @@ async function initializeConnection() {
 }
 
 
-
 async function startStreaming(assistantReply) {
   try {
     logger.debug('Starting streaming with reply:', assistantReply);
@@ -1874,56 +1874,62 @@ async function startStreaming(assistantReply) {
       return;
     }
 
-    // Only transition to streaming video if we're not already streaming
-    if (!isCurrentlyStreaming) {
-      const silentResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${DID_API.key}`,
-          'Content-Type': 'application/json',
+    // Start with a silent video, but don't transition yet
+    const silentResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: '<break time="5000ms"/>',
+          ssml: true,
+          provider: {
+            type: 'microsoft',
+            voice_id: avatars[currentAvatar].voiceId,
+          },
         },
-        body: JSON.stringify({
-          script: {
-            type: 'text',
-            input: '<break time="5000ms"/>',
-            ssml: true,
-            provider: {
-              type: 'microsoft',
-              voice_id: avatars[currentAvatar].voiceId,
-            },
-          },
-          session_id: persistentSessionId,
-          driver_url: "bank://lively/driver-06",
-          config: {
-            fluent: true,
-            stitch: true,
-            pad_audio: 0.5,
-            auto_match: true,
-            align_driver: true,
-            normalization_factor: 0.1,
-            align_expand_factor: 0.3,
-            motion_factor: 0.55,
-          },
-        }),
-      });
+        session_id: persistentSessionId,
+        driver_url: "bank://lively/driver-06",
+        config: {
+          fluent: true,
+          stitch: true,
+          pad_audio: 0.5,
+          auto_match: true,
+          align_driver: true,
+          normalization_factor: 0.1,
+          align_expand_factor: 0.3,
+          motion_factor: 0.55,
+        },
+      }),
+    });
 
-      if (!silentResponse.ok) {
-        throw new Error(`HTTP error! status: ${silentResponse.status}`);
-      }
+    if (!silentResponse.ok) {
+      throw new Error(`HTTP error! status: ${silentResponse.status}`);
+    }
 
-      const silentResponseData = await silentResponse.json();
-      logger.debug('Silent video response:', silentResponseData);
+    const silentResponseData = await silentResponse.json();
+    logger.debug('Silent video response:', silentResponseData);
 
-      if (silentResponseData.status === 'started') {
-        logger.debug('Silent video started successfully');
+    if (silentResponseData.status === 'started') {
+      logger.debug('Silent video started successfully');
+      // Only transition once, from idle to streaming
+      if (!isCurrentlyStreaming) {
         smoothTransition(true);
         isCurrentlyStreaming = true;
       }
     }
 
-    // If we have an assistant reply, update the stream with it
-    if (assistantReply) {
-      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+    // Function to update the stream with new content
+    async function updateStream(content) {
+      if (content.length < 3) {
+        logger.debug('Content too short, skipping update');
+        return;
+      }
+
+      const updateResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
         method: 'POST',
         headers: {
           Authorization: `Basic ${DID_API.key}`,
@@ -1932,7 +1938,7 @@ async function startStreaming(assistantReply) {
         body: JSON.stringify({
           script: {
             type: 'text',
-            input: assistantReply,
+            input: content,
             ssml: true,
             provider: {
               type: 'microsoft',
@@ -1954,19 +1960,36 @@ async function startStreaming(assistantReply) {
         }),
       });
 
-      if (!playResponse.ok) {
-        throw new Error(`HTTP error! status: ${playResponse.status}`);
+      if (!updateResponse.ok) {
+        throw new Error(`HTTP error! status: ${updateResponse.status}`);
       }
 
-      const playResponseData = await playResponse.json();
-      logger.debug('Streaming response:', playResponseData);
+      const updateResponseData = await updateResponse.json();
+      logger.debug('Stream update response:', updateResponseData);
 
-      if (playResponseData.status === 'started') {
-        logger.debug('Stream started successfully');
+      if (updateResponseData.status === 'started') {
+        logger.debug('Stream update started successfully');
+      } else {
+        logger.warn('Unexpected response status:', updateResponseData.status);
       }
     }
 
-    isAvatarSpeaking = true;
+    // If we have an assistant reply, update the stream with it
+    if (assistantReply) {
+      // Split the reply into chunks of about 250 characters, breaking at spaces
+      const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
+
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i].trim();
+        if (chunk.length === 0) continue;
+
+        isAvatarSpeaking = true;
+        await updateStream(chunk);
+      }
+    }
+
+    isAvatarSpeaking = false;
+    // Don't transition back to idle here, let it happen naturally when the video ends
 
   } catch (error) {
     logger.error('Error during streaming:', error);
@@ -1976,8 +1999,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
-
 
 
 export function toggleSimpleMode() {
@@ -2275,9 +2296,6 @@ async function sendChatToGroq() {
     };
     logger.debug('Request body:', JSON.stringify(requestBody));
 
-    // Start streaming with silent video immediately
-    await startStreaming('');
-
     const response = await fetch('/chat', {
       method: 'POST',
       headers: {
@@ -2331,7 +2349,7 @@ async function sendChatToGroq() {
               logger.debug('Parsed content:', content);
 
               if (accumulatedContent.length >= contentThreshold) {
-                await startStreaming(accumulatedContent);
+                await updateStreamingContent(accumulatedContent);
                 accumulatedContent = '';
               }
             } catch (error) {
@@ -2346,7 +2364,7 @@ async function sendChatToGroq() {
 
     // Send any remaining content
     if (accumulatedContent.length > 0) {
-      await startStreaming(accumulatedContent);
+      await updateStreamingContent(accumulatedContent);
     }
 
     const endTime = Date.now();
@@ -2360,23 +2378,13 @@ async function sendChatToGroq() {
 
     logger.debug('Assistant reply:', assistantReply);
 
-    // Wait for the avatar to finish speaking before transitioning back to idle
-    await waitForIdleState();
-    isAvatarSpeaking = false;
-    isCurrentlyStreaming = false;
-    smoothTransition(false);
-
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
     const msgHistory = document.getElementById('msgHistory');
     msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
     msgHistory.scrollTop = msgHistory.scrollHeight;
-    isAvatarSpeaking = false;
-    isCurrentlyStreaming = false;
-    smoothTransition(false);
   }
 }
-
 
 async function updateStreamingContent(content) {
   if (content.length < 3) {
@@ -2385,7 +2393,7 @@ async function updateStreamingContent(content) {
   }
 
   try {
-    await startStreaming(content);
+    await updateStream(content);
   } catch (error) {
     logger.error('Error updating streaming content:', error);
   }
