@@ -1889,25 +1889,13 @@ async function startStreaming(assistantReply) {
       return;
     }
 
-    // Ensure the entire assistantReply is wrapped in a single <speak> tag
-    let wrappedSSML = assistantReply.trim();
-    if (!wrappedSSML.startsWith('<speak>')) {
-      wrappedSSML = `<speak>${wrappedSSML}</speak>`;
-    }
-    if (!wrappedSSML.endsWith('</speak>')) {
-      wrappedSSML = `${wrappedSSML}</speak>`;
+    // Remove outer <speak> tags if present
+    let ssmlContent = assistantReply.trim();
+    if (ssmlContent.startsWith('<speak>') && ssmlContent.endsWith('</speak>')) {
+      ssmlContent = ssmlContent.slice(7, -8);
     }
 
-    logger.debug('Wrapped SSML:', wrappedSSML);
-
-    // Escape special characters in SSML
-    const escapedSSML = wrappedSSML.replace(/&/g, '&amp;')
-                                   .replace(/</g, '&lt;')
-                                   .replace(/>/g, '&gt;')
-                                   .replace(/"/g, '&quot;')
-                                   .replace(/'/g, '&apos;');
-
-    logger.debug('Escaped SSML:', escapedSSML);
+    logger.debug('SSML content:', ssmlContent);
 
     isAvatarSpeaking = true;
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
@@ -1919,7 +1907,7 @@ async function startStreaming(assistantReply) {
       body: JSON.stringify({
         script: {
           type: 'text',
-          input: escapedSSML,
+          input: ssmlContent,
           ssml: true,
           provider: {
             type: 'microsoft',
