@@ -2335,11 +2335,9 @@ async function sendChatToGroq() {
             try {
               const parsed = JSON.parse(data);
               const content = parsed.choices[0]?.delta?.content || '';
-              // Remove <speak> tags before adding to assistantReply and displaying
-              const cleanContent = content.replace(/<\/?speak>/g, '');
-              assistantReply += cleanContent;
-              assistantSpan.innerHTML += cleanContent;
-              logger.debug('Parsed content:', cleanContent);
+              assistantReply += content;
+              assistantSpan.innerHTML += content;
+              logger.debug('Parsed content:', content);
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
