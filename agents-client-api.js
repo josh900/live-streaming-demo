@@ -436,7 +436,7 @@ ALWAYS respond with strict Speech Synthesis Markup Language (SSML), like:
 </speak>
 
 
-Please provide your response in SSML syntax:
+Please provide your response to the users last message in SSML syntax.
 `;
 
 async function prepareForStreaming() {
