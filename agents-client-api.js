@@ -1900,15 +1900,6 @@ async function startStreaming(assistantReply) {
 
     logger.debug('Wrapped SSML:', wrappedSSML);
 
-    // Escape special characters in SSML
-    const escapedSSML = wrappedSSML.replace(/&/g, '&amp;')
-                                   .replace(/</g, '&lt;')
-                                   .replace(/>/g, '&gt;')
-                                   .replace(/"/g, '&quot;')
-                                   .replace(/'/g, '&apos;');
-
-    logger.debug('Escaped SSML:', escapedSSML);
-
     isAvatarSpeaking = true;
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
       method: 'POST',
@@ -1919,7 +1910,7 @@ async function startStreaming(assistantReply) {
       body: JSON.stringify({
         script: {
           type: 'text',
-          input: escapedSSML,
+          input: wrappedSSML,
           ssml: true,
           provider: {
             type: 'microsoft',
@@ -1951,9 +1942,6 @@ async function startStreaming(assistantReply) {
     if (playResponseData.status === 'started') {
       logger.debug('Stream chunk started successfully');
 
-      let streamStarted = false;
-      let streamDone = false;
-
       // Set up event listeners for the stream events
       if (pcDataChannel) {
         pcDataChannel.onmessage = (event) => {
@@ -1962,10 +1950,9 @@ async function startStreaming(assistantReply) {
 
           if (streamEvent === 'stream/started') {
             logger.debug('Stream started event received');
-            streamStarted = true;
+            // The video should start playing automatically when it's ready
           } else if (streamEvent === 'stream/done') {
             logger.debug('Stream done event received');
-            streamDone = true;
             isAvatarSpeaking = false;
             smoothTransition(false);
           }
@@ -1974,42 +1961,30 @@ async function startStreaming(assistantReply) {
         logger.warn('Data channel not available for stream events');
       }
 
-      // Wait for the stream to start
-      let attempts = 0;
-      const maxAttempts = 30; // 30 seconds timeout
-      while (!streamStarted && attempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        attempts++;
-        logger.debug(`Waiting for stream to start... Attempt ${attempts}/${maxAttempts}`);
-      }
+      // The video should already be set up and playing from the persistent stream
+      // We just need to ensure it's visible
+      streamVideoElement.style.display = 'block';
+      idleVideoElement.style.display = 'none';
 
-      if (!streamStarted) {
-        throw new Error('Stream failed to start within the timeout period');
-      }
+      // Wait for the stream to complete
+      await new Promise(resolve => {
+        const checkStreamDone = setInterval(() => {
+          if (!isAvatarSpeaking) {
+            clearInterval(checkStreamDone);
+            resolve();
+          }
+        }, 1000);
+      });
 
-      logger.debug('Stream started, waiting for video to be ready');
-
-      // Wait for the video to be ready
-      attempts = 0;
-      while (!streamDone && attempts < maxAttempts) {
-        if (streamVideoElement.readyState >= 3) {
-          logger.debug('Video is ready to play');
-          await streamVideoElement.play();
-          smoothTransition(true);
-          break;
-        }
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        attempts++;
-        logger.debug(`Waiting for video to be ready... Attempt ${attempts}/${maxAttempts}`);
-      }
-
-      if (streamDone) {
-        logger.debug('Stream completed');
-      } else if (attempts >= maxAttempts) {
-        logger.warn('Timed out waiting for video to be ready');
-      }
+      logger.debug('Stream completed');
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
+    }
+
+    // Check if we need to reconnect
+    if (shouldReconnect()) {
+      logger.info('Approaching reconnection threshold. Initiating background reconnect.');
+      await backgroundReconnect();
     }
 
   } catch (error) {
