@@ -1909,8 +1909,9 @@ async function startStreaming(assistantReply) {
       },
       body: JSON.stringify({
         script: {
-          type: 'ssml',
-          ssml: wrappedSSML,
+          type: 'text',
+          input: wrappedSSML,
+          ssml: true,
           provider: {
             type: 'microsoft',
             voice_id: avatars[currentAvatar].voiceId,
@@ -1994,6 +1995,7 @@ async function startStreaming(assistantReply) {
     }
   }
 }
+
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
