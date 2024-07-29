@@ -1032,7 +1032,7 @@ async function sendSDPAnswer(streamId, sessionId, answer) {
 }
 
 async function initialize() {
-  setLogLevel('DEBUG');
+  setLogLevel('INFO');
   connectionState = ConnectionState.DISCONNECTED;
 
   const { idle, stream } = getVideoElements();
@@ -1343,13 +1343,16 @@ function cleanupPushToTalk() {
 }
 
 async function startPushToTalk() {
-  if (!isPushToTalkEnabled || isPushToTalkActive) return;
+  if (!isPushToTalkEnabled || isPushToTalkActive || isAvatarSpeaking) return;
 
   isPushToTalkActive = true;
   currentUtterance = '';
   interimMessageAdded = false;
 
   logger.debug('Starting Push to Talk...');
+
+  const pushToTalkButton = document.getElementById('push-to-talk-button');
+  pushToTalkButton.classList.add('active');
 
   audioWorkletNode.port.onmessage = (event) => {
     const audioData = event.data;
@@ -1364,6 +1367,9 @@ async function stopPushToTalk() {
 
   isPushToTalkActive = false;
   logger.debug('Stopping Push to Talk...');
+
+  const pushToTalkButton = document.getElementById('push-to-talk-button');
+  pushToTalkButton.classList.remove('active');
 
   audioWorkletNode.port.onmessage = null;
 
@@ -1380,7 +1386,6 @@ async function stopPushToTalk() {
   }
 }
 
-
 function handlePushToTalkTranscription(data) {
   const transcript = data.channel.alternatives[0].transcript;
   if (isPushToTalkActive) {
@@ -1391,6 +1396,7 @@ function handlePushToTalkTranscription(data) {
     }
   }
 }
+
 
 
 function updateContext(action) {
@@ -2016,11 +2022,16 @@ async function startStreaming(assistantReply) {
 
     const streamVideoElement = document.getElementById('stream-video-element');
     const idleVideoElement = document.getElementById('idle-video-element');
+    const pushToTalkButton = document.getElementById('push-to-talk-button');
 
     if (!streamVideoElement || !idleVideoElement) {
       logger.error('Video elements not found');
       return;
     }
+
+    // Disable Push to Talk button while avatar is speaking
+    pushToTalkButton.disabled = true;
+    isAvatarSpeaking = true;
 
     // Remove outer <speak> tags if present
     let ssmlContent = assistantReply.trim();
@@ -2037,7 +2048,6 @@ async function startStreaming(assistantReply) {
       const chunk = chunks[i].trim();
       if (chunk.length === 0) continue;
 
-      isAvatarSpeaking = true;
       const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
         method: 'POST',
         headers: {
@@ -2114,12 +2124,24 @@ async function startStreaming(assistantReply) {
     isAvatarSpeaking = false;
     smoothTransition(false);
 
+    // Re-enable Push to Talk button after avatar finishes speaking
+    if (isPushToTalkEnabled) {
+      pushToTalkButton.disabled = false;
+    }
+
   } catch (error) {
     logger.error('Error during streaming:', error);
     if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
       logger.warn('Stream not found or invalid session. Attempting to reinitialize persistent stream.');
       await reinitializePersistentStream();
     }
+  } finally {
+    // Ensure Push to Talk button is re-enabled even if an error occurs
+    if (isPushToTalkEnabled) {
+      const pushToTalkButton = document.getElementById('push-to-talk-button');
+      pushToTalkButton.disabled = false;
+    }
+    isAvatarSpeaking = false;
   }
 }
 
@@ -2566,7 +2588,7 @@ async function reinitializeConnection() {
     if (idleVideoElement) idleVideoElement.style.display = 'block';
 
     // Add a delay before initializing to avoid rapid successive calls
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     await initializePersistentStream();
 
