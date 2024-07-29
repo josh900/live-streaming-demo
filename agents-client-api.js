@@ -1923,14 +1923,26 @@ async function startStreaming(initialPause = true) {
     const streamData = await streamResponse.json();
     logger.debug('Stream started:', streamData);
 
+    // Set up the video element once
+    const streamVideoElement = document.getElementById('stream-video-element');
+    if (streamVideoElement) {
+      streamVideoElement.style.display = 'block';
+      streamVideoElement.src = streamData.result_url;
+      await streamVideoElement.play();
+    }
+
     // Start sending pauses until we have content
-    sendPausesUntilContent();
+    while (isAvatarSpeaking && !hasGroqResponse) {
+      await sendContentToStream('<break time="1s"/>');
+      await new Promise(resolve => setTimeout(resolve, 900)); // Wait slightly less than 1 second
+    }
 
   } catch (error) {
     logger.error('Error during streaming:', error);
     isAvatarSpeaking = false;
   }
 }
+
 
 async function sendPausesUntilContent() {
   while (isAvatarSpeaking && !hasGroqResponse) {
@@ -1940,6 +1952,11 @@ async function sendPausesUntilContent() {
 }
 
 async function sendContentToStream(content) {
+  if (content.trim().length < 3) {
+    logger.warn('Content too short, skipping');
+    return;
+  }
+
   try {
     const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
       method: 'POST',
@@ -1971,6 +1988,7 @@ async function sendContentToStream(content) {
     logger.error('Error sending content to stream:', error);
   }
 }
+
 
 
 export function toggleSimpleMode() {
