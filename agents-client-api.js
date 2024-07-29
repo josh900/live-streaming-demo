@@ -1890,10 +1890,13 @@ async function startStreaming(assistantReply) {
       return;
     }
 
-    // Split the reply into SSML chunks
-    const chunks = assistantReply.split('</speak>').filter(chunk => chunk.trim() !== '').map(chunk => `${chunk}</speak>`);
+    // Split the reply into chunks of about 250 characters, breaking at spaces
+    const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
 
-    for (const chunk of chunks) {
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i].trim();
+      if (chunk.length === 0) continue;
+
       isAvatarSpeaking = true;
       const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
         method: 'POST',
@@ -1937,6 +1940,7 @@ async function startStreaming(assistantReply) {
           },
         }),
       });
+      
 
       if (!playResponse.ok) {
         throw new Error(`HTTP error! status: ${playResponse.status}`);
@@ -1972,8 +1976,8 @@ async function startStreaming(assistantReply) {
     isAvatarSpeaking = false;
     smoothTransition(false);
 
-    // Check if we need to reconnect
-    if (shouldReconnect()) {
+     // Check if we need to reconnect
+     if (shouldReconnect()) {
       logger.info('Approaching reconnection threshold. Initiating background reconnect.');
       await backgroundReconnect();
     }
@@ -2271,12 +2275,9 @@ async function sendChatToGroq() {
       messages: [
         {
           role: 'system',
-          content: `chat history:\n\`\`\`\n${chatHistory.map(msg => `${msg.role}: ${msg.content}`).join('\n')}\n\`\`\`\n\ninstructions:\n\`\`\`\n${currentContext || context}\n\`\`\``,
+          content: currentContext || context,
         },
-        {
-          role: 'user',
-          content: chatHistory[chatHistory.length - 1].content,
-        },
+        ...chatHistory,
       ],
       model: 'llama3-8b-8192',
     };
@@ -2327,7 +2328,7 @@ async function sendChatToGroq() {
               const parsed = JSON.parse(data);
               const content = parsed.choices[0]?.delta?.content || '';
               assistantReply += content;
-              assistantSpan.innerHTML += content.replace(/<\/?[^>]+(>|$)/g, ''); // Remove SSML tags for UI display
+              assistantSpan.innerHTML += content;
               logger.debug('Parsed content:', content);
             } catch (error) {
               logger.error('Error parsing JSON:', error);
@@ -2343,24 +2344,15 @@ async function sendChatToGroq() {
     const processingTime = endTime - startTime;
     logger.debug(`Groq processing completed in ${processingTime}ms`);
 
-    // Ensure assistantReply is properly formatted with SSML tags
-    let formattedReply = assistantReply.trim();
-    if (!formattedReply.startsWith('<speak>')) {
-      formattedReply = '<speak>' + formattedReply;
-    }
-    if (!formattedReply.endsWith('</speak>')) {
-      formattedReply += '</speak>';
-    }
-
     chatHistory.push({
       role: 'assistant',
-      content: formattedReply,
+      content: assistantReply,
     });
 
-    logger.debug('Formatted assistant reply:', formattedReply);
+    logger.debug('Assistant reply:', assistantReply);
 
     // Start streaming the entire response
-    await startStreaming(formattedReply);
+    await startStreaming(assistantReply);
 
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
@@ -2369,7 +2361,6 @@ async function sendChatToGroq() {
     msgHistory.scrollTop = msgHistory.scrollHeight;
   }
 }
-
 
 function toggleAutoSpeak() {
   autoSpeakMode = !autoSpeakMode;
