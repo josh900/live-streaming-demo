@@ -1893,9 +1893,6 @@ async function startStreaming(assistantReply) {
     // Split the reply into SSML chunks
     const chunks = assistantReply.split('</speak>').filter(chunk => chunk.trim() !== '').map(chunk => `${chunk}</speak>`);
 
-    // Transition to streaming state only once at the beginning
-    smoothTransition(true);
-
     for (const chunk of chunks) {
       isAvatarSpeaking = true;
       const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
@@ -1952,16 +1949,15 @@ async function startStreaming(assistantReply) {
         logger.debug('Stream chunk started successfully');
 
         if (playResponseData.result_url) {
-          // Wait for the video to be ready before playing
+          // Wait for the video to be ready before transitioning
           await new Promise((resolve) => {
             streamVideoElement.src = playResponseData.result_url;
             streamVideoElement.oncanplay = resolve;
           });
 
-          // Play the video
-          await streamVideoElement.play();
+          // Perform the transition
+          smoothTransition(true);
 
-          // Wait for the video to finish playing
           await new Promise(resolve => {
             streamVideoElement.onended = resolve;
           });
@@ -1974,8 +1970,6 @@ async function startStreaming(assistantReply) {
     }
 
     isAvatarSpeaking = false;
-    
-    // Transition back to idle state after all chunks have been played
     smoothTransition(false);
 
     // Check if we need to reconnect
@@ -1992,7 +1986,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
