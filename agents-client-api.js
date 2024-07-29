@@ -647,7 +647,7 @@ function updateTranscript(text, isFinal) {
   msgHistory.scrollTop = msgHistory.scrollHeight;
 }
 
-function handleTextInput(text) {
+async function handleTextInput(text) {
   if (text.trim() === '') return;
 
   const textInput = document.getElementById('text-input');
@@ -660,7 +660,20 @@ function handleTextInput(text) {
     content: text,
   });
 
-  sendChatToGroq();
+  logger.debug('Initiating early stream preparation');
+  const streamPreparationPromise = prepareEarlyStream();
+
+  logger.debug('Sending chat to Groq');
+  const groqResponsePromise = sendChatToGroq();
+
+  try {
+    const [streamReady, groqResponse] = await Promise.all([streamPreparationPromise, groqResponsePromise]);
+    logger.debug('Stream prepared and Groq response received');
+    await startStreamingWithContent(groqResponse);
+  } catch (error) {
+    logger.error('Error in handleTextInput:', error);
+    showErrorMessage('An error occurred. Please try again.');
+  }
 }
 
 function updateAssistantReply(text) {
@@ -2152,7 +2165,6 @@ async function startRecording() {
       interim_results: true,
       utterance_end_ms: 2500,
       punctuate: true,
-      // endpointing: 300,
       vad_events: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate
@@ -2197,6 +2209,9 @@ async function startRecording() {
     const startButton = document.getElementById('start-button');
     startButton.textContent = 'Stop';
 
+    logger.debug('Initiating early stream preparation');
+    prepareEarlyStream();
+
     logger.debug('Recording and transcription started successfully');
   } catch (error) {
     logger.error('Error starting recording:', error);
@@ -2207,6 +2222,70 @@ async function startRecording() {
     throw error;
   }
 }
+
+async function prepareEarlyStream() {
+  logger.debug('Preparing early stream');
+
+  if (!persistentStreamId || !persistentSessionId) {
+    logger.warn('Persistent stream not initialized. Initializing now.');
+    await initializePersistentStream();
+  }
+
+  const silentSSML = '<speak><break time="1s"/></speak>';
+  let streamStarted = false;
+
+  const startSilentStream = async () => {
+    try {
+      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          script: {
+            type: 'text',
+            input: silentSSML,
+            ssml: true,
+          },
+          driver_url: "bank://lively/driver-06",
+          config: {
+            stitch: true,
+          },
+          session_id: persistentSessionId,
+        }),
+      });
+
+      if (!playResponse.ok) {
+        throw new Error(`HTTP error! status: ${playResponse.status}`);
+      }
+
+      const playResponseData = await playResponse.json();
+      logger.debug('Silent stream started:', playResponseData);
+
+      if (playResponseData.status === 'started') {
+        streamStarted = true;
+        logger.debug('Silent stream started successfully');
+      } else {
+        logger.warn('Unexpected response status:', playResponseData.status);
+      }
+    } catch (error) {
+      logger.error('Error starting silent stream:', error);
+    }
+  };
+
+  await startSilentStream();
+
+  // Continue sending silent breaks until streamStarted is true
+  while (!streamStarted) {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    await startSilentStream();
+  }
+
+  logger.debug('Early stream preparation complete');
+  return true;
+}
+
 
 function handleDeepgramError(err) {
   logger.error('Deepgram error:', err);
@@ -2269,104 +2348,49 @@ async function stopRecording() {
   }
 }
 
-async function sendChatToGroq() {
-  if (chatHistory.length === 0 || chatHistory[chatHistory.length - 1].content.trim() === '') {
-    logger.debug('No new content to send to Groq. Skipping request.');
+async function updateStreamingContent(content) {
+  if (!content || content.trim().length < 3) {
+    logger.debug('Content too short, skipping update');
     return;
   }
 
-  logger.debug('Sending chat to Groq...');
-  try {
-    const startTime = Date.now();
-    const currentContext = document.getElementById('context-input').value.trim();
-    const requestBody = {
-      messages: [
-        {
-          role: 'system',
-          content: currentContext || context,
-        },
-        ...chatHistory,
-      ],
-      model: 'llama3-8b-8192',
-    };
-    logger.debug('Request body:', JSON.stringify(requestBody));
+  logger.debug('Updating streaming content:', content);
 
-    const response = await fetch('/chat', {
+  try {
+    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
       method: 'POST',
       headers: {
+        Authorization: `Basic ${DID_API.key}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(requestBody),
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: content,
+          ssml: false,
+        },
+        driver_url: "bank://lively/driver-06",
+        config: {
+          stitch: true,
+        },
+        session_id: persistentSessionId,
+      }),
     });
 
-    logger.debug('Groq response status:', response.status);
-
-    if (!response.ok) {
-      throw new Error(`HTTP error ${response.status}`);
+    if (!playResponse.ok) {
+      throw new Error(`HTTP error! status: ${playResponse.status}`);
     }
 
-    const reader = response.body.getReader();
-    let assistantReply = '';
-    let done = false;
+    const playResponseData = await playResponse.json();
+    logger.debug('Stream update response:', playResponseData);
 
-    const msgHistory = document.getElementById('msgHistory');
-    const assistantSpan = document.createElement('span');
-    assistantSpan.innerHTML = '<u>Assistant:</u> ';
-    msgHistory.appendChild(assistantSpan);
-    msgHistory.appendChild(document.createElement('br'));
-
-    while (!done) {
-      const { value, done: readerDone } = await reader.read();
-      done = readerDone;
-
-      if (value) {
-        const chunk = new TextDecoder().decode(value);
-        logger.debug('Received chunk:', chunk);
-        const lines = chunk.split('\n');
-
-        for (const line of lines) {
-          if (line.startsWith('data:')) {
-            const data = line.substring(5).trim();
-            if (data === '[DONE]') {
-              done = true;
-              break;
-            }
-
-            try {
-              const parsed = JSON.parse(data);
-              const content = parsed.choices[0]?.delta?.content || '';
-              assistantReply += content;
-              assistantSpan.innerHTML += content;
-              logger.debug('Parsed content:', content);
-            } catch (error) {
-              logger.error('Error parsing JSON:', error);
-            }
-          }
-        }
-
-        msgHistory.scrollTop = msgHistory.scrollHeight;
-      }
+    if (playResponseData.status === 'started') {
+      logger.debug('Stream content updated successfully');
+    } else {
+      logger.warn('Unexpected response status:', playResponseData.status);
     }
-
-    const endTime = Date.now();
-    const processingTime = endTime - startTime;
-    logger.debug(`Groq processing completed in ${processingTime}ms`);
-
-    chatHistory.push({
-      role: 'assistant',
-      content: assistantReply,
-    });
-
-    logger.debug('Assistant reply:', assistantReply);
-
-    // Start streaming the entire response
-    await startStreaming(assistantReply);
-
   } catch (error) {
-    logger.error('Error in sendChatToGroq:', error);
-    const msgHistory = document.getElementById('msgHistory');
-    msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
-    msgHistory.scrollTop = msgHistory.scrollHeight;
+    logger.error('Error updating streaming content:', error);
   }
 }
 
