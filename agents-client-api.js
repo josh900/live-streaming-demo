@@ -1367,19 +1367,17 @@ async function stopPushToTalk() {
 
   audioWorkletNode.port.onmessage = null;
 
-  // Immediately process the utterance without any delays
   if (currentUtterance.trim()) {
     updateTranscript(currentUtterance.trim(), true);
     chatHistory.push({
       role: 'user',
       content: currentUtterance.trim(),
     });
-    await sendChatToGroq();
+    sendChatToGroq();
     currentUtterance = '';
     interimMessageAdded = false;
   }
 }
-
 
 function handlePushToTalkTranscription(data) {
   const transcript = data.channel.alternatives[0].transcript;
@@ -1391,7 +1389,6 @@ function handlePushToTalkTranscription(data) {
     }
   }
 }
-
 
 function updateContext(action) {
   const contextInput = document.getElementById('context-input');
@@ -2047,7 +2044,7 @@ async function startStreaming(assistantReply) {
         body: JSON.stringify({
           script: {
             type: 'text',
-            input: chunk,
+            input: chunk,  // Send the chunk without additional <speak> tags
             ssml: true,
             provider: {
               type: 'microsoft',
@@ -2057,10 +2054,11 @@ async function startStreaming(assistantReply) {
           session_id: persistentSessionId,
           driver_url: "bank://lively/driver-06",
           output_resolution: 512,
+          stream_warmup: true,
           config: {
             fluent: true,
             stitch: true,
-            pad_audio: 0,
+            pad_audio: 0.5,
             auto_match: true,
             align_driver: true,
             normalization_factor: 0.1,
@@ -2080,6 +2078,7 @@ async function startStreaming(assistantReply) {
         }),
       });
 
+      
       if (!playResponse.ok) {
         throw new Error(`HTTP error! status: ${playResponse.status}`);
       }
@@ -2114,6 +2113,12 @@ async function startStreaming(assistantReply) {
     isAvatarSpeaking = false;
     smoothTransition(false);
 
+    // Check if we need to reconnect
+    if (shouldReconnect()) {
+      logger.info('Approaching reconnection threshold. Initiating background reconnect.');
+      await backgroundReconnect();
+    }
+
   } catch (error) {
     logger.error('Error during streaming:', error);
     if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
@@ -2122,7 +2127,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
@@ -2484,7 +2488,7 @@ async function sendChatToGroq() {
 
     logger.debug('Assistant reply:', assistantReply);
 
-    // Start streaming the entire response immediately
+    // Start streaming the entire response
     await startStreaming(assistantReply);
 
   } catch (error) {
