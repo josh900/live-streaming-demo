@@ -1868,6 +1868,10 @@ async function initializeConnection() {
   }
 }
 
+function splitSSMLIntoChunks(ssml) {
+  const speakTags = ssml.match(/<speak>[\s\S]*?<\/speak>/g) || [];
+  return speakTags.map(tag => tag.trim());
+}
 
 async function startStreaming(assistantReply) {
   try {
@@ -1890,11 +1894,11 @@ async function startStreaming(assistantReply) {
       return;
     }
 
-    // Split the reply into chunks of about 250 characters, breaking at spaces
-    const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
+    // Split the SSML content into chunks of speak tags
+    const chunks = splitSSMLIntoChunks(assistantReply);
 
     for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i].trim();
+      const chunk = chunks[i];
       if (chunk.length === 0) continue;
 
       isAvatarSpeaking = true;
