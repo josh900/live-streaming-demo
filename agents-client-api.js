@@ -1980,7 +1980,7 @@ async function startStreaming(assistantReply) {
             streamVideoElement.onended = resolve;
           });
         } else {
-          logger.warn('No result_url in playResponseData. Waiting for next chunk.');
+         // logger.warn('No result_url in playResponseData. Waiting for next chunk.');
         }
       } else {
         logger.warn('Unexpected response status:', playResponseData.status);
