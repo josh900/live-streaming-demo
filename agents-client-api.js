@@ -1965,7 +1965,7 @@ async function startStreaming(assistantReply) {
         logger.warn('Data channel not available for stream events');
       }
 
-      // Wait for the stream to start
+      // Wait for the stream to start and the video to be ready
       let attempts = 0;
       const maxAttempts = 30; // 30 seconds timeout
       while (!streamStarted && attempts < maxAttempts) {
@@ -1978,44 +1978,32 @@ async function startStreaming(assistantReply) {
         throw new Error('Stream failed to start within the timeout period');
       }
 
-      logger.debug('Stream started, preparing video element');
+      logger.debug('Stream started, checking video readiness');
 
-      // Prepare the video element
-      streamVideoElement.src = null;
-      streamVideoElement.srcObject = null;
-      streamVideoElement.load();
-
-      // Set up event listeners for the video element
-      streamVideoElement.onloadedmetadata = () => {
-        logger.debug('Video metadata loaded');
-      };
-
-      streamVideoElement.oncanplay = () => {
-        logger.debug('Video can play');
-        smoothTransition(true);
-      };
-
-      streamVideoElement.onerror = (error) => {
-        logger.error('Video error:', error);
-      };
-
-      // Wait for the video to be ready or for the stream to complete
+      // Check video readiness
       attempts = 0;
-      while (!streamDone && attempts < maxAttempts) {
-        if (streamVideoElement.readyState >= 3) {
-          logger.debug('Video is ready to play');
-          await streamVideoElement.play();
-          break;
-        }
+      while (streamVideoElement.readyState < 3 && attempts < maxAttempts) {
         await new Promise(resolve => setTimeout(resolve, 1000));
         attempts++;
         logger.debug(`Waiting for video to be ready... Attempt ${attempts}/${maxAttempts}`);
       }
 
-      if (streamDone) {
-        logger.debug('Stream completed');
-      } else if (attempts >= maxAttempts) {
-        logger.warn('Timed out waiting for video to be ready');
+      if (streamVideoElement.readyState >= 3) {
+        logger.debug('Video is ready, performing smooth transition');
+        smoothTransition(true);
+
+        // Wait for the stream to complete
+        while (!streamDone && attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          attempts++;
+          logger.debug(`Waiting for stream to complete... Attempt ${attempts}/${maxAttempts}`);
+        }
+
+        if (!streamDone) {
+          logger.warn('Stream did not complete within the timeout period');
+        }
+      } else {
+        logger.error('Video failed to become ready within the timeout period');
       }
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
