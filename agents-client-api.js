@@ -1891,16 +1891,26 @@ async function startStreaming(assistantReply) {
     }
 
     // Ensure the entire assistantReply is wrapped in a single <speak> tag
-    const wrappedSSML = assistantReply.trim().startsWith('<speak>') ? assistantReply : `<speak>${assistantReply}</speak>`;
+    let wrappedSSML = assistantReply.trim();
+    if (!wrappedSSML.startsWith('<speak>')) {
+      wrappedSSML = `<speak>${wrappedSSML}</speak>`;
+    }
+    if (!wrappedSSML.endsWith('</speak>')) {
+      wrappedSSML = `${wrappedSSML}</speak>`;
+    }
+
+    logger.debug('Wrapped SSML:', wrappedSSML);
 
     // Split the SSML content into chunks, keeping the <speak> tags intact
     const chunks = wrappedSSML.match(/<speak>[\s\S]*?<\/speak>/g) || [];
 
-    logger.debug('Chunks', chunks);
+    logger.debug('Number of SSML chunks:', chunks.length);
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i].trim();
       if (chunk.length === 0) continue;
+
+      logger.debug(`Processing chunk ${i + 1}/${chunks.length}:`, chunk);
 
       isAvatarSpeaking = true;
       const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
@@ -1957,6 +1967,7 @@ async function startStreaming(assistantReply) {
         logger.debug('Stream chunk started successfully');
 
         if (playResponseData.result_url) {
+          logger.debug('Result URL received:', playResponseData.result_url);
           // Wait for the video to be ready before transitioning
           await new Promise((resolve) => {
             streamVideoElement.src = playResponseData.result_url;
@@ -1970,7 +1981,7 @@ async function startStreaming(assistantReply) {
             streamVideoElement.onended = resolve;
           });
         } else {
-          logger.debug('No result_url in playResponseData. Waiting for next chunk.');
+          logger.warn('No result_url in playResponseData. Waiting for next chunk.');
         }
       } else {
         logger.warn('Unexpected response status:', playResponseData.status);
