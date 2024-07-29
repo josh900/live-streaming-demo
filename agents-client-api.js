@@ -1893,20 +1893,17 @@ async function startStreaming(assistantReply) {
     // Remove outer <speak> tags if present
     let ssmlContent = assistantReply.trim();
     if (ssmlContent.startsWith('<speak>') && ssmlContent.endsWith('</speak>')) {
-      ssmlContent = ssmlContent.slice(7, -8);
+      ssmlContent = ssmlContent.slice(7, -8).trim();
     }
 
     // Split the SSML content into chunks, respecting SSML tags
-    const chunks = ssmlContent.match(/<[^>]+>(?:.*?<\/[^>]+>|\s*)|[^<]+/g) || [];
+    const chunks = ssmlContent.match(/(?:<[^>]+>|[^<]+)+/g) || [];
 
     logger.debug('Chunks', chunks);
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i].trim();
       if (chunk.length === 0) continue;
-
-      // Wrap each chunk in <speak> tags
-      const wrappedChunk = `<speak>${chunk}</speak>`;
 
       isAvatarSpeaking = true;
       const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
@@ -1918,7 +1915,7 @@ async function startStreaming(assistantReply) {
         body: JSON.stringify({
           script: {
             type: 'text',
-            input: wrappedChunk,
+            input: `<speak>${chunk}</speak>`,
             ssml: true,
             provider: {
               type: 'microsoft',
