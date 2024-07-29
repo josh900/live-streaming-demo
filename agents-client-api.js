@@ -1271,9 +1271,6 @@ async function saveAvatar() {
 }
 
 
-let isPushToTalkEnabled = false;
-let isPushToTalkActive = false;
-
 function togglePushToTalk() {
   isPushToTalkEnabled = !isPushToTalkEnabled;
   const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
