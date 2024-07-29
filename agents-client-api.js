@@ -1898,7 +1898,7 @@ async function startStreaming(assistantReply) {
     logger.debug('Wrapped SSML:', wrappedSSML);
 
     isAvatarSpeaking = true;
-    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/talks/${persistentStreamId}`, {
+    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -1950,7 +1950,7 @@ async function startStreaming(assistantReply) {
     const playResponseData = await playResponse.json();
     logger.debug('Streaming response:', playResponseData);
 
-    if (playResponseData.status === 'created' || playResponseData.status === 'started') {
+    if (playResponseData.status === 'started') {
       logger.debug('Stream started successfully');
 
       const maxAttempts = 30;
@@ -1958,7 +1958,7 @@ async function startStreaming(assistantReply) {
       let attempts = 0;
 
       while (attempts < maxAttempts) {
-        const statusResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/talks/${playResponseData.id}`, {
+        const statusResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
           method: 'GET',
           headers: {
             Authorization: `Basic ${DID_API.key}`,
@@ -1966,14 +1966,14 @@ async function startStreaming(assistantReply) {
         });
 
         if (!statusResponse.ok) {
-          logger.warn(`Failed to get talk status: ${statusResponse.status}`);
+          logger.warn(`Failed to get stream status: ${statusResponse.status}`);
           attempts++;
           await new Promise(resolve => setTimeout(resolve, delayMs));
           continue;
         }
 
         const statusData = await statusResponse.json();
-        logger.debug('Talk status:', statusData);
+        logger.debug('Stream status:', statusData);
 
         if (statusData.status === 'done' && statusData.result_url) {
           logger.debug('Result URL received:', statusData.result_url);
@@ -1993,7 +1993,7 @@ async function startStreaming(assistantReply) {
 
           break;
         } else if (statusData.status === 'error') {
-          throw new Error(`Talk error: ${statusData.error}`);
+          throw new Error(`Stream error: ${statusData.error}`);
         }
 
         attempts++;
@@ -2001,7 +2001,7 @@ async function startStreaming(assistantReply) {
       }
 
       if (attempts >= maxAttempts) {
-        throw new Error('Timed out waiting for talk result');
+        throw new Error('Timed out waiting for stream result');
       }
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
