@@ -2279,14 +2279,11 @@ async function sendChatToGroq() {
   try {
     const startTime = Date.now();
     const currentContext = document.getElementById('context-input').value.trim();
+    
+    const formattedMessage = formatMessageForGroq(chatHistory, currentContext || context);
+    
     const requestBody = {
-      messages: [
-        {
-          role: 'system',
-          content: currentContext || context,
-        },
-        ...chatHistory,
-      ],
+      messages: [formattedMessage],
       model: 'llama3-8b-8192',
     };
     logger.debug('Request body:', JSON.stringify(requestBody));
@@ -2368,6 +2365,25 @@ async function sendChatToGroq() {
     msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
     msgHistory.scrollTop = msgHistory.scrollHeight;
   }
+}
+
+function formatMessageForGroq(messages, context) {
+  const chatHistoryFormatted = messages.map(msg => `${msg.role}: ${msg.content}`).join('\n');
+
+  return {
+    role: 'user',
+    content: `chat history:
+\`\`\`
+${chatHistoryFormatted}
+\`\`\`
+
+instructions:
+\`\`\`
+${context}
+\`\`\`
+
+---`
+  };
 }
 
 function toggleAutoSpeak() {
