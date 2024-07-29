@@ -2323,7 +2323,7 @@ async function sendChatToGroq() {
         const lines = chunk.split('\n');
 
         for (const line of lines) {
-          if (line.startsWith('data:')) {
+          if (line.startsWith('data: ')) {
             const data = line.substring(5).trim();
             if (data === '[DONE]') {
               done = true;
