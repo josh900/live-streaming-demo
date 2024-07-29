@@ -663,21 +663,8 @@ function handleTextInput(text) {
 }
 
 function updateAssistantReply(text) {
-  const ssmlChunks = text.match(/<speak>[\s\S]*?<\/speak>/g) || [];
-  let cleanedText = '';
-
-  ssmlChunks.forEach(chunk => {
-    const cleaned = chunk.replace(/<speak>|<\/speak>/g, '')
-                         .replace(/<break[^>]*>/g, '(pause)')
-                         .replace(/<say-as[^>]*>(.*?)<\/say-as>/g, '$1')
-                         .replace(/<[^>]+>/g, '')
-                         .trim();
-    cleanedText += cleaned + ' ';
-  });
-
-  document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${cleanedText.trim()}</span><br>`;
+  document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
 }
-
 
 async function initializePersistentStream() {
   logger.info('Initializing persistent stream...');
@@ -1903,11 +1890,11 @@ async function startStreaming(assistantReply) {
       return;
     }
 
-    // Split the reply into SSML chunks
-    const ssmlChunks = assistantReply.match(/<speak>[\s\S]*?<\/speak>/g) || [];
+    // Split the reply into chunks of about 250 characters, breaking at spaces
+    const chunks = assistantReply.match(/[\s\S]{1,250}(?:\s|$)/g) || [];
 
-    for (let i = 0; i < ssmlChunks.length; i++) {
-      const chunk = ssmlChunks[i].trim();
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i].trim();
       if (chunk.length === 0) continue;
 
       isAvatarSpeaking = true;
@@ -1920,7 +1907,7 @@ async function startStreaming(assistantReply) {
         body: JSON.stringify({
           script: {
             type: 'text',
-            input: chunk,  // Send the original SSML chunk to D-ID
+            input: chunk,
             ssml: true,
             provider: {
               type: 'microsoft',
@@ -1953,6 +1940,7 @@ async function startStreaming(assistantReply) {
           },
         }),
       });
+      
 
       if (!playResponse.ok) {
         throw new Error(`HTTP error! status: ${playResponse.status}`);
@@ -1988,8 +1976,8 @@ async function startStreaming(assistantReply) {
     isAvatarSpeaking = false;
     smoothTransition(false);
 
-    // Check if we need to reconnect
-    if (shouldReconnect()) {
+     // Check if we need to reconnect
+     if (shouldReconnect()) {
       logger.info('Approaching reconnection threshold. Initiating background reconnect.');
       await backgroundReconnect();
     }
