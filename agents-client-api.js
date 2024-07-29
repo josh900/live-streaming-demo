@@ -1890,13 +1890,11 @@ async function startStreaming(assistantReply) {
       return;
     }
 
-    // Parse the SSML content
-    const parser = new DOMParser();
-    const ssmlDoc = parser.parseFromString(assistantReply, 'text/xml');
-    const speakTags = ssmlDoc.getElementsByTagName('speak');
+    // Ensure the entire assistantReply is wrapped in a single <speak> tag
+    const wrappedSSML = assistantReply.trim().startsWith('<speak>') ? assistantReply : `<speak>${assistantReply}</speak>`;
 
-    // Split the SSML content into chunks of the speak tags
-    const chunks = Array.from(speakTags).map(speakTag => new XMLSerializer().serializeToString(speakTag));
+    // Split the SSML content into chunks, keeping the <speak> tags intact
+    const chunks = wrappedSSML.match(/<speak>[\s\S]*?<\/speak>/g) || [];
 
     logger.debug('Chunks', chunks);
 
@@ -1915,6 +1913,7 @@ async function startStreaming(assistantReply) {
           script: {
             type: 'text',
             input: chunk,
+            ssml: true,
             provider: {
               type: 'microsoft',
               voice_id: avatars[currentAvatar].voiceId,
