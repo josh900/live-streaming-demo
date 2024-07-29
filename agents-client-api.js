@@ -627,9 +627,6 @@ function updateTranscript(text, isFinal) {
   const msgHistory = document.getElementById('msgHistory');
   let interimSpan = msgHistory.querySelector('span[data-interim]');
 
-  // Remove <speak> tags if present
-  text = text.replace(/<\/?speak>/g, '');
-
   if (isFinal) {
     if (interimSpan) {
       interimSpan.remove();
@@ -667,8 +664,6 @@ function handleTextInput(text) {
 }
 
 function updateAssistantReply(text) {
-  // Remove <speak> tags if present
-  text = text.replace(/<\/?speak>/g, '');
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
 }
 
