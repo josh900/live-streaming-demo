@@ -1942,9 +1942,6 @@ async function startStreaming(assistantReply) {
     if (playResponseData.status === 'started') {
       logger.debug('Stream chunk started successfully');
 
-      let streamStarted = false;
-      let streamDone = false;
-
       // Set up event listeners for the stream events
       if (pcDataChannel) {
         pcDataChannel.onmessage = (event) => {
@@ -1953,10 +1950,9 @@ async function startStreaming(assistantReply) {
 
           if (streamEvent === 'stream/started') {
             logger.debug('Stream started event received');
-            streamStarted = true;
+            // The video should start playing automatically when it's ready
           } else if (streamEvent === 'stream/done') {
             logger.debug('Stream done event received');
-            streamDone = true;
             isAvatarSpeaking = false;
             smoothTransition(false);
           }
@@ -1965,58 +1961,22 @@ async function startStreaming(assistantReply) {
         logger.warn('Data channel not available for stream events');
       }
 
-      // Wait for the stream to start
-      let attempts = 0;
-      const maxAttempts = 30; // 30 seconds timeout
-      while (!streamStarted && attempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        attempts++;
-        logger.debug(`Waiting for stream to start... Attempt ${attempts}/${maxAttempts}`);
-      }
+      // The video should already be set up and playing from the persistent stream
+      // We just need to ensure it's visible
+      streamVideoElement.style.display = 'block';
+      idleVideoElement.style.display = 'none';
 
-      if (!streamStarted) {
-        throw new Error('Stream failed to start within the timeout period');
-      }
+      // Wait for the stream to complete
+      await new Promise(resolve => {
+        const checkStreamDone = setInterval(() => {
+          if (!isAvatarSpeaking) {
+            clearInterval(checkStreamDone);
+            resolve();
+          }
+        }, 1000);
+      });
 
-      logger.debug('Stream started, preparing video element');
-
-      // Prepare the video element
-      streamVideoElement.src = null;
-      streamVideoElement.srcObject = null;
-      streamVideoElement.load();
-
-      // Set up event listeners for the video element
-      streamVideoElement.onloadedmetadata = () => {
-        logger.debug('Video metadata loaded');
-      };
-
-      streamVideoElement.oncanplay = () => {
-        logger.debug('Video can play');
-        smoothTransition(true);
-      };
-
-      streamVideoElement.onerror = (error) => {
-        logger.error('Video error:', error);
-      };
-
-      // Wait for the video to be ready or for the stream to complete
-      attempts = 0;
-      while (!streamDone && attempts < maxAttempts) {
-        if (streamVideoElement.readyState >= 3) {
-          logger.debug('Video is ready to play');
-          await streamVideoElement.play();
-          break;
-        }
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        attempts++;
-        logger.debug(`Waiting for video to be ready... Attempt ${attempts}/${maxAttempts}`);
-      }
-
-      if (streamDone) {
-        logger.debug('Stream completed');
-      } else if (attempts >= maxAttempts) {
-        logger.warn('Timed out waiting for video to be ready');
-      }
+      logger.debug('Stream completed');
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
     }
