@@ -1032,7 +1032,7 @@ async function sendSDPAnswer(streamId, sessionId, answer) {
 }
 
 async function initialize() {
-  setLogLevel('INFO');
+  setLogLevel('DEBUG');
   connectionState = ConnectionState.DISCONNECTED;
 
   const { idle, stream } = getVideoElements();
