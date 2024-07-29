@@ -1869,7 +1869,7 @@ async function initializeConnection() {
   }
 }
 
-async function startStreaming(initialPauses, assistantReply = null) {
+async function startStreaming(assistantReply) {
   try {
     logger.debug('Starting streaming with reply:', assistantReply);
     if (!persistentStreamId || !persistentSessionId) {
@@ -1892,9 +1892,73 @@ async function startStreaming(initialPauses, assistantReply = null) {
 
     isAvatarSpeaking = true;
     
-    // Function to send content to the stream
-    const sendContent = async (content) => {
-      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+    // Start with initial pauses
+    let initialPauses = '<break time="1s"/>'.repeat(5);
+    
+    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: initialPauses,
+          ssml: true,
+          provider: {
+            type: 'microsoft',
+            voice_id: avatars[currentAvatar].voiceId,
+          },
+        },
+        session_id: persistentSessionId,
+        driver_url: "bank://lively/driver-06",
+        output_resolution: 512,
+        stream_warmup: true,
+        config: {
+          fluent: true,
+          stitch: true,
+          pad_audio: 0.5,
+          auto_match: true,
+          align_driver: true,
+          normalization_factor: 0.1,
+          align_expand_factor: 0.3,
+          motion_factor: 0.55,
+          result_format: "mp4",
+          driver_expressions: {
+            expressions: [
+              {
+                start_frame: 0,
+                expression: "neutral",
+                intensity: 0.5
+              }
+            ]
+          }
+        },
+      }),
+    });
+
+    if (!playResponse.ok) {
+      throw new Error(`HTTP error! status: ${playResponse.status}`);
+    }
+
+    const playResponseData = await playResponse.json();
+    logger.debug('Streaming response:', playResponseData);
+
+    if (playResponseData.status === 'started') {
+      logger.debug('Stream started successfully');
+      
+      if (playResponseData.result_url) {
+        streamVideoElement.src = playResponseData.result_url;
+        streamVideoElement.style.display = 'block';
+        idleVideoElement.style.display = 'none';
+      }
+
+      // Wait for a moment to simulate waiting for Groq response
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+      // Now add the actual assistant reply
+      const updateResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
         method: 'POST',
         headers: {
           Authorization: `Basic ${DID_API.key}`,
@@ -1903,7 +1967,7 @@ async function startStreaming(initialPauses, assistantReply = null) {
         body: JSON.stringify({
           script: {
             type: 'text',
-            input: content,
+            input: assistantReply,
             ssml: true,
             provider: {
               type: 'microsoft',
@@ -1911,46 +1975,23 @@ async function startStreaming(initialPauses, assistantReply = null) {
             },
           },
           session_id: persistentSessionId,
-          driver_url: "bank://lively/driver-06",
-          output_resolution: 512,
-          config: {
-            fluent: true,
-            stitch: true,
-            pad_audio: 0.5,
-            auto_match: true,
-            align_driver: true,
-            normalization_factor: 0.1,
-            align_expand_factor: 0.3,
-            motion_factor: 0.55,
-          },
         }),
       });
 
-      if (!playResponse.ok) {
-        throw new Error(`HTTP error! status: ${playResponse.status}`);
+      if (!updateResponse.ok) {
+        throw new Error(`HTTP error! status: ${updateResponse.status}`);
       }
 
-      const playResponseData = await playResponse.json();
-      logger.debug('Streaming response:', playResponseData);
+      const updateResponseData = await updateResponse.json();
+      logger.debug('Update streaming response:', updateResponseData);
 
-      if (playResponseData.status === 'started') {
-        logger.debug('Stream chunk sent successfully');
-        if (playResponseData.result_url && !streamVideoElement.src) {
-          streamVideoElement.src = playResponseData.result_url;
-          streamVideoElement.style.display = 'block';
-          idleVideoElement.style.display = 'none';
-        }
+      if (updateResponseData.status === 'started') {
+        logger.debug('Stream update successful');
       } else {
-        logger.warn('Unexpected response status:', playResponseData.status);
+        logger.warn('Unexpected response status for update:', updateResponseData.status);
       }
-    };
-
-    // Start with initial pauses
-    await sendContent(initialPauses);
-
-    // If assistantReply is provided, send it as well
-    if (assistantReply) {
-      await sendContent(assistantReply);
+    } else {
+      logger.warn('Unexpected response status:', playResponseData.status);
     }
 
     isAvatarSpeaking = false;
@@ -2262,9 +2303,6 @@ async function sendChatToGroq() {
     };
     logger.debug('Request body:', JSON.stringify(requestBody));
 
-    // Start streaming with initial pauses
-    await startStreaming('<break time="1s"/>'.repeat(5));
-
     const response = await fetch('/chat', {
       method: 'POST',
       headers: {
@@ -2312,11 +2350,6 @@ async function sendChatToGroq() {
               assistantReply += content;
               assistantSpan.innerHTML += content;
               logger.debug('Parsed content:', content);
-
-              // Update the stream with the new content
-              if (content.trim().length > 0) {
-                await startStreaming('', content);
-              }
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
@@ -2337,6 +2370,9 @@ async function sendChatToGroq() {
     });
 
     logger.debug('Assistant reply:', assistantReply);
+
+    // Start streaming the entire response
+    await startStreaming(assistantReply);
 
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
