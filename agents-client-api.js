@@ -1921,7 +1921,7 @@ async function startStreaming(assistantReply) {
         body: JSON.stringify({
           script: {
             type: 'text',
-            input: chunk,  // Send the original SSML chunk to D-ID
+            input: chunk,
             ssml: true,
             provider: {
               type: 'microsoft',
