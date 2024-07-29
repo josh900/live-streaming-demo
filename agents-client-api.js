@@ -1869,13 +1869,13 @@ async function initializeConnection() {
 }
 
 function cleanSSML(text) {
-  return text.replace(/<speak>|<\/speak>/g, '')
-             .replace(/<break[^>]*>/g, '(pause)')
-             .replace(/<say-as[^>]*>(.*?)<\/say-as>/g, '$1')
-             .replace(/<[^>]+>/g, '')
-             .trim();
+  return text
+    .replace(/<speak>|<\/speak>/g, '')
+    .replace(/<break[^>]*>/g, ' (pause) ')
+    .replace(/<say-as[^>]*>(.*?)<\/say-as>/g, '$1')
+    .replace(/<[^>]+>/g, '')
+    .trim();
 }
-
 async function startStreaming(assistantReply) {
   try {
     logger.debug('Starting streaming with reply:', assistantReply);
@@ -2369,6 +2369,7 @@ async function sendChatToGroq() {
     msgHistory.scrollTop = msgHistory.scrollHeight;
   }
 }
+
 
 
 function toggleAutoSpeak() {
