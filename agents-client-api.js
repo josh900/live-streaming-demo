@@ -647,7 +647,7 @@ function updateTranscript(text, isFinal) {
   msgHistory.scrollTop = msgHistory.scrollHeight;
 }
 
-function handleTextInput(text) {
+async function handleTextInput(text) {
   if (text.trim() === '') return;
 
   const textInput = document.getElementById('text-input');
@@ -660,6 +660,11 @@ function handleTextInput(text) {
     content: text,
   });
 
+  // Start streaming with initial silent pause
+  const initialSilentSSML = '<break time="1s"/>';
+  await startStreamingWithSilence(initialSilentSSML);
+
+  // Send chat to Groq
   sendChatToGroq();
 }
 
@@ -2152,7 +2157,6 @@ async function startRecording() {
       interim_results: true,
       utterance_end_ms: 2500,
       punctuate: true,
-      // endpointing: 300,
       vad_events: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate
@@ -2197,7 +2201,11 @@ async function startRecording() {
     const startButton = document.getElementById('start-button');
     startButton.textContent = 'Stop';
 
-    logger.debug('Recording and transcription started successfully');
+    // Start streaming with initial silent pause
+    const initialSilentSSML = '<break time="1s"/>';
+    await startStreamingWithSilence(initialSilentSSML);
+
+    logger.debug('Recording, transcription, and initial streaming started successfully');
   } catch (error) {
     logger.error('Error starting recording:', error);
     isRecording = false;
@@ -2205,6 +2213,121 @@ async function startRecording() {
     startButton.textContent = 'Speak';
     showErrorMessage('Failed to start recording. Please try again.');
     throw error;
+  }
+}
+
+async function startStreamingWithSilence(initialSilentSSML) {
+  logger.debug('Starting streaming with silence');
+  
+  if (!persistentStreamId || !persistentSessionId) {
+    logger.error('Persistent stream not initialized. Cannot start streaming.');
+    await initializePersistentStream();
+  }
+
+  if (!currentAvatar || !avatars[currentAvatar]) {
+    logger.error('No avatar selected or avatar not found. Cannot start streaming.');
+    return;
+  }
+
+  const streamVideoElement = document.getElementById('stream-video-element');
+  const idleVideoElement = document.getElementById('idle-video-element');
+
+  if (!streamVideoElement || !idleVideoElement) {
+    logger.error('Video elements not found');
+    return;
+  }
+
+  try {
+    isAvatarSpeaking = true;
+    let silentSSML = initialSilentSSML;
+
+    while (!groqResponseReceived) {
+      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          script: {
+            type: 'text',
+            input: silentSSML,
+            ssml: true,
+            provider: {
+              type: 'microsoft',
+              voice_id: avatars[currentAvatar].voiceId,
+            },
+          },
+          session_id: persistentSessionId,
+          driver_url: "bank://lively/driver-06",
+          output_resolution: 512,
+          stream_warmup: true,
+          config: {
+            fluent: true,
+            stitch: true,
+            pad_audio: 0.5,
+            auto_match: true,
+            align_driver: true,
+            normalization_factor: 0.1,
+            align_expand_factor: 0.3,
+            motion_factor: 0.55,
+            result_format: "mp4",
+            driver_expressions: {
+              expressions: [
+                {
+                  start_frame: 0,
+                  expression: "neutral",
+                  intensity: 0.5
+                }
+              ]
+            }
+          },
+        }),
+      });
+
+      if (!playResponse.ok) {
+        throw new Error(`HTTP error! status: ${playResponse.status}`);
+      }
+
+      const playResponseData = await playResponse.json();
+      logger.debug('Silent streaming response:', playResponseData);
+
+      if (playResponseData.status === 'started') {
+        logger.debug('Silent stream chunk started successfully');
+
+        if (playResponseData.result_url) {
+          // Transition to the streaming video only if it's the first time
+          if (!isCurrentlyStreaming) {
+            await new Promise((resolve) => {
+              streamVideoElement.src = playResponseData.result_url;
+              streamVideoElement.oncanplay = resolve;
+            });
+            smoothTransition(true);
+            isCurrentlyStreaming = true;
+          } else {
+            streamVideoElement.src = playResponseData.result_url;
+          }
+
+          await new Promise(resolve => {
+            streamVideoElement.onended = resolve;
+          });
+        }
+      }
+
+      // Prepare the next silent SSML if Groq hasn't responded yet
+      silentSSML = '<break time="1s"/>';
+      
+      // Wait for a short time before sending the next silent chunk
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    logger.debug('Groq response received, ending silent streaming');
+  } catch (error) {
+    logger.error('Error during silent streaming:', error);
+    if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
+      logger.warn('Stream not found or invalid session. Attempting to reinitialize persistent stream.');
+      await reinitializePersistentStream();
+    }
   }
 }
 
@@ -2338,6 +2461,11 @@ async function sendChatToGroq() {
               assistantReply += content;
               assistantSpan.innerHTML += content;
               logger.debug('Parsed content:', content);
+
+              // Start or update streaming with the new content
+              if (content.trim() !== '') {
+                await updateStreamingContent(content);
+              }
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
@@ -2359,8 +2487,13 @@ async function sendChatToGroq() {
 
     logger.debug('Assistant reply:', assistantReply);
 
-    // Start streaming the entire response
-    await startStreaming(assistantReply);
+    // Ensure we've streamed all content
+    await updateStreamingContent(assistantReply, true);
+
+    // End the streaming session
+    groqResponseReceived = true;
+    isAvatarSpeaking = false;
+    smoothTransition(false);
 
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
@@ -2369,6 +2502,81 @@ async function sendChatToGroq() {
     msgHistory.scrollTop = msgHistory.scrollHeight;
   }
 }
+
+
+async function updateStreamingContent(content, isFinal = false) {
+  logger.debug(`Updating streaming content. Is final: ${isFinal}`);
+  
+  if (!persistentStreamId || !persistentSessionId) {
+    logger.error('Persistent stream not initialized. Cannot update streaming content.');
+    return;
+  }
+
+  try {
+    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: content,
+          ssml: false,
+          provider: {
+            type: 'microsoft',
+            voice_id: avatars[currentAvatar].voiceId,
+          },
+        },
+        session_id: persistentSessionId,
+        driver_url: "bank://lively/driver-06",
+        config: {
+          fluent: true,
+          stitch: true,
+          pad_audio: 0.5,
+          auto_match: true,
+          align_driver: true,
+          normalization_factor: 0.1,
+          align_expand_factor: 0.3,
+          motion_factor: 0.55,
+          result_format: "mp4",
+        },
+      }),
+    });
+
+    if (!playResponse.ok) {
+      throw new Error(`HTTP error! status: ${playResponse.status}`);
+    }
+
+    const playResponseData = await playResponse.json();
+    logger.debug('Streaming update response:', playResponseData);
+
+    if (playResponseData.status === 'started') {
+      logger.debug('Stream content update started successfully');
+
+      if (playResponseData.result_url) {
+        const streamVideoElement = document.getElementById('stream-video-element');
+        streamVideoElement.src = playResponseData.result_url;
+
+        await new Promise(resolve => {
+          streamVideoElement.onended = resolve;
+        });
+      }
+    }
+
+    if (isFinal) {
+      logger.debug('Final content streamed');
+    }
+  } catch (error) {
+    logger.error('Error updating streaming content:', error);
+    if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
+      logger.warn('Stream not found or invalid session. Attempting to reinitialize persistent stream.');
+      await reinitializePersistentStream();
+    }
+  }
+}
+
 
 function toggleAutoSpeak() {
   autoSpeakMode = !autoSpeakMode;
@@ -2387,6 +2595,8 @@ function toggleAutoSpeak() {
     }
   }
 }
+
+
 
 async function reinitializeConnection() {
   if (connectionState === ConnectionState.RECONNECTING) {
