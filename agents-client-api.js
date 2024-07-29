@@ -423,7 +423,6 @@ Don't be too formal. For example, instead of saying "Hello! How can I assist you
 
 
 ALWAYS respond with strict Speech Synthesis Markup Language (SSML), like:
-'''
 <speak>
   Here are <say-as interpret-as="characters">SSML</say-as> samples.
   I can pause <break time="3s"/>.
@@ -434,7 +433,7 @@ ALWAYS respond with strict Speech Synthesis Markup Language (SSML), like:
   Finally, I can speak a paragraph with two sentences.
   <p><s>This is sentence one.</s><s>This is sentence two.</s></p>
 </speak>
-'''
+
 
 Please provide your response in SSML syntax:
 
