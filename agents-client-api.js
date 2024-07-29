@@ -1896,12 +1896,15 @@ async function startStreaming(assistantReply = null) {
 
     isAvatarSpeaking = true;
 
-    // Start with a 1-second pause if no assistant reply yet
-    let ssmlContent = assistantReply ? assistantReply.trim() : '<break time="1s"/>';
+    // Start with a 1-second pause
+    let ssmlContent = '<break time="1s"/>';
 
-    // Remove outer <speak> tags if present
-    if (ssmlContent.startsWith('<speak>') && ssmlContent.endsWith('</speak>')) {
-      ssmlContent = ssmlContent.slice(7, -8).trim();
+    if (assistantReply) {
+      // Remove outer <speak> tags if present
+      ssmlContent = assistantReply.trim();
+      if (ssmlContent.startsWith('<speak>') && ssmlContent.endsWith('</speak>')) {
+        ssmlContent = ssmlContent.slice(7, -8).trim();
+      }
     }
 
     // Split the SSML content into chunks, respecting SSML tags
@@ -1909,7 +1912,6 @@ async function startStreaming(assistantReply = null) {
 
     logger.debug('Chunks', chunks);
 
-    let isFirstChunk = true;
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i].trim();
       if (chunk.length === 0) continue;
@@ -1930,17 +1932,30 @@ async function startStreaming(assistantReply = null) {
               voice_id: avatars[currentAvatar].voiceId,
             },
           },
+          session_id: persistentSessionId,
           driver_url: "bank://lively/driver-06",
+          output_resolution: 512,
+          stream_warmup: true,
           config: {
             fluent: true,
             stitch: true,
-            pad_audio: 0,
+            pad_audio: 0.5,
             auto_match: true,
             align_driver: true,
-            align_expand_factor: 0,
-            motion_factor: 0.5,
+            normalization_factor: 0.1,
+            align_expand_factor: 0.3,
+            motion_factor: 0.55,
+            result_format: "mp4",
+            driver_expressions: {
+              expressions: [
+                {
+                  start_frame: 0,
+                  expression: "neutral",
+                  intensity: 0.5
+                }
+              ]
+            }
           },
-          session_id: persistentSessionId,
         }),
       });
 
@@ -1954,25 +1969,35 @@ async function startStreaming(assistantReply = null) {
       if (playResponseData.status === 'started') {
         logger.debug('Stream chunk started successfully');
 
-        if (isFirstChunk) {
-          // Perform the transition only for the first chunk
+        if (playResponseData.result_url) {
+          // Wait for the video to be ready before transitioning
+          await new Promise((resolve) => {
+            streamVideoElement.src = playResponseData.result_url;
+            streamVideoElement.oncanplay = resolve;
+          });
+
+          // Perform the transition
           smoothTransition(true);
-          isFirstChunk = false;
+
+          await new Promise(resolve => {
+            streamVideoElement.onended = resolve;
+          });
+        } else {
+          logger.debug('No result_url in playResponseData. Waiting for next chunk.');
         }
       } else {
         logger.warn('Unexpected response status:', playResponseData.status);
       }
 
       // If we're still waiting for the Groq response, add another 1-second pause
-      if (!assistantReply && i === chunks.length - 1) {
-        chunks.push('<break time="1s"/>');
+      if (!assistantReply) {
+        ssmlContent = '<break time="1s"/>';
+        i = -1; // Reset the loop to start over with the pause
       }
     }
 
     isAvatarSpeaking = false;
-    if (!assistantReply) {
-      smoothTransition(false);
-    }
+    smoothTransition(false);
 
     // Check if we need to reconnect
     if (shouldReconnect()) {
