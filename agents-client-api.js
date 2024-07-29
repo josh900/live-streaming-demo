@@ -1869,9 +1869,9 @@ async function initializeConnection() {
   }
 }
 
-async function startStreaming(initialPause = true) {
+async function startStreaming(assistantReply) {
   try {
-    logger.debug('Starting streaming with initial pause');
+    logger.debug('Starting streaming with reply:', assistantReply);
     if (!persistentStreamId || !persistentSessionId) {
       logger.error('Persistent stream not initialized. Cannot start streaming.');
       await initializePersistentStream();
@@ -1890,64 +1890,104 @@ async function startStreaming(initialPause = true) {
       return;
     }
 
-    isAvatarSpeaking = true;
-    let ssmlContent = initialPause ? '<break time="1s"/>' : '';
-
-    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: ssmlContent,
-          ssml: true,
-          provider: {
-            type: 'microsoft',
-            voice_id: avatars[currentAvatar].voiceId,
-          },
-        },
-        session_id: persistentSessionId,
-        driver_url: "bank://lively/driver-06",
-        output_resolution: 512,
-        stream_warmup: true,
-        config: {
-          fluent: true,
-          stitch: true,
-          pad_audio: 0.5,
-          auto_match: true,
-          align_driver: true,
-          normalization_factor: 0.1,
-          align_expand_factor: 0.3,
-          motion_factor: 0.55,
-          result_format: "mp4",
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: "neutral",
-                intensity: 0.5
-              }
-            ]
-          }
-        },
-      }),
-    });
-
-    if (!playResponse.ok) {
-      throw new Error(`HTTP error! status: ${playResponse.status}`);
+    // Remove outer <speak> tags if present
+    let ssmlContent = assistantReply.trim();
+    if (ssmlContent.startsWith('<speak>') && ssmlContent.endsWith('</speak>')) {
+      ssmlContent = ssmlContent.slice(7, -8).trim();
     }
 
-    const playResponseData = await playResponse.json();
-    logger.debug('Streaming response:', playResponseData);
+    // Split the SSML content into chunks, respecting SSML tags
+    const chunks = ssmlContent.match(/(?:<[^>]+>|[^<]+)+/g) || [];
 
-    if (playResponseData.status === 'started') {
-      logger.debug('Stream started successfully');
-      smoothTransition(true);
-    } else {
-      logger.warn('Unexpected response status:', playResponseData.status);
+    logger.debug('Chunks', chunks);
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i].trim();
+      if (chunk.length === 0) continue;
+
+      isAvatarSpeaking = true;
+      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          script: {
+            type: 'text',
+            input: chunk,  // Send the chunk without additional <speak> tags
+            ssml: true,
+            provider: {
+              type: 'microsoft',
+              voice_id: avatars[currentAvatar].voiceId,
+            },
+          },
+          session_id: persistentSessionId,
+          driver_url: "bank://lively/driver-06",
+          output_resolution: 512,
+          stream_warmup: true,
+          config: {
+            fluent: true,
+            stitch: true,
+            pad_audio: 0.5,
+            auto_match: true,
+            align_driver: true,
+            normalization_factor: 0.1,
+            align_expand_factor: 0.3,
+            motion_factor: 0.55,
+            result_format: "mp4",
+            driver_expressions: {
+              expressions: [
+                {
+                  start_frame: 0,
+                  expression: "neutral",
+                  intensity: 0.5
+                }
+              ]
+            }
+          },
+        }),
+      });
+
+      
+      if (!playResponse.ok) {
+        throw new Error(`HTTP error! status: ${playResponse.status}`);
+      }
+
+      const playResponseData = await playResponse.json();
+      logger.debug('Streaming response:', playResponseData);
+
+      if (playResponseData.status === 'started') {
+        logger.debug('Stream chunk started successfully');
+
+        if (playResponseData.result_url) {
+          // Wait for the video to be ready before transitioning
+          await new Promise((resolve) => {
+            streamVideoElement.src = playResponseData.result_url;
+            streamVideoElement.oncanplay = resolve;
+          });
+
+          // Perform the transition
+          smoothTransition(true);
+
+          await new Promise(resolve => {
+            streamVideoElement.onended = resolve;
+          });
+        } else {
+          logger.debug('No result_url in playResponseData. Waiting for next chunk.');
+        }
+      } else {
+        logger.warn('Unexpected response status:', playResponseData.status);
+      }
+    }
+
+    isAvatarSpeaking = false;
+    smoothTransition(false);
+
+    // Check if we need to reconnect
+    if (shouldReconnect()) {
+      logger.info('Approaching reconnection threshold. Initiating background reconnect.');
+      await backgroundReconnect();
     }
 
   } catch (error) {
@@ -1958,52 +1998,6 @@ async function startStreaming(initialPause = true) {
     }
   }
 }
-
-async function continueStreaming(content) {
-  try {
-    logger.debug('Continuing streaming with content:', content);
-
-    if (!persistentStreamId || !persistentSessionId) {
-      logger.error('Persistent stream not initialized. Cannot continue streaming.');
-      return;
-    }
-
-    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: content,
-          ssml: true,
-          provider: {
-            type: 'microsoft',
-            voice_id: avatars[currentAvatar].voiceId,
-          },
-        },
-        session_id: persistentSessionId,
-      }),
-    });
-
-    if (!playResponse.ok) {
-      throw new Error(`HTTP error! status: ${playResponse.status}`);
-    }
-
-    const playResponseData = await playResponse.json();
-    logger.debug('Streaming continuation response:', playResponseData);
-
-    if (playResponseData.status !== 'started') {
-      logger.warn('Unexpected response status:', playResponseData.status);
-    }
-
-  } catch (error) {
-    logger.error('Error during streaming continuation:', error);
-  }
-}
-
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
@@ -2297,9 +2291,6 @@ async function sendChatToGroq() {
     };
     logger.debug('Request body:', JSON.stringify(requestBody));
 
-    // Start streaming with initial pause
-    await startStreaming(true);
-
     const response = await fetch('/chat', {
       method: 'POST',
       headers: {
@@ -2324,14 +2315,6 @@ async function sendChatToGroq() {
     msgHistory.appendChild(assistantSpan);
     msgHistory.appendChild(document.createElement('br'));
 
-    let pauseInterval = setInterval(async () => {
-      if (!done) {
-        await continueStreaming('<break time="1s"/>');
-      } else {
-        clearInterval(pauseInterval);
-      }
-    }, 1000);
-
     while (!done) {
       const { value, done: readerDone } = await reader.read();
       done = readerDone;
@@ -2355,11 +2338,6 @@ async function sendChatToGroq() {
               assistantReply += content;
               assistantSpan.innerHTML += content;
               logger.debug('Parsed content:', content);
-
-              // Continue streaming with the new content
-              if (content.trim() !== '') {
-                await continueStreaming(content);
-              }
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
@@ -2369,8 +2347,6 @@ async function sendChatToGroq() {
         msgHistory.scrollTop = msgHistory.scrollHeight;
       }
     }
-
-    clearInterval(pauseInterval);
 
     const endTime = Date.now();
     const processingTime = endTime - startTime;
@@ -2383,22 +2359,14 @@ async function sendChatToGroq() {
 
     logger.debug('Assistant reply:', assistantReply);
 
-    isAvatarSpeaking = false;
-    smoothTransition(false);
-
-    // Check if we need to reconnect
-    if (shouldReconnect()) {
-      logger.info('Approaching reconnection threshold. Initiating background reconnect.');
-      await backgroundReconnect();
-    }
+    // Start streaming the entire response
+    await startStreaming(assistantReply);
 
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
     const msgHistory = document.getElementById('msgHistory');
     msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
     msgHistory.scrollTop = msgHistory.scrollHeight;
-    isAvatarSpeaking = false;
-    smoothTransition(false);
   }
 }
 
