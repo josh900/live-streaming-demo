@@ -1894,6 +1894,14 @@ async function startStreaming(initialPauses, assistantReply = null) {
     
     // Function to send content to the stream
     const sendContent = async (content) => {
+      if (!content || content.trim().length < 3) {
+        logger.debug('Content too short, skipping:', content);
+        return;
+      }
+
+      // Wrap content in <speak> tags if it's not already
+      const wrappedContent = content.trim().startsWith('<speak>') ? content : `<speak>${content}</speak>`;
+
       const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
         method: 'POST',
         headers: {
@@ -1903,7 +1911,7 @@ async function startStreaming(initialPauses, assistantReply = null) {
         body: JSON.stringify({
           script: {
             type: 'text',
-            input: content,
+            input: wrappedContent,
             ssml: true,
             provider: {
               type: 'microsoft',
@@ -1946,7 +1954,9 @@ async function startStreaming(initialPauses, assistantReply = null) {
     };
 
     // Start with initial pauses
-    await sendContent(initialPauses);
+    if (initialPauses) {
+      await sendContent(initialPauses);
+    }
 
     // If assistantReply is provided, send it as well
     if (assistantReply) {
@@ -2263,7 +2273,7 @@ async function sendChatToGroq() {
     logger.debug('Request body:', JSON.stringify(requestBody));
 
     // Start streaming with initial pauses
-    await startStreaming('<break time="1s"/>'.repeat(5));
+    await startStreaming('<speak><break time="1s"/><break time="1s"/><break time="1s"/><break time="1s"/><break time="1s"/></speak>');
 
     const response = await fetch('/chat', {
       method: 'POST',
@@ -2315,7 +2325,7 @@ async function sendChatToGroq() {
 
               // Update the stream with the new content
               if (content.trim().length > 0) {
-                await startStreaming('', content);
+                await startStreaming('', `<speak>${content}</speak>`);
               }
             } catch (error) {
               logger.error('Error parsing JSON:', error);
