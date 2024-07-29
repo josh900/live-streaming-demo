@@ -660,8 +660,12 @@ function handleTextInput(text) {
     content: text,
   });
 
+  // Start streaming with pauses immediately
+  startStreaming();
+
   sendChatToGroq();
 }
+
 
 function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
@@ -1869,9 +1873,9 @@ async function initializeConnection() {
   }
 }
 
-async function startStreaming(assistantReply) {
+async function startStreaming(assistantReply = null) {
   try {
-    logger.debug('Starting streaming with reply:', assistantReply);
+    logger.debug('Starting streaming...');
     if (!persistentStreamId || !persistentSessionId) {
       logger.error('Persistent stream not initialized. Cannot start streaming.');
       await initializePersistentStream();
@@ -1890,10 +1894,17 @@ async function startStreaming(assistantReply) {
       return;
     }
 
-    // Remove outer <speak> tags if present
-    let ssmlContent = assistantReply.trim();
-    if (ssmlContent.startsWith('<speak>') && ssmlContent.endsWith('</speak>')) {
-      ssmlContent = ssmlContent.slice(7, -8).trim();
+    isAvatarSpeaking = true;
+
+    // Start with a 1-second pause
+    let ssmlContent = '<break time="1s"/>';
+
+    if (assistantReply) {
+      // Remove outer <speak> tags if present
+      ssmlContent = assistantReply.trim();
+      if (ssmlContent.startsWith('<speak>') && ssmlContent.endsWith('</speak>')) {
+        ssmlContent = ssmlContent.slice(7, -8).trim();
+      }
     }
 
     // Split the SSML content into chunks, respecting SSML tags
@@ -1905,7 +1916,6 @@ async function startStreaming(assistantReply) {
       const chunk = chunks[i].trim();
       if (chunk.length === 0) continue;
 
-      isAvatarSpeaking = true;
       const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
         method: 'POST',
         headers: {
@@ -1915,7 +1925,7 @@ async function startStreaming(assistantReply) {
         body: JSON.stringify({
           script: {
             type: 'text',
-            input: chunk,  // Send the chunk without additional <speak> tags
+            input: chunk,
             ssml: true,
             provider: {
               type: 'microsoft',
@@ -1949,7 +1959,6 @@ async function startStreaming(assistantReply) {
         }),
       });
 
-      
       if (!playResponse.ok) {
         throw new Error(`HTTP error! status: ${playResponse.status}`);
       }
@@ -1978,6 +1987,12 @@ async function startStreaming(assistantReply) {
         }
       } else {
         logger.warn('Unexpected response status:', playResponseData.status);
+      }
+
+      // If we're still waiting for the Groq response, add another 1-second pause
+      if (!assistantReply) {
+        ssmlContent = '<break time="1s"/>';
+        i = -1; // Reset the loop to start over with the pause
       }
     }
 
@@ -2291,6 +2306,9 @@ async function sendChatToGroq() {
     };
     logger.debug('Request body:', JSON.stringify(requestBody));
 
+    // Start streaming with pauses while waiting for Groq response
+    startStreaming();
+
     const response = await fetch('/chat', {
       method: 'POST',
       headers: {
@@ -2369,6 +2387,7 @@ async function sendChatToGroq() {
     msgHistory.scrollTop = msgHistory.scrollHeight;
   }
 }
+
 
 function toggleAutoSpeak() {
   autoSpeakMode = !autoSpeakMode;
@@ -2508,6 +2527,8 @@ startButton.onclick = async () => {
   if (!isRecording) {
     try {
       await startRecording();
+      // Start streaming with pauses immediately
+      startStreaming();
     } catch (error) {
       logger.error('Failed to start recording:', error);
       showErrorMessage('Failed to start recording. Please try again.');
@@ -2516,6 +2537,7 @@ startButton.onclick = async () => {
     await stopRecording();
   }
 };
+
 
 const saveAvatarButton = document.getElementById('save-avatar-button');
 saveAvatarButton.onclick = saveAvatar;
