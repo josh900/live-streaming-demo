@@ -1398,6 +1398,7 @@ function handlePushToTalkTranscription(data) {
 }
 
 
+
 function updateContext(action) {
   const contextInput = document.getElementById('context-input');
   const newContext = contextInput.value.trim();
