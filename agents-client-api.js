@@ -1869,25 +1869,13 @@ async function initializeConnection() {
 }
 
 function cleanSSML(text) {
-  // Handle partial SSML tags
-  let cleanedText = text;
-  
-  // Remove opening and closing <speak> tags
-  cleanedText = cleanedText.replace(/<\/?speak>/g, '');
-  
-  // Replace <break> tags with (pause)
-  cleanedText = cleanedText.replace(/<break[^>]*\/?>/g, ' (pause) ');
-  
-  // Handle <say-as> tags
-  cleanedText = cleanedText.replace(/<say-as[^>]*>(.*?)<\/say-as>/g, '$1');
-  
-  // Remove any remaining XML tags
-  cleanedText = cleanedText.replace(/<[^>]+>/g, '');
-  
-  return cleanedText.trim();
+  return text
+    .replace(/<speak>|<\/speak>/g, '')
+    .replace(/<break[^>]*>/g, ' (pause) ')
+    .replace(/<say-as[^>]*>(.*?)<\/say-as>/g, '$1')
+    .replace(/<[^>]+>/g, '')
+    .trim();
 }
-
-
 async function startStreaming(assistantReply) {
   try {
     logger.debug('Starting streaming with reply:', assistantReply);
@@ -2331,13 +2319,12 @@ async function sendChatToGroq() {
 
       if (value) {
         const chunk = new TextDecoder().decode(value);
-        logger.debug('Received raw chunk:', chunk);
+        logger.debug('Received chunk:', chunk);
         const lines = chunk.split('\n');
 
         for (const line of lines) {
           if (line.startsWith('data:')) {
             const data = line.substring(5).trim();
-            logger.debug('Processed data line:', data);
             if (data === '[DONE]') {
               done = true;
               break;
