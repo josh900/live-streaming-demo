@@ -1869,7 +1869,6 @@ async function initializeConnection() {
   }
 }
 
-
 async function startStreaming(assistantReply) {
   try {
     logger.debug('Starting streaming with reply:', assistantReply);
@@ -1891,17 +1890,23 @@ async function startStreaming(assistantReply) {
       return;
     }
 
-    // Ensure the entire assistantReply is wrapped in a single <speak> tag
-    const wrappedSSML = assistantReply.trim().startsWith('<speak>') ? assistantReply : `<speak>${assistantReply}</speak>`;
+    // Remove outer <speak> tags if present
+    let ssmlContent = assistantReply.trim();
+    if (ssmlContent.startsWith('<speak>') && ssmlContent.endsWith('</speak>')) {
+      ssmlContent = ssmlContent.slice(7, -8);
+    }
 
-    // Split the SSML content into chunks, keeping the <speak> tags intact
-    const chunks = wrappedSSML.match(/<speak>[\s\S]*?<\/speak>/g) || [];
+    // Split the SSML content into chunks, respecting SSML tags
+    const chunks = ssmlContent.match(/<[^>]+>(?:.*?<\/[^>]+>|\s*)|[^<]+/g) || [];
 
     logger.debug('Chunks', chunks);
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i].trim();
       if (chunk.length === 0) continue;
+
+      // Wrap each chunk in <speak> tags
+      const wrappedChunk = `<speak>${chunk}</speak>`;
 
       isAvatarSpeaking = true;
       const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
@@ -1913,7 +1918,7 @@ async function startStreaming(assistantReply) {
         body: JSON.stringify({
           script: {
             type: 'text',
-            input: chunk,
+            input: wrappedChunk,
             ssml: true,
             provider: {
               type: 'microsoft',
