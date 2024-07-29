@@ -58,6 +58,8 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 const INITIAL_RECONNECT_DELAY = 2000; // 1 second
 const MAX_RECONNECT_DELAY = 90000; // 30 seconds
 let autoSpeakInProgress = false;
+let isStreamActive = false;
+
 
 
 const ConnectionState = {
@@ -1945,6 +1947,7 @@ async function startStreaming(initialPause = true) {
 
     if (playResponseData.status === 'started') {
       logger.debug('Stream started successfully');
+      isStreamActive = true;
       smoothTransition(true);
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
@@ -2251,8 +2254,10 @@ async function sendChatToGroq() {
     };
     logger.debug('Request body:', JSON.stringify(requestBody));
 
-    // Start streaming with initial pause
-    await startStreaming(true);
+    // Start streaming with initial pause if not already active
+    if (!isStreamActive) {
+      await startStreaming(true);
+    }
 
     const response = await fetch('/chat', {
       method: 'POST',
@@ -2278,6 +2283,8 @@ async function sendChatToGroq() {
     msgHistory.appendChild(assistantSpan);
     msgHistory.appendChild(document.createElement('br'));
 
+    let accumulatedContent = '';
+
     while (!done) {
       const { value, done: readerDone } = await reader.read();
       done = readerDone;
@@ -2302,8 +2309,12 @@ async function sendChatToGroq() {
               assistantSpan.innerHTML += content;
               logger.debug('Parsed content:', content);
 
-              // Send content to the ongoing stream
-              await updateStreamContent(content);
+              accumulatedContent += content;
+              // Send accumulated content to the stream when it reaches a suitable length
+              if (accumulatedContent.length >= 50 || done) {
+                await updateStreamContent(accumulatedContent);
+                accumulatedContent = '';
+              }
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
@@ -2337,8 +2348,10 @@ async function sendChatToGroq() {
 }
 
 
+
 async function updateStreamContent(content) {
   if (content.trim().length < 3) {
+    logger.debug('Content too short, adding pause');
     content = `<break time="1s"/>${content}`;
   }
 
@@ -2406,6 +2419,7 @@ async function endStreaming() {
     logger.debug('Stream end response:', endResponseData);
 
     isAvatarSpeaking = false;
+    isStreamActive = false;
     smoothTransition(false);
 
     // Check if we need to reconnect
@@ -2417,7 +2431,6 @@ async function endStreaming() {
     logger.error('Error ending stream:', error);
   }
 }
-
 
 
 function toggleAutoSpeak() {
