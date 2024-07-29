@@ -1915,7 +1915,7 @@ async function startStreaming(assistantReply) {
         body: JSON.stringify({
           script: {
             type: 'text',
-            input: `<speak>${chunk}</speak>`,
+            input: chunk,  // Send the chunk without additional <speak> tags
             ssml: true,
             provider: {
               type: 'microsoft',
