@@ -679,7 +679,6 @@ function updateAssistantReply(text) {
 }
 
 
-
 async function initializePersistentStream() {
   logger.info('Initializing persistent stream...');
   connectionState = ConnectionState.CONNECTING;
@@ -1921,7 +1920,7 @@ async function startStreaming(assistantReply) {
         body: JSON.stringify({
           script: {
             type: 'text',
-            input: chunk,
+            input: chunk,  // Send the original SSML chunk to D-ID
             ssml: true,
             provider: {
               type: 'microsoft',
