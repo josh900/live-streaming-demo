@@ -1869,43 +1869,6 @@ async function initializeConnection() {
 }
 
 
-// Add this new function to poll for the result_url
-async function pollForResultUrl(talkId, maxAttempts = 30, interval = 1000) {
-  for (let i = 0; i < maxAttempts; i++) {
-    try {
-      const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/talks/${talkId}`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Basic ${DID_API.key}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      logger.debug('Poll response:', data);
-
-      if (data.result_url) {
-        return data.result_url;
-      }
-
-      if (data.status === 'done') {
-        throw new Error('Talk processing completed but no result_url found');
-      }
-
-      await new Promise(resolve => setTimeout(resolve, interval));
-    } catch (error) {
-      logger.error('Error polling for result_url:', error);
-      throw error;
-    }
-  }
-
-  throw new Error('Max polling attempts reached without getting result_url');
-}
-
-// Update the startStreaming function
 async function startStreaming(assistantReply) {
   try {
     logger.debug('Starting streaming with reply:', assistantReply);
@@ -1938,7 +1901,7 @@ async function startStreaming(assistantReply) {
     logger.debug('Wrapped SSML:', wrappedSSML);
 
     isAvatarSpeaking = true;
-    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/talks`, {
+    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -1954,7 +1917,7 @@ async function startStreaming(assistantReply) {
             voice_id: avatars[currentAvatar].voiceId,
           },
         },
-        source_url: avatars[currentAvatar].imageUrl,
+        session_id: persistentSessionId,
         driver_url: "bank://lively/driver-06",
         config: {
           fluent: true,
@@ -1990,25 +1953,29 @@ async function startStreaming(assistantReply) {
     const playResponseData = await playResponse.json();
     logger.debug('Streaming response:', playResponseData);
 
-    if (playResponseData.id) {
-      logger.debug('Talk created successfully. Polling for result_url...');
-      const resultUrl = await pollForResultUrl(playResponseData.id);
-      logger.debug('Result URL received:', resultUrl);
+    if (playResponseData.status === 'started') {
+      logger.debug('Stream started successfully');
 
-      // Wait for the video to be ready before transitioning
-      await new Promise((resolve) => {
-        streamVideoElement.src = resultUrl;
-        streamVideoElement.oncanplay = resolve;
-      });
+      if (playResponseData.result_url) {
+        logger.debug('Result URL received:', playResponseData.result_url);
+        
+        // Wait for the video to be ready before transitioning
+        await new Promise((resolve) => {
+          streamVideoElement.src = playResponseData.result_url;
+          streamVideoElement.oncanplay = resolve;
+        });
 
-      // Perform the transition
-      smoothTransition(true);
+        // Perform the transition
+        smoothTransition(true);
 
-      await new Promise(resolve => {
-        streamVideoElement.onended = resolve;
-      });
+        await new Promise(resolve => {
+          streamVideoElement.onended = resolve;
+        });
+      } else {
+        logger.warn('No result_url in playResponseData.');
+      }
     } else {
-      logger.warn('Unexpected response data:', playResponseData);
+      logger.warn('Unexpected response status:', playResponseData.status);
     }
 
     isAvatarSpeaking = false;
@@ -2028,6 +1995,7 @@ async function startStreaming(assistantReply) {
     }
   }
 }
+
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
