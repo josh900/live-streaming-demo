@@ -734,7 +734,10 @@ async function initializePersistentStream() {
   }
 }
 
-
+function shouldReconnect() {
+  const timeSinceLastConnection = Date.now() - lastConnectionTime;
+  return timeSinceLastConnection > RECONNECTION_INTERVAL * 0.9;
+}
 
 
 
