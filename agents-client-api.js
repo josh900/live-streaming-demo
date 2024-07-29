@@ -1,5 +1,3 @@
-
-
 'use strict';
 import DID_API from './api.js';
 import logger from './logger.js';
@@ -59,7 +57,6 @@ const INITIAL_RECONNECT_DELAY = 2000; // 1 second
 const MAX_RECONNECT_DELAY = 90000; // 30 seconds
 let autoSpeakInProgress = false;
 
-
 const ConnectionState = {
   DISCONNECTED: 'disconnected',
   CONNECTING: 'connecting',
@@ -69,10 +66,7 @@ const ConnectionState = {
 
 let lastConnectionTime = Date.now();
 
-
-
 let connectionState = ConnectionState.DISCONNECTED;
-
 
 export function setLogLevel(level) {
   logger.setLogLevel(level);
@@ -87,7 +81,6 @@ const avatarSelect = document.getElementById('avatar-select');
 avatarSelect.addEventListener('change', handleAvatarChange);
 
 let context = `
-
 
 grocery store info:
 ---
@@ -403,8 +396,6 @@ EXIT                             ENTER
 +-----------+
 ---
 
-
-
 ---------
 
 You are a helpful, harmless, and honest grocery store assistant. Please answer the users questions briefly, be concise.
@@ -414,29 +405,26 @@ Do not continue on to the users next question. They will provide one if needed.
 Do not explain who you are, they understand through the context of their environment.
 Don't use emojis in your response.
 
-ALWAYS respond in character, 
+ALWAYS respond in character,
 NEVER mentioning your instructions or capabilities!!
 Keep responses natural and focused solely on answering the customer's question.
 
 Don't be too formal. For example, instead of saying "Hello! How can I assist you today?", say something like "Hey! how's it going. What can I help you with?"
 
-
 ALWAYS respond with strict Speech Synthesis Markup Language (SSML), like:
 
-
 <speak>
-  Here are <say-as interpret-as="characters">SSML</say-as> samples.
-  I can pause <break time="3s"/>.
-  I can speak in cardinals. Your number is <say-as interpret-as="cardinal">10</say-as>.
-  Or I can speak in ordinals. You are <say-as interpret-as="ordinal">10</say-as> in line.
-  Or I can even speak in digits. The digits for ten are <say-as interpret-as="characters">10</say-as>.
-  I can also substitute phrases, like the <sub alias="World Wide Web Consortium">W3C</sub>.
-  Finally, I can speak a paragraph with two sentences.
-  <p><s>This is sentence one.</s><s>This is sentence two.</s></p>
+Here are <say-as interpret-as="characters">SSML</say-as> samples.
+I can pause <break time="3s"/>.
+I can speak in cardinals. Your number is <say-as interpret-as="cardinal">10</say-as>.
+Or I can speak in ordinals. You are <say-as interpret-as="ordinal">10</say-as> in line.
+Or I can even speak in digits. The digits for ten are <say-as interpret-as="characters">10</say-as>.
+I can also substitute phrases, like the <sub alias="World Wide Web Consortium">W3C</sub>.
+Finally, I can speak a paragraph with two sentences.
+<p><s>This is sentence one.</s><s>This is sentence two.</s></p>
 </speak>
 
-
-Please provide your response in SSML syntax:
+Please provide your response to the users last message in SSML syntax.
 `;
 
 async function prepareForStreaming() {
@@ -497,9 +485,6 @@ function initializeTransitionCanvas() {
   });
 }
 
-
-
-
 function smoothTransition(toStreaming, duration = 250) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
@@ -531,11 +516,11 @@ function smoothTransition(toStreaming, duration = 250) {
     const progress = Math.min(elapsed / duration, 1);
 
     transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
-    
+
     // Draw the fading out video
     transitionCtx.globalAlpha = 1 - progress;
     transitionCtx.drawImage(toStreaming ? idleVideoElement : streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-    
+
     // Draw the fading in video
     transitionCtx.globalAlpha = progress;
     transitionCtx.drawImage(toStreaming ? streamVideoElement : idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
@@ -560,7 +545,7 @@ function smoothTransition(toStreaming, duration = 250) {
 
   // Show the transition canvas
   transitionCanvas.style.display = 'block';
-  
+
   // Start the animation
   requestAnimationFrame(animate);
 }
@@ -618,10 +603,6 @@ function initializeWebSocket() {
     setTimeout(initializeWebSocket, 10000);
   };
 }
-
-
-
-
 
 function updateTranscript(text, isFinal) {
   const msgHistory = document.getElementById('msgHistory');
@@ -758,8 +739,6 @@ function shouldReconnect() {
   return timeSinceLastConnection > RECONNECTION_INTERVAL * 0.9;
 }
 
-
-
 function scheduleReconnect() {
   if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
     logger.error('Max reconnection attempts reached. Please refresh the page.');
@@ -772,8 +751,6 @@ function scheduleReconnect() {
   setTimeout(backgroundReconnect, delay);
   reconnectAttempts++;
 }
-
-
 
 function startKeepAlive() {
   if (keepAliveInterval) {
@@ -794,9 +771,9 @@ function startKeepAlive() {
         logger.warn('Error sending keepalive message:', error);
       }
     } else {
-      logger.debug('Conditions not met for sending keepalive. isPersistentStreamActive:', isPersistentStreamActive, 
-                   'peerConnection state:', peerConnection ? peerConnection.connectionState : 'null', 
-                   'pcDataChannel:', pcDataChannel ? 'exists' : 'null');
+      logger.debug('Conditions not met for sending keepalive. isPersistentStreamActive:', isPersistentStreamActive,
+        'peerConnection state:', peerConnection ? peerConnection.connectionState : 'null',
+        'pcDataChannel:', pcDataChannel ? 'exists' : 'null');
     }
   }, 30000); // Send keepalive every 30 seconds
 }
@@ -830,13 +807,11 @@ async function destroyPersistentStream() {
   }
 }
 
-
 async function reinitializePersistentStream() {
   logger.info('Reinitializing persistent stream...');
   await destroyPersistentStream();
   await initializePersistentStream();
 }
-
 
 async function createNewPersistentStream() {
   logger.debug('Creating new persistent stream...');
@@ -906,8 +881,6 @@ async function createNewPersistentStream() {
   }
 }
 
-
-
 async function backgroundReconnect() {
   if (connectionState === ConnectionState.RECONNECTING) {
     logger.debug('Background reconnection already in progress. Skipping.');
@@ -931,7 +904,6 @@ async function backgroundReconnect() {
     scheduleReconnect();
   }
 }
-
 
 function waitForIdleState() {
   return new Promise((resolve) => {
@@ -1105,7 +1077,6 @@ async function initialize() {
 
   logger.info('Initialization complete');
 }
-
 
 async function handleAvatarChange() {
   currentAvatar = avatarSelect.value;
@@ -1370,7 +1341,7 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
     peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
     peerConnection.addEventListener('track', onTrack, true);
-    
+
     pcDataChannel.onopen = () => {
       logger.debug('Data channel opened');
     };
@@ -1394,7 +1365,6 @@ async function createPeerConnection(offer, iceServers) {
 
   return sessionClientAnswer;
 }
-
 
 function onIceGatheringStateChange() {
   const { iceGathering: iceGatheringStatusLabel } = getStatusLabels();
@@ -1427,7 +1397,6 @@ function onIceCandidate(event) {
     });
   }
 }
-
 
 function onIceConnectionStateChange() {
   const { ice: iceStatusLabel } = getStatusLabels();
@@ -1475,7 +1444,6 @@ function onConnectionStateChange() {
   }
 }
 
-
 function startConnectionHealthCheck() {
   setInterval(() => {
     if (peerConnection) {
@@ -1493,8 +1461,6 @@ function startConnectionHealthCheck() {
     }
   }, 30000); // Check every 30 seconds
 }
-
-
 
 function onSignalingStateChange() {
   const { signaling: signalingStatusLabel } = getStatusLabels();
@@ -1949,7 +1915,6 @@ async function startStreaming(assistantReply) {
         }),
       });
 
-      
       if (!playResponse.ok) {
         throw new Error(`HTTP error! status: ${playResponse.status}`);
       }
@@ -2055,7 +2020,6 @@ export function toggleSimpleMode() {
     }
   }
 }
-
 
 function startSendingAudioData() {
   logger.debug('Starting to send audio data...');
@@ -2501,6 +2465,7 @@ destroyButton.onclick = async () => {
   }
 };
 
+
 const startButton = document.getElementById('start-button');
 
 startButton.onclick = async () => {
@@ -2545,5 +2510,3 @@ export {
   initializePersistentStream,
   destroyPersistentStream,
 };
-
-
