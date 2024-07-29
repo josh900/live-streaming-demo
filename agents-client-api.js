@@ -565,6 +565,7 @@ function smoothTransition(toStreaming, duration = 250) {
   requestAnimationFrame(animate);
 }
 
+
 function getVideoElements() {
   const idle = document.getElementById('idle-video-element');
   const stream = document.getElementById('stream-video-element');
@@ -647,7 +648,7 @@ function updateTranscript(text, isFinal) {
   msgHistory.scrollTop = msgHistory.scrollHeight;
 }
 
-function handleTextInput(text) {
+async function handleTextInput(text) {
   if (text.trim() === '') return;
 
   const textInput = document.getElementById('text-input');
@@ -660,8 +661,19 @@ function handleTextInput(text) {
     content: text,
   });
 
-  sendChatToGroq();
+  logger.debug('Starting stream and sending chat to Groq simultaneously');
+  
+  // Start the stream
+  const streamPromise = startSilentStream();
+  
+  // Send chat to Groq
+  const groqPromise = sendChatToGroq();
+
+  // Wait for both promises to resolve
+  await Promise.all([streamPromise, groqPromise]);
 }
+
+
 
 function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
@@ -2121,12 +2133,15 @@ async function startRecording() {
     return;
   }
 
-  logger.debug('Starting recording process...');
+  logger.debug('Starting recording process and silent stream...');
 
   currentUtterance = '';
   interimMessageAdded = false;
 
   try {
+    // Start the silent stream
+    const streamPromise = startSilentStream();
+
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     logger.info('Microphone stream obtained');
 
@@ -2152,7 +2167,6 @@ async function startRecording() {
       interim_results: true,
       utterance_end_ms: 2500,
       punctuate: true,
-      // endpointing: 300,
       vad_events: true,
       encoding: "linear16",
       sample_rate: audioContext.sampleRate
@@ -2197,7 +2211,10 @@ async function startRecording() {
     const startButton = document.getElementById('start-button');
     startButton.textContent = 'Stop';
 
-    logger.debug('Recording and transcription started successfully');
+    // Wait for the stream to be ready
+    await streamPromise;
+
+    logger.debug('Recording, transcription, and silent stream started successfully');
   } catch (error) {
     logger.error('Error starting recording:', error);
     isRecording = false;
@@ -2206,6 +2223,109 @@ async function startRecording() {
     showErrorMessage('Failed to start recording. Please try again.');
     throw error;
   }
+}
+
+async function startSilentStream() {
+  logger.debug('Starting silent stream...');
+
+  if (!persistentStreamId || !persistentSessionId) {
+    logger.error('Persistent stream not initialized. Cannot start streaming.');
+    await initializePersistentStream();
+  }
+
+  if (!currentAvatar || !avatars[currentAvatar]) {
+    logger.error('No avatar selected or avatar not found. Cannot start streaming.');
+    return;
+  }
+
+  const streamVideoElement = document.getElementById('stream-video-element');
+  const idleVideoElement = document.getElementById('idle-video-element');
+
+  if (!streamVideoElement || !idleVideoElement) {
+    logger.error('Video elements not found');
+    return;
+  }
+
+  const silentSsml = '<break time="1s"/>';
+  let isSilentStreamActive = true;
+
+  while (isSilentStreamActive) {
+    try {
+      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          script: {
+            type: 'text',
+            input: silentSsml,
+            ssml: true,
+            provider: {
+              type: 'microsoft',
+              voice_id: avatars[currentAvatar].voiceId,
+            },
+          },
+          session_id: persistentSessionId,
+          driver_url: "bank://lively/driver-06",
+          output_resolution: 512,
+          config: {
+            fluent: true,
+            stitch: true,
+            pad_audio: 0,
+            auto_match: true,
+            align_driver: true,
+            normalization_factor: 0.1,
+            align_expand_factor: 0.3,
+            motion_factor: 0.55,
+          },
+        }),
+      });
+
+      if (!playResponse.ok) {
+        throw new Error(`HTTP error! status: ${playResponse.status}`);
+      }
+
+      const playResponseData = await playResponse.json();
+      logger.debug('Silent stream response:', playResponseData);
+
+      if (playResponseData.status === 'started') {
+        logger.debug('Silent stream chunk started successfully');
+
+        if (playResponseData.result_url) {
+          // Wait for the video to be ready before transitioning
+          await new Promise((resolve) => {
+            streamVideoElement.src = playResponseData.result_url;
+            streamVideoElement.oncanplay = resolve;
+          });
+
+          // Perform the transition only if it hasn't been done yet
+          if (!isCurrentlyStreaming) {
+            smoothTransition(true);
+            isCurrentlyStreaming = true;
+          }
+
+          await new Promise(resolve => {
+            streamVideoElement.onended = resolve;
+          });
+        } else {
+          logger.debug('No result_url in playResponseData. Waiting for next chunk.');
+        }
+      } else {
+        logger.warn('Unexpected response status:', playResponseData.status);
+      }
+
+      // Check if we should continue the silent stream
+      isSilentStreamActive = !groqResponseReceived;
+
+    } catch (error) {
+      logger.error('Error during silent streaming:', error);
+      isSilentStreamActive = false;
+    }
+  }
+
+  logger.debug('Silent stream ended');
 }
 
 function handleDeepgramError(err) {
@@ -2315,6 +2435,9 @@ async function sendChatToGroq() {
     msgHistory.appendChild(assistantSpan);
     msgHistory.appendChild(document.createElement('br'));
 
+    let accumulatedContent = '';
+    const contentThreshold = 20; // Minimum characters before sending to D-ID
+
     while (!done) {
       const { value, done: readerDone } = await reader.read();
       done = readerDone;
@@ -2336,8 +2459,15 @@ async function sendChatToGroq() {
               const parsed = JSON.parse(data);
               const content = parsed.choices[0]?.delta?.content || '';
               assistantReply += content;
+              accumulatedContent += content;
               assistantSpan.innerHTML += content;
               logger.debug('Parsed content:', content);
+
+              // Send accumulated content to D-ID if it reaches the threshold
+              if (accumulatedContent.length >= contentThreshold) {
+                await updateStreamingContent(accumulatedContent);
+                accumulatedContent = '';
+              }
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
@@ -2346,6 +2476,11 @@ async function sendChatToGroq() {
 
         msgHistory.scrollTop = msgHistory.scrollHeight;
       }
+    }
+
+    // Send any remaining content
+    if (accumulatedContent.length > 0) {
+      await updateStreamingContent(accumulatedContent);
     }
 
     const endTime = Date.now();
@@ -2359,8 +2494,15 @@ async function sendChatToGroq() {
 
     logger.debug('Assistant reply:', assistantReply);
 
-    // Start streaming the entire response
-    await startStreaming(assistantReply);
+    // Signal that the Groq response is complete
+    groqResponseReceived = true;
+
+    // Ensure the entire response has been spoken before transitioning back to idle
+    await waitForSpeechToFinish();
+
+    // Transition back to idle video
+    smoothTransition(false);
+    isCurrentlyStreaming = false;
 
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
@@ -2368,6 +2510,72 @@ async function sendChatToGroq() {
     msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
     msgHistory.scrollTop = msgHistory.scrollHeight;
   }
+}
+
+async function updateStreamingContent(content) {
+  if (content.length < 4) {
+    logger.debug('Content too short, skipping update');
+    return;
+  }
+
+  logger.debug('Updating streaming content:', content);
+
+  try {
+    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: content,
+          ssml: false,
+          provider: {
+            type: 'microsoft',
+            voice_id: avatars[currentAvatar].voiceId,
+          },
+        },
+        session_id: persistentSessionId,
+        driver_url: "bank://lively/driver-06",
+        output_resolution: 512,
+        config: {
+          fluent: true,
+          stitch: true,
+          pad_audio: 0,
+          auto_match: true,
+          align_driver: true,
+          normalization_factor: 0.1,
+          align_expand_factor: 0.3,
+          motion_factor: 0.55,
+        },
+      }),
+    });
+
+    if (!playResponse.ok) {
+      throw new Error(`HTTP error! status: ${playResponse.status}`);
+    }
+
+    const playResponseData = await playResponse.json();
+    logger.debug('D-ID update response:', playResponseData);
+
+  } catch (error) {
+    logger.error('Error updating streaming content:', error);
+  }
+}
+
+function waitForSpeechToFinish() {
+  return new Promise((resolve) => {
+    const checkSpeechStatus = () => {
+      if (isAvatarSpeaking) {
+        setTimeout(checkSpeechStatus, 100); // Check every 100ms
+      } else {
+        resolve();
+      }
+    };
+    checkSpeechStatus();
+  });
 }
 
 function toggleAutoSpeak() {
