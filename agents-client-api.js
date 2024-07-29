@@ -1949,6 +1949,7 @@ async function startStreaming(assistantReply) {
         }),
       });
 
+      
       if (!playResponse.ok) {
         throw new Error(`HTTP error! status: ${playResponse.status}`);
       }
