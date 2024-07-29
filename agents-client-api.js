@@ -1890,91 +1890,91 @@ async function startStreaming(assistantReply) {
       return;
     }
 
-    // Ensure the entire assistantReply is wrapped in a single <speak> tag
-    const wrappedSSML = assistantReply.trim().startsWith('<speak>') ? assistantReply : `<speak>${assistantReply}</speak>`;
+    // Remove any leading/trailing whitespace and newlines
+    const cleanedSSML = assistantReply.trim().replace(/^\s*[\r\n]/gm, '');
 
-    // Split the SSML content into chunks, keeping the <speak> tags intact
-    const chunks = wrappedSSML.match(/<speak>[\s\S]*?<\/speak>/g) || [];
+    // Ensure the SSML is properly wrapped in <speak> tags
+    const wrappedSSML = cleanedSSML.startsWith('<speak>') && cleanedSSML.endsWith('</speak>') 
+      ? cleanedSSML 
+      : `<speak>${cleanedSSML}</speak>`;
 
-    logger.debug('Chunks', chunks);
+    logger.debug('Wrapped SSML:', wrappedSSML);
 
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i].trim();
-      if (chunk.length === 0) continue;
-
-      isAvatarSpeaking = true;
-      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${DID_API.key}`,
-          'Content-Type': 'application/json',
+    isAvatarSpeaking = true;
+    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'ssml',
+          ssml: wrappedSSML,
+          provider: {
+            type: 'microsoft',
+            voice_id: avatars[currentAvatar].voiceId,
+          },
         },
-        body: JSON.stringify({
-          script: {
-            type: 'text',
-            input: chunk,
-            ssml: true,
-            provider: {
-              type: 'microsoft',
-              voice_id: avatars[currentAvatar].voiceId,
-            },
-          },
-          session_id: persistentSessionId,
-          driver_url: "bank://lively/driver-06",
-          output_resolution: 512,
-          stream_warmup: true,
-          config: {
-            fluent: true,
-            stitch: true,
-            pad_audio: 0.5,
-            auto_match: true,
-            align_driver: true,
-            normalization_factor: 0.1,
-            align_expand_factor: 0.3,
-            motion_factor: 0.55,
-            result_format: "mp4",
-            driver_expressions: {
-              expressions: [
-                {
-                  start_frame: 0,
-                  expression: "neutral",
-                  intensity: 0.5
-                }
-              ]
-            }
-          },
-        }),
-      });
+        session_id: persistentSessionId,
+        driver_url: "bank://lively/driver-06",
+        config: {
+          fluent: true,
+          stitch: true,
+          pad_audio: 0.5,
+          auto_match: true,
+          align_driver: true,
+          normalization_factor: 0.1,
+          align_expand_factor: 0.3,
+          motion_factor: 0.55,
+          result_format: "mp4",
+          driver_expressions: {
+            expressions: [
+              {
+                start_frame: 0,
+                expression: "neutral",
+                intensity: 0.5
+              }
+            ]
+          }
+        },
+      }),
+    });
 
-      if (!playResponse.ok) {
-        throw new Error(`HTTP error! status: ${playResponse.status}`);
-      }
+    logger.debug('Play response status:', playResponse.status);
+    logger.debug('Play response headers:', Object.fromEntries(playResponse.headers.entries()));
 
-      const playResponseData = await playResponse.json();
-      logger.debug('Streaming response:', playResponseData);
+    if (!playResponse.ok) {
+      const errorText = await playResponse.text();
+      throw new Error(`HTTP error! status: ${playResponse.status}, body: ${errorText}`);
+    }
 
-      if (playResponseData.status === 'started') {
-        logger.debug('Stream chunk started successfully');
+    const playResponseData = await playResponse.json();
+    logger.debug('Streaming response:', playResponseData);
 
-        if (playResponseData.result_url) {
-          // Wait for the video to be ready before transitioning
-          await new Promise((resolve) => {
-            streamVideoElement.src = playResponseData.result_url;
-            streamVideoElement.oncanplay = resolve;
-          });
+    if (playResponseData.status === 'started') {
+      logger.debug('Stream started successfully');
 
-          // Perform the transition
-          smoothTransition(true);
+      if (playResponseData.result_url) {
+        logger.debug('Result URL received:', playResponseData.result_url);
+        
+        // Wait for the video to be ready before transitioning
+        await new Promise((resolve) => {
+          streamVideoElement.src = playResponseData.result_url;
+          streamVideoElement.oncanplay = resolve;
+        });
 
-          await new Promise(resolve => {
-            streamVideoElement.onended = resolve;
-          });
-        } else {
-          logger.debug('No result_url in playResponseData. Waiting for next chunk.');
-        }
+        // Perform the transition
+        smoothTransition(true);
+
+        await new Promise(resolve => {
+          streamVideoElement.onended = resolve;
+        });
       } else {
-        logger.warn('Unexpected response status:', playResponseData.status);
+        logger.warn('No result_url in playResponseData.');
       }
+    } else {
+      logger.warn('Unexpected response status:', playResponseData.status);
     }
 
     isAvatarSpeaking = false;
