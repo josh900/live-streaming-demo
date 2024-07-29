@@ -1868,7 +1868,6 @@ async function initializeConnection() {
   }
 }
 
-
 async function startStreaming(assistantReply) {
   try {
     logger.debug('Starting streaming with reply:', assistantReply);
@@ -1985,6 +1984,8 @@ async function startStreaming(assistantReply) {
         }
       } else {
         logger.warn('Unexpected response status:', playResponseData.status);
+        // Add more detailed logging for unexpected response
+        logger.debug('Full response data:', JSON.stringify(playResponseData, null, 2));
       }
     }
 
@@ -1999,6 +2000,7 @@ async function startStreaming(assistantReply) {
 
   } catch (error) {
     logger.error('Error during streaming:', error);
+    logger.debug('Error details:', error.stack);
     if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
       logger.warn('Stream not found or invalid session. Attempting to reinitialize persistent stream.');
       await reinitializePersistentStream();
