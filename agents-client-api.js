@@ -1891,10 +1891,10 @@ async function startStreaming(assistantReply) {
     }
 
     isAvatarSpeaking = true;
-
-    // Start with pauses
-    const initialPauses = '<speak>' + '<break time="1s"/>'.repeat(5) + '</speak>';
-
+    
+    // Start with initial pauses
+    let initialPauses = '<break time="1s"/>'.repeat(5);
+    
     const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
       method: 'POST',
       headers: {
@@ -1913,6 +1913,8 @@ async function startStreaming(assistantReply) {
         },
         session_id: persistentSessionId,
         driver_url: "bank://lively/driver-06",
+        output_resolution: 512,
+        stream_warmup: true,
         config: {
           fluent: true,
           stitch: true,
@@ -1923,6 +1925,15 @@ async function startStreaming(assistantReply) {
           align_expand_factor: 0.3,
           motion_factor: 0.55,
           result_format: "mp4",
+          driver_expressions: {
+            expressions: [
+              {
+                start_frame: 0,
+                expression: "neutral",
+                intensity: 0.5
+              }
+            ]
+          }
         },
       }),
     });
@@ -1932,58 +1943,58 @@ async function startStreaming(assistantReply) {
     }
 
     const playResponseData = await playResponse.json();
-    logger.debug('Initial streaming response:', playResponseData);
+    logger.debug('Streaming response:', playResponseData);
 
     if (playResponseData.status === 'started') {
       logger.debug('Stream started successfully');
-      smoothTransition(true);
+      
+      if (playResponseData.result_url) {
+        streamVideoElement.src = playResponseData.result_url;
+        streamVideoElement.style.display = 'block';
+        idleVideoElement.style.display = 'none';
+      }
+
+      // Wait for a moment to simulate waiting for Groq response
+      await new Promise(resolve => setTimeout(resolve, 5000));
 
       // Now add the actual assistant reply
-      if (assistantReply.trim()) {
-        // Remove outer <speak> tags if present
-        let ssmlContent = assistantReply.trim();
-        if (ssmlContent.startsWith('<speak>') && ssmlContent.endsWith('</speak>')) {
-          ssmlContent = ssmlContent.slice(7, -8).trim();
-        }
-
-        const updateResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/content`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Basic ${DID_API.key}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            script: {
-              type: 'text',
-              input: `<speak>${ssmlContent}</speak>`,
-              ssml: true,
-              provider: {
-                type: 'microsoft',
-                voice_id: avatars[currentAvatar].voiceId,
-              },
+      const updateResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          script: {
+            type: 'text',
+            input: assistantReply,
+            ssml: true,
+            provider: {
+              type: 'microsoft',
+              voice_id: avatars[currentAvatar].voiceId,
             },
-            session_id: persistentSessionId,
-          }),
-        });
+          },
+          session_id: persistentSessionId,
+        }),
+      });
 
-        if (!updateResponse.ok) {
-          throw new Error(`HTTP error! status: ${updateResponse.status}`);
-        }
+      if (!updateResponse.ok) {
+        throw new Error(`HTTP error! status: ${updateResponse.status}`);
+      }
 
-        const updateResponseData = await updateResponse.json();
-        logger.debug('Content update response:', updateResponseData);
+      const updateResponseData = await updateResponse.json();
+      logger.debug('Update streaming response:', updateResponseData);
+
+      if (updateResponseData.status === 'started') {
+        logger.debug('Stream update successful');
+      } else {
+        logger.warn('Unexpected response status for update:', updateResponseData.status);
       }
     } else {
       logger.warn('Unexpected response status:', playResponseData.status);
     }
 
-    // Wait for the video to finish
-    await new Promise(resolve => {
-      streamVideoElement.onended = resolve;
-    });
-
     isAvatarSpeaking = false;
-    smoothTransition(false);
 
     // Check if we need to reconnect
     if (shouldReconnect()) {
@@ -1999,7 +2010,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
