@@ -1032,7 +1032,7 @@ async function sendSDPAnswer(streamId, sessionId, answer) {
 }
 
 async function initialize() {
-  setLogLevel('INFO');
+  setLogLevel('DEBUG');
   connectionState = ConnectionState.DISCONNECTED;
 
   const { idle, stream } = getVideoElements();
@@ -1284,11 +1284,7 @@ function togglePushToTalk() {
   } else {
     cleanupPushToTalk();
   }
-
-  logger.debug(`Push to Talk toggled: ${isPushToTalkEnabled}`);
 }
-
-
 
 async function initializePushToTalk() {
   try {
@@ -1343,12 +1339,11 @@ function cleanupPushToTalk() {
   if (deepgramConnection) {
     deepgramConnection.finish();
   }
-  isPushToTalkActive = false;
   logger.debug('Push to Talk cleaned up');
 }
 
 async function startPushToTalk() {
-  if (!isPushToTalkEnabled) return;
+  if (!isPushToTalkEnabled || isPushToTalkActive) return;
 
   isPushToTalkActive = true;
   currentUtterance = '';
@@ -1384,7 +1379,6 @@ async function stopPushToTalk() {
     interimMessageAdded = false;
   }
 }
-
 
 
 function handlePushToTalkTranscription(data) {
@@ -2119,13 +2113,6 @@ async function startStreaming(assistantReply) {
 
     isAvatarSpeaking = false;
     smoothTransition(false);
-
-    // Ensure Push to Talk remains active after avatar finishes speaking
-    if (isPushToTalkEnabled) {
-      logger.debug('Avatar finished speaking. Push to Talk remains active.');
-      const pushToTalkButton = document.getElementById('push-to-talk-button');
-      pushToTalkButton.disabled = false;
-    }
 
   } catch (error) {
     logger.error('Error during streaming:', error);
