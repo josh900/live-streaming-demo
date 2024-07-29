@@ -1890,96 +1890,97 @@ async function startStreaming(assistantReply) {
       return;
     }
 
-    // Remove outer <speak> tags if present
-    let ssmlContent = assistantReply.trim();
-    if (ssmlContent.startsWith('<speak>') && ssmlContent.endsWith('</speak>')) {
-      ssmlContent = ssmlContent.slice(7, -8).trim();
-    }
+    isAvatarSpeaking = true;
 
-    // Split the SSML content into chunks, respecting SSML tags
-    const chunks = ssmlContent.match(/(?:<[^>]+>|[^<]+)+/g) || [];
+    // Start with pauses
+    const initialPauses = '<speak>' + '<break time="1s"/>'.repeat(5) + '</speak>';
 
-    logger.debug('Chunks', chunks);
-
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i].trim();
-      if (chunk.length === 0) continue;
-
-      isAvatarSpeaking = true;
-      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${DID_API.key}`,
-          'Content-Type': 'application/json',
+    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: initialPauses,
+          ssml: true,
+          provider: {
+            type: 'microsoft',
+            voice_id: avatars[currentAvatar].voiceId,
+          },
         },
-        body: JSON.stringify({
-          script: {
-            type: 'text',
-            input: chunk,  // Send the chunk without additional <speak> tags
-            ssml: true,
-            provider: {
-              type: 'microsoft',
-              voice_id: avatars[currentAvatar].voiceId,
-            },
-          },
-          session_id: persistentSessionId,
-          driver_url: "bank://lively/driver-06",
-          output_resolution: 512,
-          stream_warmup: true,
-          config: {
-            fluent: true,
-            stitch: true,
-            pad_audio: 0.5,
-            auto_match: true,
-            align_driver: true,
-            normalization_factor: 0.1,
-            align_expand_factor: 0.3,
-            motion_factor: 0.55,
-            result_format: "mp4",
-            driver_expressions: {
-              expressions: [
-                {
-                  start_frame: 0,
-                  expression: "neutral",
-                  intensity: 0.5
-                }
-              ]
-            }
-          },
-        }),
-      });
+        session_id: persistentSessionId,
+        driver_url: "bank://lively/driver-06",
+        config: {
+          fluent: true,
+          stitch: true,
+          pad_audio: 0.5,
+          auto_match: true,
+          align_driver: true,
+          normalization_factor: 0.1,
+          align_expand_factor: 0.3,
+          motion_factor: 0.55,
+          result_format: "mp4",
+        },
+      }),
+    });
 
-      
-      if (!playResponse.ok) {
-        throw new Error(`HTTP error! status: ${playResponse.status}`);
-      }
-
-      const playResponseData = await playResponse.json();
-      logger.debug('Streaming response:', playResponseData);
-
-      if (playResponseData.status === 'started') {
-        logger.debug('Stream chunk started successfully');
-
-        if (playResponseData.result_url) {
-          // Wait for the video to be ready before transitioning
-          await new Promise((resolve) => {
-            streamVideoElement.src = playResponseData.result_url;
-            streamVideoElement.oncanplay = resolve;
-          });
-
-          // Perform the transition
-          smoothTransition(true);
-
-          await new Promise(resolve => {
-            streamVideoElement.onended = resolve;
-          });
-        } else {
-          logger.debug('No result_url in playResponseData. Waiting for next chunk.');
-        }
-      } else {
-        logger.warn('Unexpected response status:', playResponseData.status);
-      }
+    if (!playResponse.ok) {
+      throw new Error(`HTTP error! status: ${playResponse.status}`);
     }
+
+    const playResponseData = await playResponse.json();
+    logger.debug('Initial streaming response:', playResponseData);
+
+    if (playResponseData.status === 'started') {
+      logger.debug('Stream started successfully');
+      smoothTransition(true);
+
+      // Now add the actual assistant reply
+      if (assistantReply.trim()) {
+        // Remove outer <speak> tags if present
+        let ssmlContent = assistantReply.trim();
+        if (ssmlContent.startsWith('<speak>') && ssmlContent.endsWith('</speak>')) {
+          ssmlContent = ssmlContent.slice(7, -8).trim();
+        }
+
+        const updateResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/content`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Basic ${DID_API.key}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            script: {
+              type: 'text',
+              input: `<speak>${ssmlContent}</speak>`,
+              ssml: true,
+              provider: {
+                type: 'microsoft',
+                voice_id: avatars[currentAvatar].voiceId,
+              },
+            },
+            session_id: persistentSessionId,
+          }),
+        });
+
+        if (!updateResponse.ok) {
+          throw new Error(`HTTP error! status: ${updateResponse.status}`);
+        }
+
+        const updateResponseData = await updateResponse.json();
+        logger.debug('Content update response:', updateResponseData);
+      }
+    } else {
+      logger.warn('Unexpected response status:', playResponseData.status);
+    }
+
+    // Wait for the video to finish
+    await new Promise(resolve => {
+      streamVideoElement.onended = resolve;
+    });
 
     isAvatarSpeaking = false;
     smoothTransition(false);
@@ -1998,6 +1999,7 @@ async function startStreaming(assistantReply) {
     }
   }
 }
+
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
