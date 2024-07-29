@@ -1075,16 +1075,6 @@ async function initialize() {
   pushToTalkButton.addEventListener('mouseup', stopPushToTalk);
   pushToTalkButton.addEventListener('mouseleave', stopPushToTalk);
 
-  // Add touch event listeners for mobile devices
-  pushToTalkButton.addEventListener('touchstart', (e) => {
-    e.preventDefault(); // Prevent mouse events from firing
-    startPushToTalk();
-  });
-  pushToTalkButton.addEventListener('touchend', (e) => {
-    e.preventDefault(); // Prevent mouse events from firing
-    stopPushToTalk();
-  });
-
   initializeWebSocket();
   playIdleVideo();
 
@@ -1289,8 +1279,6 @@ function togglePushToTalk() {
   pushToTalkToggle.textContent = `Push to Talk: ${isPushToTalkEnabled ? 'On' : 'Off'}`;
   pushToTalkButton.disabled = !isPushToTalkEnabled;
 
-  logger.debug(`Push to Talk toggled: ${isPushToTalkEnabled}`);
-
   if (isPushToTalkEnabled) {
     initializePushToTalk();
   } else {
@@ -1355,11 +1343,7 @@ function cleanupPushToTalk() {
 }
 
 async function startPushToTalk() {
-  logger.debug(`Start Push to Talk called. Enabled: ${isPushToTalkEnabled}, Active: ${isPushToTalkActive}, Avatar Speaking: ${isAvatarSpeaking}`);
-  if (!isPushToTalkEnabled || isPushToTalkActive || isAvatarSpeaking) {
-    logger.debug('Push to Talk start conditions not met. Returning.');
-    return;
-  }
+  if (!isPushToTalkEnabled || isPushToTalkActive || isAvatarSpeaking) return;
 
   isPushToTalkActive = true;
   currentUtterance = '';
@@ -1379,11 +1363,7 @@ async function startPushToTalk() {
 }
 
 async function stopPushToTalk() {
-  logger.debug(`Stop Push to Talk called. Enabled: ${isPushToTalkEnabled}, Active: ${isPushToTalkActive}`);
-  if (!isPushToTalkEnabled || !isPushToTalkActive) {
-    logger.debug('Push to Talk stop conditions not met. Returning.');
-    return;
-  }
+  if (!isPushToTalkEnabled || !isPushToTalkActive) return;
 
   isPushToTalkActive = false;
   logger.debug('Stopping Push to Talk...');
@@ -1393,6 +1373,7 @@ async function stopPushToTalk() {
 
   audioWorkletNode.port.onmessage = null;
 
+  // Immediately process the utterance without any delays
   if (currentUtterance.trim()) {
     updateTranscript(currentUtterance.trim(), true);
     chatHistory.push({
@@ -1415,7 +1396,6 @@ function handlePushToTalkTranscription(data) {
     }
   }
 }
-
 
 
 function updateContext(action) {
@@ -2051,7 +2031,6 @@ async function startStreaming(assistantReply) {
     // Disable Push to Talk button while avatar is speaking
     pushToTalkButton.disabled = true;
     isAvatarSpeaking = true;
-    logger.debug('Avatar speaking started, Push to Talk button disabled');
 
     // Remove outer <speak> tags if present
     let ssmlContent = assistantReply.trim();
@@ -2062,7 +2041,7 @@ async function startStreaming(assistantReply) {
     // Split the SSML content into chunks, respecting SSML tags
     const chunks = ssmlContent.match(/(?:<[^>]+>|[^<]+)+/g) || [];
 
-    logger.debug('Chunks:', chunks);
+    logger.debug('Chunks', chunks);
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i].trim();
@@ -2141,8 +2120,13 @@ async function startStreaming(assistantReply) {
       }
     }
 
-    logger.debug('All chunks processed, transitioning back to idle state');
+    isAvatarSpeaking = false;
     smoothTransition(false);
+
+    // Re-enable Push to Talk button after avatar finishes speaking
+    if (isPushToTalkEnabled) {
+      pushToTalkButton.disabled = false;
+    }
 
   } catch (error) {
     logger.error('Error during streaming:', error);
@@ -2151,31 +2135,14 @@ async function startStreaming(assistantReply) {
       await reinitializePersistentStream();
     }
   } finally {
-    // Ensure Push to Talk button is re-enabled and avatar speaking flag is reset
-    isAvatarSpeaking = false;
+    // Ensure Push to Talk button is re-enabled even if an error occurs
     if (isPushToTalkEnabled) {
       const pushToTalkButton = document.getElementById('push-to-talk-button');
       pushToTalkButton.disabled = false;
-      logger.debug('Avatar speaking ended, Push to Talk button re-enabled');
     }
-
-    // Check if we need to reconnect
-    if (shouldReconnect()) {
-      logger.info('Approaching reconnection threshold. Initiating background reconnect.');
-      await backgroundReconnect();
-    }
-
-    logger.debug('Streaming process completed');
+    isAvatarSpeaking = false;
   }
 }
-
-function logPushToTalkState() {
-  logger.debug(`Push to Talk State - Enabled: ${isPushToTalkEnabled}, Active: ${isPushToTalkActive}, Avatar Speaking: ${isAvatarSpeaking}`);
-}
-
-
-
-setInterval(logPushToTalkState, 1000);
 
 
 export function toggleSimpleMode() {
