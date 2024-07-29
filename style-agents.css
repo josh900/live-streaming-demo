@@ -398,6 +398,13 @@ body {
 }
 
 
+#push-to-talk-button.active {
+  background-color: #ff0000; /* Red background when active */
+  color: white;
+}
+
+
+
 
 @media (max-width: 1024px) {
   #content {
