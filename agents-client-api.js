@@ -1953,11 +1953,17 @@ async function startStreaming(assistantReply) {
         throw new Error(`HTTP error! status: ${playResponse.status}`);
       }
 
-      const playResponseData = await playResponse.json();
-      logger.debug('Streaming response:', playResponseData);
+      let playResponseData = await playResponse.json();
+      logger.debug('Initial streaming response:', playResponseData);
 
       if (playResponseData.status === 'started') {
         logger.debug('Stream chunk started successfully');
+
+        // Wait for the result_url if it's not immediately available
+        if (!playResponseData.result_url) {
+          logger.debug('No result_url in initial response. Waiting for result...');
+          playResponseData = await waitForResultUrl(persistentStreamId, persistentSessionId);
+        }
 
         if (playResponseData.result_url) {
           // Wait for the video to be ready before playing
@@ -1970,7 +1976,7 @@ async function startStreaming(assistantReply) {
             streamVideoElement.onended = resolve;
           });
         } else {
-          logger.debug('No result_url in playResponseData. Waiting for next chunk.');
+          logger.warn('Failed to get result_url for chunk. Skipping this chunk.');
         }
       } else {
         logger.warn('Unexpected response status:', playResponseData.status);
@@ -1996,6 +2002,36 @@ async function startStreaming(assistantReply) {
     }
   }
 }
+
+
+async function waitForResultUrl(streamId, sessionId, maxAttempts = 50, delay = 200) {
+  for (let i = 0; i < maxAttempts; i++) {
+    const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (data.result_url) {
+      logger.debug('Received result_url:', data.result_url);
+      return data;
+    }
+
+    logger.debug(`Attempt ${i + 1}: Still waiting for result_url. Retrying in ${delay}ms.`);
+    await new Promise(resolve => setTimeout(resolve, delay));
+  }
+
+  logger.warn(`Failed to get result_url after ${maxAttempts} attempts.`);
+  return null;
+}
+
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
