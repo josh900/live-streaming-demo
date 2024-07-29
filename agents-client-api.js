@@ -499,7 +499,7 @@ function initializeTransitionCanvas() {
 
 
 
-function smoothTransition(toStreaming, duration = 250) {
+function smoothTransition(toStreaming, duration = 250, forceTransition = false) {
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
 
@@ -513,8 +513,8 @@ function smoothTransition(toStreaming, duration = 250) {
     return;
   }
 
-  // Don't transition if we're already in the desired state
-  if ((toStreaming && isCurrentlyStreaming) || (!toStreaming && !isCurrentlyStreaming)) {
+  // Allow forced transition even if the state seems unchanged
+  if (!forceTransition && ((toStreaming && isCurrentlyStreaming) || (!toStreaming && !isCurrentlyStreaming))) {
     logger.debug('Already in desired state, skipping transition');
     return;
   }
@@ -563,6 +563,7 @@ function smoothTransition(toStreaming, duration = 250) {
   // Start the animation
   requestAnimationFrame(animate);
 }
+
 
 function getVideoElements() {
   const idle = document.getElementById('idle-video-element');
@@ -1894,6 +1895,9 @@ async function startStreaming(assistantReply) {
       return;
     }
 
+    // Force transition to streaming state
+    smoothTransition(true, 250, true);
+
     // Split the SSML content into chunks of speak tags
     const chunks = splitSSMLIntoChunks(assistantReply);
 
@@ -1944,7 +1948,6 @@ async function startStreaming(assistantReply) {
           },
         }),
       });
-      
 
       if (!playResponse.ok) {
         throw new Error(`HTTP error! status: ${playResponse.status}`);
@@ -1957,14 +1960,11 @@ async function startStreaming(assistantReply) {
         logger.debug('Stream chunk started successfully');
 
         if (playResponseData.result_url) {
-          // Wait for the video to be ready before transitioning
+          // Wait for the video to be ready before playing
           await new Promise((resolve) => {
             streamVideoElement.src = playResponseData.result_url;
             streamVideoElement.oncanplay = resolve;
           });
-
-          // Perform the transition
-          smoothTransition(true);
 
           await new Promise(resolve => {
             streamVideoElement.onended = resolve;
@@ -1978,10 +1978,12 @@ async function startStreaming(assistantReply) {
     }
 
     isAvatarSpeaking = false;
-    smoothTransition(false);
+    
+    // Force transition back to idle state
+    smoothTransition(false, 250, true);
 
-     // Check if we need to reconnect
-     if (shouldReconnect()) {
+    // Check if we need to reconnect
+    if (shouldReconnect()) {
       logger.info('Approaching reconnection threshold. Initiating background reconnect.');
       await backgroundReconnect();
     }
