@@ -1898,6 +1898,8 @@ async function startStreaming(assistantReply) {
     // Split the SSML content into chunks of the speak tags
     const chunks = Array.from(speakTags).map(speakTag => new XMLSerializer().serializeToString(speakTag));
 
+    logger.debug('Chunks', chunks);
+
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i].trim();
       if (chunk.length === 0) continue;
