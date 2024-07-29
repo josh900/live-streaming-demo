@@ -1005,7 +1005,7 @@ async function sendSDPAnswer(streamId, sessionId, answer) {
   });
 }
 
-function initialize() {
+async function initialize() {
   setLogLevel('DEBUG');
   connectionState = ConnectionState.DISCONNECTED;
 
@@ -1018,7 +1018,7 @@ function initialize() {
 
   initializeTransitionCanvas();
 
-  loadAvatars();
+  await loadAvatars();
   populateAvatarSelect();
 
   const contextInput = document.getElementById('context-input');
