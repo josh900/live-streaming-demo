@@ -1869,26 +1869,107 @@ async function initializeConnection() {
   }
 }
 
-async function startStreaming(assistantReply) {
+async function startStreaming(initialPause = '<break time="1s"/>', minPauseDuration = 1000) {
+  if (!persistentStreamId || !persistentSessionId) {
+    logger.error('Persistent stream not initialized. Cannot start streaming.');
+    await initializePersistentStream();
+  }
+
+  if (!currentAvatar || !avatars[currentAvatar]) {
+    logger.error('No avatar selected or avatar not found. Cannot start streaming.');
+    return;
+  }
+
+  isAvatarSpeaking = true;
+
+  const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      script: {
+        type: 'text',
+        input: initialPause,
+        ssml: true,
+        provider: {
+          type: 'microsoft',
+          voice_id: avatars[currentAvatar].voiceId,
+        },
+      },
+      session_id: persistentSessionId,
+      driver_url: "bank://lively/driver-06",
+      output_resolution: 512,
+      stream_warmup: true,
+      config: {
+        fluent: true,
+        stitch: true,
+        pad_audio: 0.5,
+        auto_match: true,
+        align_driver: true,
+        normalization_factor: 0.1,
+        align_expand_factor: 0.3,
+        motion_factor: 0.55,
+        result_format: "mp4",
+        driver_expressions: {
+          expressions: [
+            {
+              start_frame: 0,
+              expression: "neutral",
+              intensity: 0.5
+            }
+          ]
+        }
+      },
+    }),
+  });
+
+  if (!playResponse.ok) {
+    throw new Error(`HTTP error! status: ${playResponse.status}`);
+  }
+
+  const playResponseData = await playResponse.json();
+  logger.debug('Streaming response:', playResponseData);
+
+  if (playResponseData.status !== 'started') {
+    logger.warn('Unexpected response status:', playResponseData.status);
+  }
+
+  // Keep adding pauses until we receive the Groq response
+  let elapsedTime = 0;
+  const intervalId = setInterval(async () => {
+    elapsedTime += minPauseDuration;
+    await addPauseToStream(minPauseDuration);
+    logger.debug(`Added ${elapsedTime}ms of pause to the stream`);
+  }, minPauseDuration);
+
+  // Return a cleanup function to stop the interval when the Groq response is received
+  return () => clearInterval(intervalId);
+}
+
+async function addPauseToStream(duration) {
+  const pauseSSML = `<break time="${duration}ms"/>`;
+  await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${DID_API.key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      script: {
+        type: 'text',
+        input: pauseSSML,
+        ssml: true,
+      },
+      session_id: persistentSessionId,
+    }),
+  });
+}
+
+async function addGroqResponseToStream(assistantReply) {
   try {
-    logger.debug('Starting streaming with reply:', assistantReply);
-    if (!persistentStreamId || !persistentSessionId) {
-      logger.error('Persistent stream not initialized. Cannot start streaming.');
-      await initializePersistentStream();
-    }
-
-    if (!currentAvatar || !avatars[currentAvatar]) {
-      logger.error('No avatar selected or avatar not found. Cannot start streaming.');
-      return;
-    }
-
-    const streamVideoElement = document.getElementById('stream-video-element');
-    const idleVideoElement = document.getElementById('idle-video-element');
-
-    if (!streamVideoElement || !idleVideoElement) {
-      logger.error('Video elements not found');
-      return;
-    }
+    logger.debug('Adding Groq response to stream:', assistantReply);
 
     // Remove outer <speak> tags if present
     let ssmlContent = assistantReply.trim();
@@ -1903,10 +1984,9 @@ async function startStreaming(assistantReply) {
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i].trim();
-      if (chunk.length === 0) continue;
+      if (chunk.length < 3) continue;
 
-      isAvatarSpeaking = true;
-      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
         method: 'POST',
         headers: {
           Authorization: `Basic ${DID_API.key}`,
@@ -1915,81 +1995,21 @@ async function startStreaming(assistantReply) {
         body: JSON.stringify({
           script: {
             type: 'text',
-            input: chunk,  // Send the chunk without additional <speak> tags
+            input: chunk,
             ssml: true,
-            provider: {
-              type: 'microsoft',
-              voice_id: avatars[currentAvatar].voiceId,
-            },
           },
           session_id: persistentSessionId,
-          driver_url: "bank://lively/driver-06",
-          output_resolution: 512,
-          stream_warmup: true,
-          config: {
-            fluent: true,
-            stitch: true,
-            pad_audio: 0.5,
-            auto_match: true,
-            align_driver: true,
-            normalization_factor: 0.1,
-            align_expand_factor: 0.3,
-            motion_factor: 0.55,
-            result_format: "mp4",
-            driver_expressions: {
-              expressions: [
-                {
-                  start_frame: 0,
-                  expression: "neutral",
-                  intensity: 0.5
-                }
-              ]
-            }
-          },
         }),
       });
-
-      
-      if (!playResponse.ok) {
-        throw new Error(`HTTP error! status: ${playResponse.status}`);
-      }
-
-      const playResponseData = await playResponse.json();
-      logger.debug('Streaming response:', playResponseData);
-
-      if (playResponseData.status === 'started') {
-        logger.debug('Stream chunk started successfully');
-
-        if (playResponseData.result_url) {
-          // Wait for the video to be ready before transitioning
-          await new Promise((resolve) => {
-            streamVideoElement.src = playResponseData.result_url;
-            streamVideoElement.oncanplay = resolve;
-          });
-
-          // Perform the transition
-          smoothTransition(true);
-
-          await new Promise(resolve => {
-            streamVideoElement.onended = resolve;
-          });
-        } else {
-          logger.debug('No result_url in playResponseData. Waiting for next chunk.');
-        }
-      } else {
-        logger.warn('Unexpected response status:', playResponseData.status);
-      }
     }
 
     isAvatarSpeaking = false;
-    smoothTransition(false);
 
     // Check if we need to reconnect
     if (shouldReconnect()) {
       logger.info('Approaching reconnection threshold. Initiating background reconnect.');
       await backgroundReconnect();
     }
-
   } catch (error) {
     logger.error('Error during streaming:', error);
     if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
@@ -1998,6 +2018,7 @@ async function startStreaming(assistantReply) {
     }
   }
 }
+
 
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
@@ -2276,6 +2297,10 @@ async function sendChatToGroq() {
   }
 
   logger.debug('Sending chat to Groq...');
+
+  // Start streaming with pauses
+  const stopAddingPauses = await startStreaming();
+
   try {
     const startTime = Date.now();
     const currentContext = document.getElementById('context-input').value.trim();
@@ -2359,9 +2384,11 @@ async function sendChatToGroq() {
 
     logger.debug('Assistant reply:', assistantReply);
 
-    // Start streaming the entire response
-    await startStreaming(assistantReply);
+    // Stop adding pauses
+    stopAddingPauses();
 
+    // Add the Groq response to the stream
+    await addGroqResponseToStream(assistantReply);
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
     const msgHistory = document.getElementById('msgHistory');
