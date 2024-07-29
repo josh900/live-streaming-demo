@@ -663,12 +663,7 @@ function handleTextInput(text) {
 }
 
 function updateAssistantReply(text) {
-  const cleanedText = text.replace(/<speak>|<\/speak>/g, '')
-                          .replace(/<break[^>]*>/g, '(pause)')
-                          .replace(/<say-as[^>]*>(.*?)<\/say-as>/g, '$1')
-                          .replace(/<[^>]+>/g, '')
-                          .trim();
-  document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${cleanedText}</span><br>`;
+  document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
 }
 
 async function initializePersistentStream() {
@@ -756,8 +751,6 @@ async function initializePersistentStream() {
     throw error;
   }
 }
-
-
 
 
 function shouldReconnect() {
