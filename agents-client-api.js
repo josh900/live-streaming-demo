@@ -1637,12 +1637,12 @@ function onTrack(event) {
             videoStatsFound = true;
             const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
 
-            logger.debug('Video stats:', {
-             bytesReceived: report.bytesReceived,
-             lastBytesReceived,
-             videoIsPlaying,
-             videoStatusChanged
-            });
+            // logger.debug('Video stats:', {
+            //  bytesReceived: report.bytesReceived,
+            //  lastBytesReceived,
+            //  videoIsPlaying,
+            //  videoStatusChanged
+            // });
 
             if (videoStatusChanged) {
               videoIsPlaying = report.bytesReceived > lastBytesReceived;
