@@ -1915,7 +1915,6 @@ async function startStreaming(assistantReply) {
           script: {
             type: 'text',
             input: chunk,
-            ssml: true,
             provider: {
               type: 'microsoft',
               voice_id: avatars[currentAvatar].voiceId,
