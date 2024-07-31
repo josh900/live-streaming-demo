@@ -624,6 +624,32 @@ function initializeWebSocket() {
 
 
 
+
+
+function updateTranscript(text, isFinal) {
+  const msgHistory = document.getElementById('msgHistory');
+  let interimSpan = msgHistory.querySelector('span[data-interim]');
+
+  if (isFinal) {
+    if (interimSpan) {
+      interimSpan.remove();
+    }
+    msgHistory.innerHTML += `<span><u>User:</u> ${text}</span><br>`;
+    logger.debug('Final transcript added to chat history:', text);
+    interimMessageAdded = false;
+  } else {
+    if (text.trim()) {
+      if (!interimMessageAdded) {
+        msgHistory.innerHTML += `<span data-interim style='opacity:0.5'><u>User (interim):</u> ${text}</span><br>`;
+        interimMessageAdded = true;
+      } else if (interimSpan) {
+        interimSpan.innerHTML = `<u>User (interim):</u> ${text}`;
+      }
+    }
+  }
+  msgHistory.scrollTop = msgHistory.scrollHeight;
+}
+
 function handleTextInput(text) {
   if (text.trim() === '') return;
 
