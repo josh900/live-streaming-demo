@@ -40,6 +40,12 @@ app.post('/chat', async (req, res) => {
   }
 });
 
+// Dummy function
+function dummyFunction() {
+  console.log("This is a dummy function");
+  return "Dummy result";
+}
+
 app.listen(port, () => {
   console.log(`Groq server is running on port ${port}`);
 });
