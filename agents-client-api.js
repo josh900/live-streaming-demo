@@ -2413,6 +2413,10 @@ async function reinitializeConnection() {
   }
 }
 
+async function dummyFunction() {
+  logger.debug('dummyFunction');
+}
+
 async function cleanupOldStream() {
   logger.debug('Cleaning up old stream...');
 
@@ -2464,7 +2468,6 @@ destroyButton.onclick = async () => {
     closePC();
   }
 };
-
 
 const startButton = document.getElementById('start-button');
 
