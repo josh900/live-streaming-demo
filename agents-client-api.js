@@ -1028,8 +1028,6 @@ async function initialize() {
   const textInput = document.getElementById('text-input');
   const replaceContextButton = document.getElementById('replace-context-button');
   const autoSpeakToggle = document.getElementById('auto-speak-toggle');
-  const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
-  const pushToTalkButton = document.getElementById('push-to-talk-button');
   const editAvatarButton = document.getElementById('edit-avatar-button');
 
   sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
@@ -1038,16 +1036,7 @@ async function initialize() {
   });
   replaceContextButton.addEventListener('click', () => updateContext('replace'));
   autoSpeakToggle.addEventListener('click', toggleAutoSpeak);
-  pushToTalkToggle.addEventListener('click', togglePushToTalk);
-  pushToTalkButton.addEventListener('mousedown', startPushToTalk);
-  pushToTalkButton.addEventListener('mouseup', stopPushToTalk);
-  pushToTalkButton.addEventListener('mouseleave', stopPushToTalk);
   editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatar));
-
-  // Initialize push-to-talk state
-  let isPushToTalkEnabled = false;
-  pushToTalkToggle.textContent = 'Push to Talk: Off';
-  pushToTalkButton.disabled = true;
 
   initializeWebSocket();
   playIdleVideo();
@@ -1981,8 +1970,6 @@ export function toggleSimpleMode() {
   const simpleModeButton = document.getElementById('simple-mode-button');
   const header = document.querySelector('.header');
   const autoSpeakToggle = document.getElementById('auto-speak-toggle');
-  const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
-  const pushToTalkButton = document.getElementById('push-to-talk-button');
   const startButton = document.getElementById('start-button');
 
   if (content.style.display !== 'none') {
