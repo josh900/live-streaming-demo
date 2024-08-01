@@ -41,9 +41,6 @@ let isDebugMode = false;
 let isTransitioning = false;
 let lastVideoStatus = null;
 let isCurrentlyStreaming = false;
-let isPushToTalkEnabled = false;
-let isPushToTalkActive = false;
-let pushToTalkStream = null;
 let reconnectAttempts = 10;
 let persistentStreamId = null;
 let persistentSessionId = null;
@@ -1032,7 +1029,6 @@ async function initialize() {
   const replaceContextButton = document.getElementById('replace-context-button');
   const autoSpeakToggle = document.getElementById('auto-speak-toggle');
   const editAvatarButton = document.getElementById('edit-avatar-button');
-  const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
 
   sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
   textInput.addEventListener('keypress', (event) => {
@@ -1041,7 +1037,6 @@ async function initialize() {
   replaceContextButton.addEventListener('click', () => updateContext('replace'));
   autoSpeakToggle.addEventListener('click', toggleAutoSpeak);
   editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatar));
-  pushToTalkToggle.addEventListener('click', togglePushToTalk);
 
   initializeWebSocket();
   playIdleVideo();
@@ -1080,7 +1075,6 @@ async function initialize() {
     }
   });
 
-  setupPushToTalkButton();
   logger.info('Initialization complete');
 }
 
@@ -2358,141 +2352,6 @@ function toggleAutoSpeak() {
   }
 }
 
-function togglePushToTalk() {
-  isPushToTalkEnabled = !isPushToTalkEnabled;
-  const toggleButton = document.getElementById('push-to-talk-toggle');
-  const pushToTalkButton = document.getElementById('push-to-talk-button');
-  toggleButton.textContent = `Push to Talk: ${isPushToTalkEnabled ? 'On' : 'Off'}`;
-  
-  if (isPushToTalkEnabled) {
-    pushToTalkButton.disabled = false;
-    initializePushToTalkSession();
-  } else {
-    pushToTalkButton.disabled = true;
-    cleanupPushToTalkSession();
-  }
-}
-
-async function initializePushToTalkSession() {
-  try {
-    pushToTalkStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    audioContext = new AudioContext();
-    await audioContext.audioWorklet.addModule('audio-processor.js');
-    const source = audioContext.createMediaStreamSource(pushToTalkStream);
-    audioWorkletNode = new AudioWorkletNode(audioContext, 'audio-processor');
-    source.connect(audioWorkletNode);
-
-    const deepgramOptions = {
-      model: "nova-2",
-      language: "en-US",
-      smart_format: true,
-      interim_results: true,
-      punctuate: true,
-      encoding: "linear16",
-      sample_rate: audioContext.sampleRate
-    };
-
-    deepgramConnection = await deepgramClient.listen.live(deepgramOptions);
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
-      logger.debug('Deepgram WebSocket Connection opened for Push to Talk');
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Close, () => {
-      logger.debug('Deepgram WebSocket connection closed for Push to Talk');
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
-      handleTranscription(data);
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
-      logger.error('Deepgram error in Push to Talk:', err);
-      handleDeepgramError(err);
-    });
-
-    logger.debug('Push to Talk session initialized successfully');
-  } catch (error) {
-    logger.error('Error initializing Push to Talk session:', error);
-    showErrorMessage('Failed to initialize Push to Talk. Please try again.');
-  }
-}
-
-function cleanupPushToTalkSession() {
-  if (pushToTalkStream) {
-    pushToTalkStream.getTracks().forEach(track => track.stop());
-    pushToTalkStream = null;
-  }
-
-  if (audioContext) {
-    audioContext.close().catch(error => {
-      logger.warn('Error while closing AudioContext:', error);
-    });
-  }
-
-  if (deepgramConnection) {
-    deepgramConnection.finish();
-  }
-
-  logger.debug('Push to Talk session cleaned up');
-}
-
-function setupPushToTalkButton() {
-  const pushToTalkButton = document.getElementById('push-to-talk-button');
-  
-  pushToTalkButton.addEventListener('mousedown', startPushToTalk);
-  pushToTalkButton.addEventListener('mouseup', stopPushToTalk);
-  pushToTalkButton.addEventListener('mouseleave', stopPushToTalk);
-  
-  // Touch events for mobile devices
-  pushToTalkButton.addEventListener('touchstart', (e) => {
-    e.preventDefault();
-    startPushToTalk();
-  });
-  pushToTalkButton.addEventListener('touchend', (e) => {
-    e.preventDefault();
-    stopPushToTalk();
-  });
-}
-
-function startPushToTalk() {
-  if (!isPushToTalkEnabled || isPushToTalkActive) return;
-  
-  isPushToTalkActive = true;
-  currentUtterance = '';
-  interimMessageAdded = false;
-  
-  audioWorkletNode.port.onmessage = (event) => {
-    const audioData = event.data;
-    if (audioData instanceof ArrayBuffer && deepgramConnection && deepgramConnection.getReadyState() === WebSocket.OPEN) {
-      deepgramConnection.send(audioData);
-    }
-  };
-  
-  logger.debug('Push to Talk activated, sending audio to Deepgram');
-}
-
-function stopPushToTalk() {
-  if (!isPushToTalkEnabled || !isPushToTalkActive) return;
-  
-  isPushToTalkActive = false;
-  audioWorkletNode.port.onmessage = null;
-  
-  if (currentUtterance.trim()) {
-    updateTranscript(currentUtterance.trim(), true);
-    chatHistory.push({
-      role: 'user',
-      content: currentUtterance.trim(),
-    });
-    sendChatToGroq();
-  }
-  
-  currentUtterance = '';
-  interimMessageAdded = false;
-  
-  logger.debug('Push to Talk deactivated, processing final transcript');
-}
-
 async function reinitializeConnection() {
   if (connectionState === ConnectionState.RECONNECTING) {
     logger.warn('Connection reinitialization already in progress. Skipping reinitialize.');
@@ -2648,7 +2507,6 @@ export {
   updateContext,
   handleTextInput,
   toggleAutoSpeak,
-  togglePushToTalk,
   initializePersistentStream,
   destroyPersistentStream,
 };
