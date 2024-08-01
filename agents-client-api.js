@@ -1032,6 +1032,13 @@ async function initialize() {
   const autoSpeakToggle = document.getElementById('auto-speak-toggle');
   const editAvatarButton = document.getElementById('edit-avatar-button');
 
+  const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
+  const pushToTalkButton = document.getElementById('push-to-talk-button');
+  pushToTalkToggle.addEventListener('click', togglePushToTalk);
+  pushToTalkButton.addEventListener('mousedown', startPushToTalk);
+  pushToTalkButton.addEventListener('mouseup', stopPushToTalk);
+  pushToTalkButton.addEventListener('mouseleave', stopPushToTalk);
+
   sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
   textInput.addEventListener('keypress', (event) => {
     if (event.key === 'Enter') handleTextInput(textInput.value);
@@ -2626,6 +2633,165 @@ avatarImageInput.onchange = (event) => {
     reader.readAsDataURL(file);
   }
 };
+      smart_format: true,
+      interim_results: true,
+      punctuate: true,
+      encoding: "linear16",
+      sample_rate: audioContext.sampleRate
+    };
+
+    if (!isPushToTalkEnabled) {
+      deepgramOptions.utterance_end_ms = 2500;
+      deepgramOptions.vad_events = true;
+    }
+
+    logger.debug('Creating Deepgram connection with options:', deepgramOptions);
+
+    deepgramConnection = await deepgramClient.listen.live(deepgramOptions);
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
+      logger.debug('Deepgram WebSocket Connection opened');
+      if (!isPushToTalkEnabled) {
+        startSendingAudioData();
+      }
+    });
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.Close, () => {
+      logger.debug('Deepgram WebSocket connection closed');
+    });
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
+      logger.debug('Received transcription:', JSON.stringify(data));
+      handleTranscription(data);
+    });
+
+    if (!isPushToTalkEnabled) {
+      deepgramConnection.addListener(LiveTranscriptionEvents.UtteranceEnd, (data) => {
+        logger.debug('Utterance end event received:', data);
+        handleUtteranceEnd(data);
+      });
+    }
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
+      logger.error('Deepgram error:', err);
+      handleDeepgramError(err);
+    });
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.Warning, (warning) => {
+      logger.warn('Deepgram warning:', warning);
+    });
+
+    isRecording = true;
+    if (autoSpeakMode) {
+      autoSpeakInProgress = true;
+    }
+    const startButton = document.getElementById('start-button');
+    startButton.textContent = 'Stop';
+
+    logger.debug('Recording and transcription started successfully');
+  } catch (error) {
+    logger.error('Error starting recording:', error);
+    isRecording = false;
+    const startButton = document.getElementById('start-button');
+    startButton.textContent = 'Speak';
+    showErrorMessage('Failed to start recording. Please try again.');
+    throw error;
+  }
+}
+
+function togglePushToTalk() {
+  isPushToTalkEnabled = !isPushToTalkEnabled;
+  const toggleButton = document.getElementById('push-to-talk-toggle');
+  const pushToTalkButton = document.getElementById('push-to-talk-button');
+  toggleButton.textContent = `Push to Talk: ${isPushToTalkEnabled ? 'On' : 'Off'}`;
+  pushToTalkButton.disabled = !isPushToTalkEnabled;
+
+  if (isPushToTalkEnabled) {
+    startRecording();
+  } else {
+    stopRecording();
+  }
+}
+
+async function startPushToTalk() {
+  if (!isPushToTalkEnabled || isPushToTalkActive) return;
+
+  isPushToTalkActive = true;
+  currentUtterance = '';
+  interimMessageAdded = false;
+
+  logger.debug('Starting Push to Talk...');
+
+  try {
+    if (!deepgramConnection || deepgramConnection.getReadyState() !== WebSocket.OPEN) {
+      await startRecording();
+    }
+
+    startSendingAudioData();
+    logger.debug('Push to Talk started successfully');
+  } catch (error) {
+    logger.error('Error starting Push to Talk:', error);
+    isPushToTalkActive = false;
+    showErrorMessage('Failed to start Push to Talk. Please try again.');
+  }
+}
+
+async function stopPushToTalk() {
+  if (!isPushToTalkEnabled || !isPushToTalkActive) return;
+
+  isPushToTalkActive = false;
+  logger.debug('Stopping Push to Talk...');
+
+  try {
+    if (deepgramConnection) {
+      deepgramConnection.removeAllListeners(LiveTranscriptionEvents.Transcript);
+    }
+
+    if (currentUtterance.trim()) {
+      updateTranscript(currentUtterance.trim(), true);
+      chatHistory.push({
+        role: 'user',
+        content: currentUtterance.trim(),
+      });
+      await sendChatToGroq();
+    }
+
+    currentUtterance = '';
+    interimMessageAdded = false;
+
+    logger.debug('Push to Talk stopped successfully');
+  } catch (error) {
+    logger.error('Error stopping Push to Talk:', error);
+    showErrorMessage('Failed to stop Push to Talk. Please try again.');
+  }
+}
+
+function handleTranscription(data) {
+  if (!isRecording) return;
+
+  const transcript = data.channel.alternatives[0].transcript;
+  if (data.is_final) {
+    logger.debug('Final transcript:', transcript);
+    if (transcript.trim()) {
+      currentUtterance += transcript + ' ';
+      updateTranscript(currentUtterance.trim(), true);
+      if (!isPushToTalkEnabled) {
+        chatHistory.push({
+          role: 'user',
+          content: currentUtterance.trim(),
+        });
+        sendChatToGroq();
+      }
+    }
+    if (!isPushToTalkEnabled) {
+      currentUtterance = '';
+      interimMessageAdded = false;
+    }
+  } else {
+    logger.debug('Interim transcript:', transcript);
+    updateTranscript(currentUtterance + transcript, false);
+  }
+}
 
 // Export functions and variables that need to be accessed from other modules
 export {
@@ -2638,5 +2804,8 @@ export {
   handleTextInput,
   toggleAutoSpeak,
   initializePersistentStream,
+  togglePushToTalk,
+  startPushToTalk,
+  stopPushToTalk,
   destroyPersistentStream,
 };
