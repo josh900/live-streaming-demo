@@ -2465,6 +2465,7 @@ destroyButton.onclick = async () => {
   }
 };
 
+
 const startButton = document.getElementById('start-button');
 
 startButton.onclick = async () => {
