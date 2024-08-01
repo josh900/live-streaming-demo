@@ -41,8 +41,6 @@ let isDebugMode = false;
 let isTransitioning = false;
 let lastVideoStatus = null;
 let isCurrentlyStreaming = false;
-let isPushToTalkEnabled = false;
-let isPushToTalkActive = false;
 let reconnectAttempts = 10;
 let persistentStreamId = null;
 let persistentSessionId = null;
@@ -2354,115 +2352,6 @@ function toggleAutoSpeak() {
   }
 }
 
-function togglePushToTalk() {
-  isPushToTalkEnabled = !isPushToTalkEnabled;
-  const toggleButton = document.getElementById('push-to-talk-toggle');
-  const pushToTalkButton = document.getElementById('push-to-talk-button');
-  toggleButton.textContent = `Push to Talk: ${isPushToTalkEnabled ? 'On' : 'Off'}`;
-  pushToTalkButton.disabled = !isPushToTalkEnabled;
-
-  if (isPushToTalkEnabled) {
-    initializePushToTalk();
-  } else {
-    cleanupPushToTalk();
-  }
-}
-
-async function initializePushToTalk() {
-  try {
-    await startRecording(true);
-  } catch (error) {
-    logger.error('Failed to initialize Push to Talk:', error);
-    showErrorMessage('Failed to initialize Push to Talk. Please try again.');
-  }
-}
-
-function cleanupPushToTalk() {
-  stopRecording();
-}
-
-function handlePushToTalkStart() {
-  if (!isPushToTalkEnabled || !isRecording) return;
-
-  isPushToTalkActive = true;
-  startSendingAudioData();
-}
-
-async function handlePushToTalkEnd() {
-  if (!isPushToTalkEnabled || !isRecording) return;
-
-  isPushToTalkActive = false;
-  stopSendingAudioData();
-
-  if (currentUtterance.trim()) {
-    updateTranscript(currentUtterance.trim(), true);
-    chatHistory.push({
-      role: 'user',
-      content: currentUtterance.trim(),
-    });
-    await sendChatToGroq();
-    currentUtterance = '';
-    interimMessageAdded = false;
-  }
-}
-
-function startSendingAudioData() {
-  logger.debug('Starting to send audio data...');
-
-  let packetCount = 0;
-  let totalBytesSent = 0;
-
-  audioWorkletNode.port.onmessage = (event) => {
-    const audioData = event.data;
-
-    if (!(audioData instanceof ArrayBuffer)) {
-      logger.warn('Received non-ArrayBuffer data from AudioWorklet:', typeof audioData);
-      return;
-    }
-
-    if (deepgramConnection && deepgramConnection.getReadyState() === WebSocket.OPEN) {
-      try {
-        deepgramConnection.send(audioData);
-        packetCount++;
-        totalBytesSent += audioData.byteLength;
-
-        if (packetCount % 100 === 0) {
-          logger.debug(`Sent ${packetCount} audio packets to Deepgram. Total bytes: ${totalBytesSent}`);
-        }
-      } catch (error) {
-        logger.error('Error sending audio data to Deepgram:', error);
-      }
-    } else {
-      logger.warn('Deepgram connection not open, cannot send audio data. ReadyState:', deepgramConnection ? deepgramConnection.getReadyState() : 'undefined');
-    }
-  };
-
-  logger.debug('Audio data sending setup complete');
-}
-
-function stopSendingAudioData() {
-  if (deepgramConnection) {
-    deepgramConnection.removeAllListeners(LiveTranscriptionEvents.Transcript);
-  }
-}
-
-async function startRecording(forPushToTalk = false) {
-  if (isRecording) {
-    logger.warn('Recording is already in progress. Stopping current recording.');
-    await stopRecording();
-    return;
-  }
-
-  logger.debug('Starting recording process...');
-
-  currentUtterance = '';
-  interimMessageAdded = false;
-
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    logger.info('Microphone stream obtained');
-
-    audioContext = new AudioContext();
 async function reinitializeConnection() {
   if (connectionState === ConnectionState.RECONNECTING) {
     logger.warn('Connection reinitialization already in progress. Skipping reinitialize.');
@@ -2581,10 +2470,6 @@ const startButton = document.getElementById('start-button');
 
 startButton.onclick = async () => {
   logger.info('Start button clicked. Current state:', isRecording ? 'Recording' : 'Not recording');
-  if (isPushToTalkEnabled) {
-    showErrorMessage('Push to Talk is enabled. Use the Push to Talk button to speak.');
-    return;
-  }
   if (!isRecording) {
     try {
       await startRecording();
@@ -2596,21 +2481,6 @@ startButton.onclick = async () => {
     await stopRecording();
   }
 };
-
-const pushToTalkToggle = document.createElement('button');
-pushToTalkToggle.id = 'push-to-talk-toggle';
-pushToTalkToggle.textContent = 'Push to Talk: Off';
-pushToTalkToggle.onclick = togglePushToTalk;
-document.querySelector('.header').appendChild(pushToTalkToggle);
-
-const pushToTalkButton = document.createElement('button');
-pushToTalkButton.id = 'push-to-talk-button';
-pushToTalkButton.textContent = 'Push to Talk';
-pushToTalkButton.disabled = true;
-pushToTalkButton.onmousedown = handlePushToTalkStart;
-pushToTalkButton.onmouseup = handlePushToTalkEnd;
-pushToTalkButton.onmouseleave = handlePushToTalkEnd;
-document.querySelector('.header').appendChild(pushToTalkButton);
 
 const saveAvatarButton = document.getElementById('save-avatar-button');
 saveAvatarButton.onclick = saveAvatar;
