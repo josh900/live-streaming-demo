@@ -2078,7 +2078,7 @@ function handleTranscription(data) {
   }
 }
 
-async function startRecording() {
+async function initializeRecordingSession() {
   if (isRecording) {
     logger.warn('Recording is already in progress. Stopping current recording.');
     await stopRecording();
@@ -2112,9 +2112,10 @@ async function startRecording() {
     const deepgramOptions = {
       model: "nova-2",
       language: "en-US",
-      smart_format: true,
-      interim_results: true,
-      utterance_end_ms: 2500,
+      smart_format: false,
+      interim_results: false,
+      utterance_end_ms: null,
+      endpointing: null,
       punctuate: true,
       // endpointing: 300,
       vad_events: true,
@@ -2128,7 +2129,6 @@ async function startRecording() {
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
       logger.debug('Deepgram WebSocket Connection opened');
-      startSendingAudioData();
     });
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Close, () => {
@@ -2155,13 +2155,13 @@ async function startRecording() {
     });
 
     isRecording = true;
-    if (autoSpeakMode) {
-      autoSpeakInProgress = true;
-    }
-    const startButton = document.getElementById('start-button');
-    startButton.textContent = 'Stop';
-
     logger.debug('Recording and transcription started successfully');
+
+    if (!isPushToTalkEnabled) {
+      startSendingAudioData();
+      const startButton = document.getElementById('start-button');
+      startButton.textContent = 'Stop';
+    }
   } catch (error) {
     logger.error('Error starting recording:', error);
     isRecording = false;
@@ -2169,6 +2169,21 @@ async function startRecording() {
     startButton.textContent = 'Speak';
     showErrorMessage('Failed to start recording. Please try again.');
     throw error;
+  }
+}
+
+async function startSendingAudioToDeepgram() {
+  if (isRecording && deepgramConnection) {
+    startSendingAudioData();
+    logger.debug('Started sending audio to Deepgram');
+  }
+}
+
+async function stopSendingAudioToDeepgram() {
+  if (isRecording && deepgramConnection) {
+    // Stop sending audio data to Deepgram
+    audioWorkletNode.port.onmessage = null;
+    logger.debug('Stopped sending audio to Deepgram');
   }
 }
 
