@@ -2251,6 +2251,14 @@ async function stopRecording() {
 async function sendChatToGroq() {
   if (chatHistory.length === 0 || chatHistory[chatHistory.length - 1].content.trim() === '') {
     logger.debug('No new content to send to Groq. Skipping request.');
+    
+    // If Push to Talk was active but no content was recorded, reset the UI
+    if (isPushToTalkEnabled) {
+      const pushToTalkButton = document.getElementById('push-to-talk-button');
+      pushToTalkButton.textContent = 'Push to Talk';
+      pushToTalkButton.disabled = false;
+    }
+    
     return;
   }
 
