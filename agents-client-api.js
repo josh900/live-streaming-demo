@@ -1,5 +1,3 @@
-
-
 'use strict';
 import DID_API from './api.js';
 import logger from './logger.js';
@@ -531,11 +529,11 @@ function smoothTransition(toStreaming, duration = 250) {
     const progress = Math.min(elapsed / duration, 1);
 
     transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
-    
+
     // Draw the fading out video
     transitionCtx.globalAlpha = 1 - progress;
     transitionCtx.drawImage(toStreaming ? idleVideoElement : streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
-    
+
     // Draw the fading in video
     transitionCtx.globalAlpha = progress;
     transitionCtx.drawImage(toStreaming ? streamVideoElement : idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
@@ -560,7 +558,7 @@ function smoothTransition(toStreaming, duration = 250) {
 
   // Show the transition canvas
   transitionCanvas.style.display = 'block';
-  
+
   // Start the animation
   requestAnimationFrame(animate);
 }
@@ -794,9 +792,9 @@ function startKeepAlive() {
         logger.warn('Error sending keepalive message:', error);
       }
     } else {
-      logger.debug('Conditions not met for sending keepalive. isPersistentStreamActive:', isPersistentStreamActive, 
-                   'peerConnection state:', peerConnection ? peerConnection.connectionState : 'null', 
-                   'pcDataChannel:', pcDataChannel ? 'exists' : 'null');
+      logger.debug('Conditions not met for sending keepalive. isPersistentStreamActive:', isPersistentStreamActive,
+        'peerConnection state:', peerConnection ? peerConnection.connectionState : 'null',
+        'pcDataChannel:', pcDataChannel ? 'exists' : 'null');
     }
   }, 30000); // Send keepalive every 30 seconds
 }
@@ -1370,7 +1368,7 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
     peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
     peerConnection.addEventListener('track', onTrack, true);
-    
+
     pcDataChannel.onopen = () => {
       logger.debug('Data channel opened');
     };
@@ -1949,7 +1947,7 @@ async function startStreaming(assistantReply) {
         }),
       });
 
-      
+
       if (!playResponse.ok) {
         throw new Error(`HTTP error! status: ${playResponse.status}`);
       }
@@ -2545,5 +2543,3 @@ export {
   initializePersistentStream,
   destroyPersistentStream,
 };
-
-
