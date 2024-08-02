@@ -111,6 +111,20 @@ button#destroy-button {
   margin-top: 10px;
 }
 
+#push-to-talk-toggle,
+#push-to-talk-button {
+  margin-left: 10px;
+}
+
+#push-to-talk-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#push-to-talk-controls {
+  margin-top: 10px;
+}
+
 #start-button {
   padding: 12px 24px;
   font-size: 18px;
