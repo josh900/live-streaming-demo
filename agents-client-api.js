@@ -39,6 +39,7 @@ let transitionCanvas;
 let transitionCtx;
 let isDebugMode = false;
 let isTransitioning = false;
+let pushToTalkEnabled = false;
 let lastVideoStatus = null;
 let isCurrentlyStreaming = false;
 let reconnectAttempts = 10;
@@ -2352,6 +2353,108 @@ function toggleAutoSpeak() {
   }
 }
 
+function togglePushToTalk() {
+  pushToTalkEnabled = !pushToTalkEnabled;
+  const toggleButton = document.getElementById('push-to-talk-toggle');
+  const pushToTalkButton = document.getElementById('push-to-talk-button');
+  toggleButton.textContent = `Push to Talk: ${pushToTalkEnabled ? 'On' : 'Off'}`;
+  pushToTalkButton.disabled = !pushToTalkEnabled;
+
+  if (pushToTalkEnabled) {
+    initializePushToTalk();
+  } else {
+    cleanupPushToTalk();
+  }
+}
+
+async function initializePushToTalk() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioContext = new AudioContext();
+    await audioContext.audioWorklet.addModule('audio-processor.js');
+    const source = audioContext.createMediaStreamSource(stream);
+    audioWorkletNode = new AudioWorkletNode(audioContext, 'audio-processor');
+    source.connect(audioWorkletNode);
+
+    const deepgramOptions = {
+      model: "nova-2",
+      language: "en-US",
+      smart_format: true,
+      interim_results: false,
+      punctuate: true,
+      encoding: "linear16",
+      sample_rate: audioContext.sampleRate
+    };
+
+    deepgramConnection = await deepgramClient.listen.live(deepgramOptions);
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
+      logger.debug('Deepgram WebSocket Connection opened for Push to Talk');
+    });
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.Close, () => {
+      logger.debug('Deepgram WebSocket connection closed for Push to Talk');
+    });
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
+      logger.debug('Received transcription:', JSON.stringify(data));
+      handlePushToTalkTranscription(data);
+    });
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
+      logger.error('Deepgram error:', err);
+    });
+
+    const pushToTalkButton = document.getElementById('push-to-talk-button');
+    pushToTalkButton.addEventListener('mousedown', startPushToTalk);
+    pushToTalkButton.addEventListener('mouseup', stopPushToTalk);
+    pushToTalkButton.addEventListener('mouseleave', stopPushToTalk);
+  } catch (error) {
+    logger.error('Error initializing Push to Talk:', error);
+  }
+}
+
+function startPushToTalk() {
+  if (audioWorkletNode && deepgramConnection) {
+    audioWorkletNode.port.onmessage = (event) => {
+      const audioData = event.data;
+      if (audioData instanceof ArrayBuffer) {
+        deepgramConnection.send(audioData);
+      }
+    };
+  }
+}
+
+function stopPushToTalk() {
+  if (audioWorkletNode) {
+    audioWorkletNode.port.onmessage = null;
+  }
+  if (deepgramConnection) {
+    deepgramConnection.finish();
+  }
+}
+
+function handlePushToTalkTranscription(data) {
+  const transcript = data.channel.alternatives[0].transcript;
+  if (transcript.trim()) {
+    updateTranscript(transcript.trim(), true);
+    chatHistory.push({
+      role: 'user',
+      content: transcript.trim(),
+    });
+    sendChatToGroq();
+  }
+}
+
+function cleanupPushToTalk() {
+  if (audioContext) {
+    audioContext.close();
+  }
+  if (deepgramConnection) {
+    deepgramConnection.finish();
+  }
+}
+
 async function reinitializeConnection() {
   if (connectionState === ConnectionState.RECONNECTING) {
     logger.warn('Connection reinitialization already in progress. Skipping reinitialize.');
@@ -2484,6 +2587,9 @@ startButton.onclick = async () => {
 
 const saveAvatarButton = document.getElementById('save-avatar-button');
 saveAvatarButton.onclick = saveAvatar;
+
+const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
+pushToTalkToggle.addEventListener('click', togglePushToTalk);
 
 const avatarImageInput = document.getElementById('avatar-image');
 avatarImageInput.onchange = (event) => {
