@@ -89,22 +89,6 @@ button#connect-button {
   background-color: #4CAF50;
 }
 
-#push-to-talk-toggle,
-#push-to-talk-button {
-  margin-left: 10px;
-}
-
-#push-to-talk-button {
-  background-color: #4CAF50;
-  padding: 12px 24px;
-  font-size: 18px;
-}
-
-#push-to-talk-button:disabled {
-  background-color: #cccccc;
-  cursor: not-allowed;
-}
-
 button#destroy-button {
   background-color: #f44336;
 }
