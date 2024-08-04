@@ -39,8 +39,6 @@ let transitionCanvas;
 let transitionCtx;
 let isDebugMode = false;
 let isTransitioning = false;
-let pushToTalkMode = false;
-let pushToTalkActive = false;
 let lastVideoStatus = null;
 let isCurrentlyStreaming = false;
 let reconnectAttempts = 10;
@@ -604,26 +602,6 @@ function initializeWebSocket() {
     logger.info('WebSocket connection closed');
     setTimeout(initializeWebSocket, 10000);
   };
-}
-
-function togglePushToTalk() {
-  pushToTalkMode = !pushToTalkMode;
-  const toggleButton = document.getElementById('push-to-talk-toggle');
-  const pushToTalkButton = document.getElementById('push-to-talk-button');
-  toggleButton.textContent = `Push to Talk: ${pushToTalkMode ? 'On' : 'Off'}`;
-  pushToTalkButton.disabled = !pushToTalkMode;
-
-  if (pushToTalkMode) {
-    startRecording(true); // Prepare for push-to-talk
-  } else {
-    stopRecording();
-  }
-}
-
-function startPushToTalk() {
-  if (!pushToTalkMode || pushToTalkActive) return;
-  pushToTalkActive = true;
-  startSendingAudioData();
 }
 
 function updateTranscript(text, isFinal) {
@@ -2100,7 +2078,7 @@ function handleTranscription(data) {
   }
 }
 
-async function startRecording(preparePushToTalk = false) {
+async function startRecording() {
   if (isRecording) {
     logger.warn('Recording is already in progress. Stopping current recording.');
     await stopRecording();
@@ -2136,7 +2114,7 @@ async function startRecording(preparePushToTalk = false) {
       language: "en-US",
       smart_format: true,
       interim_results: true,
-      utterance_end_ms: preparePushToTalk ? null : 2500,
+      utterance_end_ms: 2500,
       punctuate: true,
       // endpointing: 300,
       vad_events: true,
@@ -2164,9 +2142,7 @@ async function startRecording(preparePushToTalk = false) {
 
     deepgramConnection.addListener(LiveTranscriptionEvents.UtteranceEnd, (data) => {
       logger.debug('Utterance end event received:', data);
-      if (!pushToTalkMode) {
-        handleUtteranceEnd(data);
-      }
+      handleUtteranceEnd(data);
     });
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
@@ -2180,9 +2156,7 @@ async function startRecording(preparePushToTalk = false) {
 
     isRecording = true;
     if (autoSpeakMode) {
-      autoSpeakInProgress = !preparePushToTalk;
-    } else if (preparePushToTalk) {
-      startSendingAudioData();
+      autoSpeakInProgress = true;
     }
     const startButton = document.getElementById('start-button');
     startButton.textContent = 'Stop';
@@ -2196,17 +2170,6 @@ async function startRecording(preparePushToTalk = false) {
     showErrorMessage('Failed to start recording. Please try again.');
     throw error;
   }
-}
-
-function stopPushToTalk() {
-  if (!pushToTalkMode || !pushToTalkActive) return;
-  pushToTalkActive = false;
-  
-  // Stop sending audio samples to Deepgram
-  if (audioWorkletNode) {
-    audioWorkletNode.port.onmessage = null;
-  }
-  sendChatToGroq();
 }
 
 function handleDeepgramError(err) {
@@ -2259,28 +2222,11 @@ async function stopRecording() {
     if (deepgramConnection) {
       deepgramConnection.finish();
       logger.debug('Deepgram connection finished');
-<<<<<<< found
     }
 
     isRecording = false;
     autoSpeakInProgress = false;
     const startButton = document.getElementById('start-button');
-||||||| expected
-  }
-
-  isRecording = false;
-  autoSpeakInProgress = false;
-  const startButton = document.getElementById('start-button');
-=======
-  }
-
-  if (audioWorkletNode) {
-    audioWorkletNode.port.onmessage = null;
-  }
-  isRecording = false;
-  autoSpeakInProgress = false;
-  const startButton = document.getElementById('start-button');
->>>>>>> replacement
     startButton.textContent = 'Speak';
 
     logger.debug('Recording and transcription stopped');
@@ -2369,11 +2315,6 @@ async function sendChatToGroq() {
     const endTime = Date.now();
     const processingTime = endTime - startTime;
     logger.debug(`Groq processing completed in ${processingTime}ms`);
-
-    // Re-enable push-to-talk mode if it was enabled before the avatar response
-    if (pushToTalkMode) {
-      startRecording(true);
-    }
 
     chatHistory.push({
       role: 'assistant',
@@ -2541,13 +2482,6 @@ startButton.onclick = async () => {
   }
 };
 
-const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
-pushToTalkToggle.addEventListener('click', togglePushToTalk);
-
-const pushToTalkButton = document.getElementById('push-to-talk-button');
-pushToTalkButton.addEventListener('mousedown', startPushToTalk);
-pushToTalkButton.addEventListener('mouseup', stopPushToTalk);
-
 const saveAvatarButton = document.getElementById('save-avatar-button');
 saveAvatarButton.onclick = saveAvatar;
 
@@ -2575,5 +2509,4 @@ export {
   toggleAutoSpeak,
   initializePersistentStream,
   destroyPersistentStream,
-  togglePushToTalk,
 };
