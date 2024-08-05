@@ -43,9 +43,6 @@ let reconnectAttempts = 10;
 let persistentStreamId = null;
 let persistentSessionId = null;
 let isPersistentStreamActive = false;
-let pushToTalkMode = false;
-let pushToTalkInProgress = false;
-let pushToTalkAudioContext = null;
 const API_RATE_LIMIT = 40; // Maximum number of calls per minute
 const API_CALL_INTERVAL = 30000 / API_RATE_LIMIT; // Minimum time between API calls in milliseconds
 let lastApiCallTime = 0;
@@ -1030,7 +1027,6 @@ async function initialize() {
   const replaceContextButton = document.getElementById('replace-context-button');
   const autoSpeakToggle = document.getElementById('auto-speak-toggle');
   const editAvatarButton = document.getElementById('edit-avatar-button');
-  const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
 
   sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
   textInput.addEventListener('keypress', (event) => {
@@ -1039,7 +1035,6 @@ async function initialize() {
   replaceContextButton.addEventListener('click', () => updateContext('replace'));
   autoSpeakToggle.addEventListener('click', toggleAutoSpeak);
   editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatar));
-  pushToTalkToggle.addEventListener('click', togglePushToTalk);
 
   initializeWebSocket();
   playIdleVideo();
@@ -2236,153 +2231,6 @@ async function stopRecording() {
   }
 }
 
-function toggleAutoSpeak() {
-  autoSpeakMode = !autoSpeakMode;
-  const toggleButton = document.getElementById('auto-speak-toggle');
-  const startButton = document.getElementById('start-button');
-  toggleButton.textContent = `Auto-Speak: ${autoSpeakMode ? 'On' : 'Off'}`;
-  if (autoSpeakMode) {
-    startButton.textContent = 'Stop';
-    if (!isRecording) {
-      startRecording();
-    }
-  } else {
-    startButton.textContent = isRecording ? 'Stop' : 'Speak';
-    if (isRecording) {
-      stopRecording();
-    }
-  }
-}
-
-function togglePushToTalk() {
-  pushToTalkMode = !pushToTalkMode;
-  const toggleButton = document.getElementById('push-to-talk-toggle');
-  const pushToTalkControls = document.getElementById('push-to-talk-controls');
-  toggleButton.textContent = `Push to Talk: ${pushToTalkMode ? 'On' : 'Off'}`;
-  pushToTalkControls.style.display = pushToTalkMode ? 'block' : 'none';
-
-  if (pushToTalkMode) {
-    initializePushToTalk();
-  } else {
-    cleanupPushToTalk();
-  }
-}
-
-async function initializePushToTalk() {
-  try {
-    pushToTalkAudioContext = new (window.AudioContext || window.webkitAudioContext)();
-    await pushToTalkAudioContext.audioWorklet.addModule('audio-processor.js');
-    logger.debug('Push to Talk audio context initialized');
-
-    const pushToTalkButton = document.getElementById('push-to-talk-button');
-    pushToTalkButton.addEventListener('mousedown', startPushToTalk);
-    pushToTalkButton.addEventListener('mouseup', stopPushToTalk);
-    pushToTalkButton.addEventListener('touchstart', startPushToTalk);
-    pushToTalkButton.addEventListener('touchend', stopPushToTalk);
-  } catch (error) {
-    logger.error('Error initializing Push to Talk:', error);
-  }
-}
-
-function cleanupPushToTalk() {
-  if (pushToTalkAudioContext) {
-    pushToTalkAudioContext.close();
-    pushToTalkAudioContext = null;
-  }
-
-  const pushToTalkButton = document.getElementById('push-to-talk-button');
-  pushToTalkButton.removeEventListener('mousedown', startPushToTalk);
-  pushToTalkButton.removeEventListener('mouseup', stopPushToTalk);
-  pushToTalkButton.removeEventListener('touchstart', startPushToTalk);
-  pushToTalkButton.removeEventListener('touchend', stopPushToTalk);
-}
-
-async function startPushToTalk(event) {
-  event.preventDefault();
-  if (pushToTalkInProgress) return;
-
-  pushToTalkInProgress = true;
-  logger.debug('Starting Push to Talk');
-
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const source = pushToTalkAudioContext.createMediaStreamSource(stream);
-    const audioWorkletNode = new AudioWorkletNode(pushToTalkAudioContext, 'audio-processor');
-
-    source.connect(audioWorkletNode);
-    audioWorkletNode.connect(pushToTalkAudioContext.destination);
-
-    const deepgramOptions = {
-      model: "nova-2",
-      language: "en-US",
-      smart_format: true,
-      interim_results: true,
-      punctuate: true,
-      encoding: "linear16",
-      sample_rate: pushToTalkAudioContext.sampleRate
-    };
-
-    deepgramConnection = await deepgramClient.listen.live(deepgramOptions);
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
-      logger.debug('Deepgram WebSocket Connection opened for Push to Talk');
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Close, () => {
-      logger.debug('Deepgram WebSocket connection closed for Push to Talk');
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
-      logger.debug('Received transcription:', JSON.stringify(data));
-      handleTranscription(data);
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
-      logger.error('Deepgram error during Push to Talk:', err);
-    });
-
-    audioWorkletNode.port.onmessage = (event) => {
-      if (deepgramConnection && deepgramConnection.getReadyState() === WebSocket.OPEN) {
-        deepgramConnection.send(event.data);
-      }
-    };
-
-  } catch (error) {
-    logger.error('Error starting Push to Talk:', error);
-    pushToTalkInProgress = false;
-  }
-}
-
-async function stopPushToTalk() {
-  if (!pushToTalkInProgress) return;
-
-  logger.debug('Stopping Push to Talk');
-
-  try {
-    let transcriptToProcess = currentUtterance.trim();
-    if (deepgramConnection) {
-      deepgramConnection.finish();
-    }
-
-    pushToTalkInProgress = false;
-
-    // Process the final transcription
-    if (transcriptToProcess) {
-      updateTranscript(transcriptToProcess, true);
-      chatHistory.push({
-        role: 'user',
-        content: transcriptToProcess,
-      });
-      logger.debug('Push to Talk transcript:', transcriptToProcess);
-      await sendChatToGroq();
-      currentUtterance = ''; // Reset currentUtterance after processing
-    }
-
-  } catch (error) {
-    logger.error('Error stopping Push to Talk:', error);
-  }
-}
-
 async function sendChatToGroq() {
   if (chatHistory.length === 0 || chatHistory[chatHistory.length - 1].content.trim() === '') {
     logger.debug('No new content to send to Groq. Skipping request.');
@@ -2476,18 +2324,29 @@ async function sendChatToGroq() {
     // Start streaming the entire response
     await startStreaming(assistantReply);
 
-    // Re-enable Push to Talk if it was active before
-    if (pushToTalkMode) {
-      const pushToTalkButton = document.getElementById('push-to-talk-button');
-      pushToTalkButton.disabled = false;
-      logger.debug('Re-enabled Push to Talk button');
-    }
-
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
     const msgHistory = document.getElementById('msgHistory');
     msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
     msgHistory.scrollTop = msgHistory.scrollHeight;
+  }
+}
+
+function toggleAutoSpeak() {
+  autoSpeakMode = !autoSpeakMode;
+  const toggleButton = document.getElementById('auto-speak-toggle');
+  const startButton = document.getElementById('start-button');
+  toggleButton.textContent = `Auto-Speak: ${autoSpeakMode ? 'On' : 'Off'}`;
+  if (autoSpeakMode) {
+    startButton.textContent = 'Stop';
+    if (!isRecording) {
+      startRecording();
+    }
+  } else {
+    startButton.textContent = isRecording ? 'Stop' : 'Speak';
+    if (isRecording) {
+      stopRecording();
+    }
   }
 }
 
