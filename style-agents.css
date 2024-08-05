@@ -328,22 +328,6 @@ body {
   background-color: #e0e0e0;
 }
 
-#push-to-talk-toggle {
-  padding: 10px 20px;
-  font-size: 16px;
-  margin-left: 10px;
-}
-
-#push-to-talk-controls {
-  margin-top: 10px;
-}
-
-#push-to-talk-button {
-  padding: 10px 20px;
-  font-size: 16px;
-  width: 100%;
-}
-
 
 
 
@@ -356,7 +340,7 @@ body {
   margin: 0 5%;
   padding: 20px;
 }
-
+ 
 
 #idle-video-element,
 #stream-video-element
@@ -368,7 +352,7 @@ body {
   height: 100%;
   object-fit: cover;
   transition: opacity 0.1s ease-in-out;
-  background: transparent;
+  background: transparent; 
 /*
   max-width: 550px;
   max-height: 550px;
@@ -397,7 +381,7 @@ body {
   margin: 0 auto;
   overflow: hidden;
   border-radius: 13%;
-  background: transparent;
+  background: transparent; 
 
 }
 
@@ -410,7 +394,7 @@ body {
 
 #preload-video-element {
   visibility: hidden;
-  background: transparent;
+  background: transparent; 
 }
 
 
