@@ -427,6 +427,41 @@ body {
   }
 }
 
+#push-to-talk-toggle {
+  padding: 10px 20px;
+  font-size: 16px;
+  margin-left: 10px;
+  background-color: #7459fe;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+#push-to-talk-toggle:hover {
+  background-color: #5a3dd3;
+}
+
+#push-to-talk-button {
+  padding: 20px 30px;
+  font-size: 18px;
+  margin-top: 10px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+#push-to-talk-button:hover {
+  background-color: #45a049;
+}
+
+#push-to-talk-button:active {
+  background-color: #3e8e41;
+}
+
 @media (max-width: 480px) {
   #video-wrapper {
   }
