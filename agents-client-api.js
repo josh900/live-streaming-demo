@@ -2460,7 +2460,6 @@ async function stopPushToTalk() {
   logger.debug('Stopping Push to Talk');
 
   try {
-    let transcriptToProcess = currentUtterance.trim();
     if (deepgramConnection) {
       deepgramConnection.finish();
     }
@@ -2468,47 +2467,18 @@ async function stopPushToTalk() {
     pushToTalkInProgress = false;
 
     // Process the final transcription
-    if (transcriptToProcess) {
-      updateTranscript(transcriptToProcess, true);
+    if (currentUtterance.trim()) {
+      updateTranscript(currentUtterance.trim(), true);
       chatHistory.push({
         role: 'user',
-        content: transcriptToProcess,
+        content: currentUtterance.trim(),
       });
-      logger.debug('Push to Talk transcript:', transcriptToProcess);
       await sendChatToGroq();
-      transcriptToProcess = '';
+      currentUtterance = '';
     }
 
   } catch (error) {
     logger.error('Error stopping Push to Talk:', error);
-  }
-}
-
-async function sendChatToGroq() {
-  if (chatHistory.length === 0 || chatHistory[chatHistory.length - 1].content.trim() === '') {
-    logger.debug('No new content to send to Groq. Skipping request.');
-    return;
-  }
-
-  logger.debug('Sending chat to Groq...');
-  try {
-    // ... (existing code for sending chat to Groq)
-
-    logger.debug('Assistant reply:', assistantReply);
-
-    // Start streaming the entire response
-    await startStreaming(assistantReply);
-
-    // Re-enable Push to Talk if it was active before
-    if (pushToTalkMode) {
-      const pushToTalkButton = document.getElementById('push-to-talk-button');
-      pushToTalkButton.disabled = false;
-      logger.debug('Re-enabled Push to Talk button');
-    }
-
-  } catch (error) {
-    logger.error('Error in sendChatToGroq:', error);
-    // ... (existing error handling)
   }
 }
 
