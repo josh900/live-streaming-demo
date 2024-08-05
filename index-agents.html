@@ -88,6 +88,8 @@
 
             <div id="speak-controls">
                 <button id="start-button" type="button">Speak</button>
+                <button id="push-to-talk-toggle" type="button">Push to Talk: Off</button>
+                <button id="push-to-talk-button" type="button" disabled>Push to Talk</button>
                 <button id="auto-speak-toggle" type="button">Auto-Speak: On</button>
             </div>
             <div id="text-input-controls">
@@ -149,7 +151,9 @@
     <script type="module">
       import { initialize, handleAvatarChange, openAvatarModal, closeAvatarModal, saveAvatar, updateContext, handleTextInput, toggleAutoSpeak } from './agents-client-api.js';
      
-  
+      // Make functions available globally
+      window.togglePushToTalk = togglePushToTalk;
+      window.handlePushToTalk = handlePushToTalk;
       // Make closeAvatarModal available globally
       window.closeAvatarModal = closeAvatarModal;
   </script>
