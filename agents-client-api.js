@@ -2059,7 +2059,7 @@ function startSendingAudioData() {
 }
 
 function handleTranscription(data) {
-  if (!isRecording && !pushToTalkInProgress) return;
+  if (!isRecording) return;
 
   const transcript = data.channel.alternatives[0].transcript;
   if (data.is_final) {
@@ -2067,15 +2067,11 @@ function handleTranscription(data) {
     if (transcript.trim()) {
       currentUtterance += transcript + ' ';
       updateTranscript(currentUtterance.trim(), true);
-      if (!pushToTalkInProgress) {
-        chatHistory.push({
-          role: 'user',
-          content: currentUtterance.trim(),
-        });
-        sendChatToGroq();
-        currentUtterance = '';
-        interimMessageAdded = false;
-      }
+      chatHistory.push({
+        role: 'user',
+        content: currentUtterance.trim(),
+      });
+      sendChatToGroq();
     }
     currentUtterance = '';
     interimMessageAdded = false;
