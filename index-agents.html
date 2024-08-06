@@ -96,10 +96,14 @@
         <div id="speak-controls">
           <button id="start-button" type="button">Speak</button>
           <button id="auto-speak-toggle" type="button">Auto-Speak: On</button>
+          <button id="push-to-talk-toggle" type="button">Push to Talk: Off</button>
         </div>
         <div id="text-input-controls">
           <input type="text" id="text-input" placeholder="Type your message here" />
           <button id="send-text-button" type="button">Send</button>
+        </div>
+        <div id="push-to-talk-controls" style="display: none;">
+          <button id="push-to-talk-button" type="button">Push to Talk</button>
         </div>
       </div>
     </div>
@@ -173,6 +177,12 @@
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dom-parser/0.1.5/dom-parser.min.js"></script>
 
+      <script type="module">
+        import { togglePushToTalk, handlePushToTalkPress, handlePushToTalkRelease } from './agents-client-api.js';
+        document.getElementById('push-to-talk-toggle').addEventListener('click', togglePushToTalk);
+        document.getElementById('push-to-talk-button').addEventListener('mousedown', handlePushToTalkPress);
+        document.getElementById('push-to-talk-button').addEventListener('mouseup', handlePushToTalkRelease);
+      </script>
     <script type="module">
       import { toggleSimpleMode } from './agents-client-api.js';
       document.getElementById('simple-mode-button').addEventListener('click', toggleSimpleMode);
