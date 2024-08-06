@@ -40,6 +40,8 @@ let isTransitioning = false;
 let lastVideoStatus = null;
 let isCurrentlyStreaming = false;
 let reconnectAttempts = 10;
+let pushToTalkMode = false;
+let isPushToTalkActive = false;
 let persistentStreamId = null;
 let persistentSessionId = null;
 let isPersistentStreamActive = false;
@@ -1979,6 +1981,50 @@ async function startStreaming(assistantReply) {
       await reinitializePersistentStream();
     }
   }
+}
+
+function togglePushToTalk() {
+  pushToTalkMode = !pushToTalkMode;
+  const toggleButton = document.getElementById('push-to-talk-toggle');
+  const pushToTalkButton = document.getElementById('push-to-talk-button');
+  const pushToTalkControls = document.getElementById('push-to-talk-controls');
+  toggleButton.textContent = `Push to Talk: ${pushToTalkMode ? 'On' : 'Off'}`;
+  pushToTalkControls.style.display = pushToTalkMode ? 'block' : 'none';
+}
+
+function startPushToTalk() {
+  if (!pushToTalkMode || isPushToTalkActive) return;
+  isPushToTalkActive = true;
+  startRecording();
+}
+
+function stopPushToTalk() {
+  if (!pushToTalkMode || !isPushToTalkActive) return;
+  isPushToTalkActive = false;
+  stopRecording();
+  sendChatToGroq();
+}
+
+async function startRecording() {
+  // ...
+  const deepgramOptions = {
+    // ...
+    endpointing: pushToTalkMode ? false : 300,
+    vad_events: !pushToTalkMode,
+    // ...
+  };
+  // ...
+}
+
+function handleTranscription(data) {
+  // ...
+  if (data.is_final || pushToTalkMode) {
+    // ...
+    if (pushToTalkMode) {
+      sendChatToGroq();
+    }
+  }
+  // ...
 }
 
 export function toggleSimpleMode() {
