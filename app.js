@@ -3,7 +3,6 @@ import http from 'http';
 import { WebSocketServer } from 'ws';
 import cors from 'cors';
 import { createProxyMiddleware } from 'http-proxy-middleware';
-import startPingMonitoring from './ping.js';
 import compression from 'compression';
 import multer from 'multer';
 import { createOrUpdateAvatar, getAvatars } from './avatar-manager.js';
@@ -101,7 +100,4 @@ server.listen(port, () => {
   console.log(`Server started on port localhost:${port}`);
   console.log(`http://localhost:${port}`);
   console.log(`http://localhost:${port}/agents`);
-
-  // Start ping monitoring
-  startPingMonitoring();
 });
