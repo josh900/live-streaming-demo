@@ -8,7 +8,6 @@ import multer from 'multer';
 import { createOrUpdateAvatar, getAvatars } from './avatar-manager.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { startPingService } from './ping_service.js';
 import groqServer from './groqServer.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -101,6 +100,4 @@ server.listen(port, () => {
   console.log(`Server started on port localhost:${port}`);
   console.log(`http://localhost:${port}`);
   console.log(`http://localhost:${port}/agents`);
-
-  startPingService();
 });
