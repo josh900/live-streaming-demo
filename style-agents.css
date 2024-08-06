@@ -132,7 +132,6 @@ h4 {
   margin-bottom: 20px;
 }
 
-<<<<<<< found
 #logo-wrapper {
   position: absolute;
   left: 5.5%;
@@ -419,18 +418,3 @@ body {
   #video-wrapper {
   }
 }
-||||||| expected
-=======
-#push-to-talk-toggle {
-  padding: 10px 20px;
-  font-size: 16px;
-  margin-left: 10px;
-}
-
-#push-to-talk-button {
-  padding: 12px 24px;
-  font-size: 18px;
-  margin-bottom: 20px;
-}
-
->>>>>>> replacement
