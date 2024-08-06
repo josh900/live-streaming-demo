@@ -54,6 +54,8 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 const INITIAL_RECONNECT_DELAY = 2000; // 1 second
 const MAX_RECONNECT_DELAY = 90000; // 30 seconds
 let autoSpeakInProgress = false;
+let isPushToTalkEnabled = false;
+let isPushToTalkActive = false;
 
 const ConnectionState = {
   DISCONNECTED: 'disconnected',
@@ -1044,6 +1046,42 @@ async function initialize() {
   const replaceContextButton = document.getElementById('replace-context-button');
   const autoSpeakToggle = document.getElementById('auto-speak-toggle');
   const editAvatarButton = document.getElementById('edit-avatar-button');
+  const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
+  const pushToTalkButton = document.getElementById('push-to-talk-button');
+
+  pushToTalkToggle.addEventListener('click', togglePushToTalk);
+  pushToTalkButton.addEventListener('mousedown', startPushToTalk);
+  pushToTalkButton.addEventListener('mouseup', stopPushToTalk);
+  pushToTalkButton.addEventListener('mouseleave', stopPushToTalk);
+
+  function togglePushToTalk() {
+    isPushToTalkEnabled = !isPushToTalkEnabled;
+    pushToTalkToggle.textContent = `Push to Talk: ${isPushToTalkEnabled ? 'On' : 'Off'}`;
+    pushToTalkButton.style.display = isPushToTalkEnabled ? 'block' : 'none';
+    autoSpeakToggle.disabled = isPushToTalkEnabled;
+
+    if (isPushToTalkEnabled) {
+      stopRecording();
+      autoSpeakMode = false;
+      autoSpeakToggle.textContent = 'Auto-Speak: Off';
+    }
+  }
+
+  async function startPushToTalk() {
+    if (!isPushToTalkEnabled || isPushToTalkActive) return;
+
+    isPushToTalkActive = true;
+    currentUtterance = '';
+    interimMessageAdded = false;
+
+    try {
+      await startRecording();
+    } catch (error) {
+      logger.error('Failed to start recording:', error);
+      showErrorMessage('Failed to start recording. Please try again.');
+      isPushToTalkActive = false;
+    }
+  }
 
   sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
   textInput.addEventListener('keypress', (event) => {
@@ -1091,6 +1129,48 @@ async function initialize() {
   });
 
   logger.info('Initialization complete');
+}
+
+async function stopPushToTalk() {
+  if (!isPushToTalkEnabled || !isPushToTalkActive) return;
+
+  isPushToTalkActive = false;
+  await stopRecording();
+
+  if (currentUtterance.trim()) {
+    updateTranscript(currentUtterance.trim(), true);
+    chatHistory.push({
+      role: 'user',
+      content: currentUtterance.trim(),
+    });
+    sendChatToGroq();
+  }
+
+  currentUtterance = '';
+  interimMessageAdded = false;
+}
+
+function toggleAutoSpeak() {
+  autoSpeakMode = !autoSpeakMode;
+  const toggleButton = document.getElementById('auto-speak-toggle');
+  const startButton = document.getElementById('start-button');
+  const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
+  toggleButton.textContent = `Auto-Speak: ${autoSpeakMode ? 'On' : 'Off'}`;
+  if (autoSpeakMode) {
+    startButton.textContent = 'Stop';
+    if (!isRecording) {
+      startRecording();
+    }
+    isPushToTalkEnabled = false;
+    pushToTalkToggle.textContent = 'Push to Talk: Off';
+    document.getElementById('push-to-talk-button').style.display = 'none';
+  } else {
+    startButton.textContent = isRecording ? 'Stop' : 'Speak';
+    if (isRecording) {
+      stopRecording();
+    }
+  }
+  pushToTalkToggle.disabled = autoSpeakMode;
 }
 
 async function handleAvatarChange() {
@@ -2083,6 +2163,7 @@ function handleTranscription(data) {
     logger.debug('Final transcript:', transcript);
     if (transcript.trim()) {
       currentUtterance += transcript + ' ';
+      updateTranscript(currentUtterance.trim(), !isPushToTalkActive);
       updateTranscript(currentUtterance.trim(), true);
       chatHistory.push({
         role: 'user',
@@ -2090,8 +2171,10 @@ function handleTranscription(data) {
       });
       sendChatToGroq();
     }
-    currentUtterance = '';
-    interimMessageAdded = false;
+    if (!isPushToTalkActive) {
+      currentUtterance = '';
+      interimMessageAdded = false;
+    }
   } else {
     logger.debug('Interim transcript:', transcript);
     updateTranscript(currentUtterance + transcript, false);
@@ -2180,6 +2263,8 @@ async function startRecording() {
     }
     const startButton = document.getElementById('start-button');
     startButton.textContent = 'Stop';
+  const pushToTalkButton = document.getElementById('push-to-talk-button');
+  pushToTalkButton.disabled = false;
 
     logger.debug('Recording and transcription started successfully');
   } catch (error) {
@@ -2248,6 +2333,8 @@ async function stopRecording() {
     autoSpeakInProgress = false;
     const startButton = document.getElementById('start-button');
     startButton.textContent = 'Speak';
+    const pushToTalkButton = document.getElementById('push-to-talk-button');
+    pushToTalkButton.disabled = true;
 
     logger.debug('Recording and transcription stopped');
   }
@@ -2487,6 +2574,7 @@ destroyButton.onclick = async () => {
 const startButton = document.getElementById('start-button');
 
 startButton.onclick = async () => {
+  if (isPushToTalkEnabled) return;
   logger.info('Start button clicked. Current state:', isRecording ? 'Recording' : 'Not recording');
   if (!isRecording) {
     try {
@@ -2526,5 +2614,6 @@ export {
   handleTextInput,
   toggleAutoSpeak,
   initializePersistentStream,
+  togglePushToTalk,
   destroyPersistentStream,
 };
