@@ -1,7 +1,6 @@
 import express from 'express';
 import http from 'http';
 import { WebSocketServer } from 'ws';
-<<<<<<< found
 import cors from 'cors';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import compression from 'compression';
@@ -99,11 +98,6 @@ wss.on('connection', (ws) => {
 
 server.listen(port, () => {
   console.log(`Server started on port localhost:${port}`);
-||||||| expected
-=======
-import { startPingService } from './pingService.js';
->>>>>>> replacement
   console.log(`http://localhost:${port}`);
   console.log(`http://localhost:${port}/agents`);
 });
-startPingService();
