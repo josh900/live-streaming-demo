@@ -96,6 +96,8 @@
         <div id="speak-controls">
           <button id="start-button" type="button">Speak</button>
           <button id="auto-speak-toggle" type="button">Auto-Speak: On</button>
+          <button id="push-to-talk-toggle" type="button">Push to Talk: Off</button>
+          <button id="push-to-talk-button" type="button" disabled>Push to Talk</button>
         </div>
         <div id="text-input-controls">
           <input type="text" id="text-input" placeholder="Type your message here" />
@@ -176,6 +178,10 @@
     <script type="module">
       import { toggleSimpleMode } from './agents-client-api.js';
       document.getElementById('simple-mode-button').addEventListener('click', toggleSimpleMode);
+      import { togglePushToTalk, handlePushToTalkStart, handlePushToTalkEnd } from './agents-client-api.js';
+      document.getElementById('push-to-talk-toggle').addEventListener('click', togglePushToTalk);
+      document.getElementById('push-to-talk-button').addEventListener('mousedown', handlePushToTalkStart);
+      document.getElementById('push-to-talk-button').addEventListener('mouseup', handlePushToTalkEnd);
     </script>
   </body>
 </html>
