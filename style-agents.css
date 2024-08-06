@@ -123,6 +123,24 @@ h4 {
   margin-top: 10px;
 }
 
+#push-to-talk-toggle {
+  padding: 10px 20px;
+  font-size: 16px;
+  margin-left: 10px;
+}
+
+#push-to-talk-button {
+  padding: 12px 24px;
+  font-size: 18px;
+  margin-top: 10px;
+  display: block;
+}
+
+#push-to-talk-button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
 #auto-speak-toggle {
   padding: 10px 20px;
   font-size: 16px;
