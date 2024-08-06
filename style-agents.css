@@ -414,31 +414,6 @@ body {
   }
 }
 
-#push-to-talk-toggle {
-  padding: 10px 20px;
-  font-size: 16px;
-  margin-left: 10px;
-}
-
-#push-to-talk-controls {
-  margin-top: 10px;
-}
-
-#push-to-talk-button {
-  padding: 10px 20px;
-  font-size: 16px;
-  background-color: #4caf50;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-}
-
-#push-to-talk-button:disabled {
-  background-color: #cccccc;
-  cursor: not-allowed;
-}
-
 @media (max-width: 480px) {
   #video-wrapper {
   }
