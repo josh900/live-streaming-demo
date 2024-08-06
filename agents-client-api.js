@@ -54,6 +54,8 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 const INITIAL_RECONNECT_DELAY = 2000; // 1 second
 const MAX_RECONNECT_DELAY = 90000; // 30 seconds
 let autoSpeakInProgress = false;
+let isPushToTalkMode = false;
+let isPushToTalkActive = false;
 
 const ConnectionState = {
   DISCONNECTED: 'disconnected',
@@ -1981,6 +1983,141 @@ async function startStreaming(assistantReply) {
   }
 }
 
+function togglePushToTalk() {
+  isPushToTalkMode = !isPushToTalkMode;
+  const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
+  const pushToTalkButton = document.getElementById('push-to-talk-button');
+  
+  pushToTalkToggle.textContent = `Push to Talk: ${isPushToTalkMode ? 'On' : 'Off'}`;
+  pushToTalkToggle.classList.toggle('active', isPushToTalkMode);
+  pushToTalkButton.disabled = !isPushToTalkMode;
+  
+  if (isPushToTalkMode) {
+    preparePushToTalkSession();
+  } else {
+    cleanupPushToTalkSession();
+  }
+}
+
+function preparePushToTalkSession() {
+  // Prepare recording session and Deepgram integration
+  // This can be similar to the existing startRecording function,
+  // but without actually starting the recording
+}
+
+function cleanupPushToTalkSession() {
+  // Clean up any resources initialized for Push-to-Talk
+}
+
+function handlePushToTalkStart() {
+  if (!isPushToTalkMode) return;
+  
+  isPushToTalkActive = true;
+  startRecording(true); // Pass true to indicate Push-to-Talk mode
+}
+
+function handlePushToTalkEnd() {
+  if (!isPushToTalkMode || !isPushToTalkActive) return;
+  
+  isPushToTalkActive = false;
+  stopRecording(true); // Pass true to indicate Push-to-Talk mode
+}
+
+async function startRecording(isPushToTalk = false) {
+  if (isRecording) {
+    logger.warn('Recording is already in progress. Stopping current recording.');
+    await stopRecording();
+    return;
+  }
+
+  logger.debug('Starting recording process...');
+
+  currentUtterance = '';
+  interimMessageAdded = false;
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    logger.info('Microphone stream obtained');
+
+    audioContext = new AudioContext();
+    logger.debug('Audio context created. Sample rate:', audioContext.sampleRate);
+
+    await audioContext.audioWorklet.addModule('audio-processor.js');
+    logger.debug('Audio worklet module added successfully');
+
+    const source = audioContext.createMediaStreamSource(stream);
+    logger.debug('Media stream source created');
+
+    audioWorkletNode = new AudioWorkletNode(audioContext, 'audio-processor');
+    logger.debug('Audio worklet node created');
+
+    source.connect(audioWorkletNode);
+    logger.debug('Media stream source connected to audio worklet node');
+
+    const deepgramOptions = {
+      model: 'nova-2',
+      language: 'en-US',
+      smart_format: true,
+      interim_results: true,
+      utterance_end_ms: isPushToTalk ? null : 2500,
+      punctuate: true,
+      vad_events: !isPushToTalk,
+      encoding: 'linear16',
+      sample_rate: audioContext.sampleRate,
+    };
+
+    logger.debug('Creating Deepgram connection with options:', deepgramOptions);
+
+    deepgramConnection = await deepgramClient.listen.live(deepgramOptions);
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
+      logger.debug('Deepgram WebSocket Connection opened');
+      startSendingAudioData();
+    });
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.Close, () => {
+      logger.debug('Deepgram WebSocket connection closed');
+    });
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
+      logger.debug('Received transcription:', JSON.stringify(data));
+      handleTranscription(data);
+    });
+
+    if (!isPushToTalk) {
+      deepgramConnection.addListener(LiveTranscriptionEvents.UtteranceEnd, (data) => {
+        logger.debug('Utterance end event received:', data);
+        handleUtteranceEnd(data);
+      });
+    }
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
+      logger.error('Deepgram error:', err);
+      handleDeepgramError(err);
+    });
+
+    deepgramConnection.addListener(LiveTranscriptionEvents.Warning, (warning) => {
+      logger.warn('Deepgram warning:', warning);
+    });
+
+    isRecording = true;
+    if (autoSpeakMode && !isPushToTalk) {
+      autoSpeakInProgress = true;
+    }
+    const startButton = document.getElementById('start-button');
+    startButton.textContent = 'Stop';
+
+    logger.debug('Recording and transcription started successfully');
+  } catch (error) {
+    logger.error('Error starting recording:', error);
+    isRecording = false;
+    const startButton = document.getElementById('start-button');
+    startButton.textContent = 'Speak';
+    showErrorMessage('Failed to start recording. Please try again.');
+    throw error;
+  }
+}
+
 export function toggleSimpleMode() {
   const content = document.getElementById('content');
   const videoWrapper = document.getElementById('video-wrapper');
@@ -2488,7 +2625,7 @@ const startButton = document.getElementById('start-button');
 
 startButton.onclick = async () => {
   logger.info('Start button clicked. Current state:', isRecording ? 'Recording' : 'Not recording');
-  if (!isRecording) {
+  if (!isRecording && !isPushToTalkMode) {
     try {
       await startRecording();
     } catch (error) {
@@ -2527,4 +2664,5 @@ export {
   toggleAutoSpeak,
   initializePersistentStream,
   destroyPersistentStream,
+  togglePushToTalk,
 };
