@@ -128,31 +128,6 @@ h4 {
   font-size: 16px;
 }
 
-#push-to-talk-toggle {
-  padding: 10px 20px;
-  font-size: 16px;
-  margin-left: 10px;
-}
-
-#push-to-talk-controls {
-  margin-top: 10px;
-}
-
-#push-to-talk-button {
-  padding: 15px 30px;
-  font-size: 18px;
-  background-color: #4CAF50;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  transition: background-color 0.3s;
-}
-
-#push-to-talk-button:hover {
-  background-color: #45a049;
-}
-
 #status {
   margin-bottom: 20px;
 }
