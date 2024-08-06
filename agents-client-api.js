@@ -54,6 +54,8 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 const INITIAL_RECONNECT_DELAY = 2000; // 1 second
 const MAX_RECONNECT_DELAY = 90000; // 30 seconds
 let autoSpeakInProgress = false;
+let pushToTalkMode = false;
+let pushToTalkActive = false;
 
 const ConnectionState = {
   DISCONNECTED: 'disconnected',
@@ -2038,6 +2040,18 @@ export function toggleSimpleMode() {
   }
 }
 
+function togglePushToTalk() {
+  pushToTalkMode = !pushToTalkMode;
+  const toggleButton = document.getElementById('push-to-talk-toggle');
+  toggleButton.textContent = `Push to Talk: ${pushToTalkMode ? 'On' : 'Off'}`;
+}
+
+function startPushToTalk() {
+  if (pushToTalkMode && !pushToTalkActive) {
+    pushToTalkActive = true;
+  }
+}
+
 function startSendingAudioData() {
   logger.debug('Starting to send audio data...');
 
@@ -2112,6 +2126,11 @@ async function startRecording() {
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (pushToTalkMode) {
+      // Prepare the session for sending audio to Deepgram
+    } else {
+      // Start recording and transcription immediately 
+    }
     logger.info('Microphone stream obtained');
 
     audioContext = new AudioContext();
@@ -2233,6 +2252,10 @@ function handleUtteranceEnd(data) {
 async function stopRecording() {
   if (isRecording) {
     logger.info('Stopping recording...');
+    if (pushToTalkMode && pushToTalkActive) {
+      // Stop sending audio samples and transcription
+      pushToTalkActive = false;
+    }
 
     if (audioContext) {
       await audioContext.close();
@@ -2261,6 +2284,10 @@ async function sendChatToGroq() {
 
   logger.debug('Sending chat to Groq...');
   try {
+    if (pushToTalkMode) {
+      // Re-enable "Push to Talk" mode after the avatar's response
+      pushToTalkMode = true;
+    }
     const startTime = Date.now();
     const currentContext = document.getElementById('context-input').value.trim();
     const requestBody = {
