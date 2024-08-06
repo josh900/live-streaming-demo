@@ -418,21 +418,3 @@ body {
   #video-wrapper {
   }
 }
-
-#push-to-talk-toggle, #push-to-talk-action {
-  padding: 10px 20px;
-  font-size: 16px;
-  margin-left: 10px;
-}
-
-#push-to-talk-action {
-  background-color: #4caf50;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-}
-
-#push-to-talk-action:active {
-  background-color: #45a049;
-}
