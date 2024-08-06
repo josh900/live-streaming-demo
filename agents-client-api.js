@@ -54,7 +54,6 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 const INITIAL_RECONNECT_DELAY = 2000; // 1 second
 const MAX_RECONNECT_DELAY = 90000; // 30 seconds
 let autoSpeakInProgress = false;
-let isPushToTalkMode = false;
 
 const ConnectionState = {
   DISCONNECTED: 'disconnected',
@@ -2099,37 +2098,6 @@ function handleTranscription(data) {
   }
 }
 
-function togglePushToTalk() {
-  isPushToTalkMode = !isPushToTalkMode;
-  const toggleButton = document.getElementById('push-to-talk-toggle');
-  const pushToTalkButton = document.getElementById('push-to-talk-button');
-  toggleButton.textContent = `Push to Talk: ${isPushToTalkMode ? 'On' : 'Off'}`;
-  pushToTalkButton.disabled = !isPushToTalkMode;
-
-  if (isPushToTalkMode) {
-    autoSpeakMode = false;
-    const autoSpeakToggle = document.getElementById('auto-speak-toggle');
-    autoSpeakToggle.textContent = 'Auto-Speak: Off';
-  }
-}
-
-async function startPushToTalk() {
-  if (!isPushToTalkMode) return;
-  
-  try {
-    await startRecording();
-  } catch (error) {
-    logger.error('Error starting Push to Talk recording:', error);
-  }
-}
-
-async function stopPushToTalk() {
-  if (!isPushToTalkMode) return;
-  
-  await stopRecording();
-  sendChatToGroq();
-}
-
 async function startRecording() {
   if (isRecording) {
     logger.warn('Recording is already in progress. Stopping current recording.');
@@ -2164,7 +2132,6 @@ async function startRecording() {
     const deepgramOptions = {
       model: 'nova-2',
       language: 'en-US',
-      endpointing: !isPushToTalkMode,
       smart_format: true,
       interim_results: true,
       utterance_end_ms: 2500,
@@ -2172,7 +2139,7 @@ async function startRecording() {
       // endpointing: 300,
       vad_events: true,
       encoding: 'linear16',
-      sample_rate: audioContext.sampleRate
+      sample_rate: audioContext.sampleRate,
     };
 
     logger.debug('Creating Deepgram connection with options:', deepgramOptions);
@@ -2194,7 +2161,7 @@ async function startRecording() {
     });
 
     deepgramConnection.addListener(LiveTranscriptionEvents.UtteranceEnd, (data) => {
-      if (!isPushToTalkMode) logger.debug('Utterance end event received:', data);
+      logger.debug('Utterance end event received:', data);
       handleUtteranceEnd(data);
     });
 
@@ -2208,7 +2175,7 @@ async function startRecording() {
     });
 
     isRecording = true;
-    if (autoSpeakMode || isPushToTalkMode) {
+    if (autoSpeakMode) {
       autoSpeakInProgress = true;
     }
     const startButton = document.getElementById('start-button');
@@ -2251,7 +2218,7 @@ function handleUtteranceEnd(data) {
   if (!isRecording) return;
 
   logger.debug('Utterance end detected:', data);
-  if (currentUtterance.trim() && !isPushToTalkMode) {
+  if (currentUtterance.trim()) {
     updateTranscript(currentUtterance.trim(), true);
     chatHistory.push({
       role: 'user',
@@ -2294,7 +2261,6 @@ async function sendChatToGroq() {
 
   logger.debug('Sending chat to Groq...');
   try {
-    if (isPushToTalkMode) await stopRecording();
     const startTime = Date.now();
     const currentContext = document.getElementById('context-input').value.trim();
     const requestBody = {
@@ -2379,7 +2345,6 @@ async function sendChatToGroq() {
 
     // Start streaming the entire response
     await startStreaming(assistantReply);
-    if (isPushToTalkMode) await startRecording();
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
     const msgHistory = document.getElementById('msgHistory');
@@ -2562,7 +2527,4 @@ export {
   toggleAutoSpeak,
   initializePersistentStream,
   destroyPersistentStream,
-  togglePushToTalk,
-  startPushToTalk,
-  stopPushToTalk
 };
