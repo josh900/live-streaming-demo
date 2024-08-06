@@ -59,7 +59,7 @@ const ConnectionState = {
   DISCONNECTED: 'disconnected',
   CONNECTING: 'connecting',
   CONNECTED: 'connected',
-  RECONNECTING: 'reconnecting',
+  RECONNECTING: 'reconnecting'
 };
 
 let lastConnectionTime = Date.now();
@@ -443,7 +443,7 @@ async function prepareForStreaming() {
   streamVideoElement.style.display = 'none';
 
   idleVideoElement.style.display = 'block';
-  idleVideoElement.play().catch((e) => logger.error('Error playing idle video:', e));
+  idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e));
 
   logger.debug('Prepared for streaming');
 }
@@ -468,7 +468,7 @@ function initializeTransitionCanvas() {
     maxHeight: '550px',
     zIndex: '3',
     borderRadius: '13%',
-    objectFit: 'cover',
+    objectFit: 'cover'
   });
 
   videoWrapper.appendChild(transitionCanvas);
@@ -517,23 +517,11 @@ function smoothTransition(toStreaming, duration = 250) {
 
     // Draw the fading out video
     transitionCtx.globalAlpha = 1 - progress;
-    transitionCtx.drawImage(
-      toStreaming ? idleVideoElement : streamVideoElement,
-      0,
-      0,
-      transitionCanvas.width,
-      transitionCanvas.height,
-    );
+    transitionCtx.drawImage(toStreaming ? idleVideoElement : streamVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
 
     // Draw the fading in video
     transitionCtx.globalAlpha = progress;
-    transitionCtx.drawImage(
-      toStreaming ? streamVideoElement : idleVideoElement,
-      0,
-      0,
-      transitionCanvas.width,
-      transitionCanvas.height,
-    );
+    transitionCtx.drawImage(toStreaming ? streamVideoElement : idleVideoElement, 0, 0, transitionCanvas.width, transitionCanvas.height);
 
     if (progress < 1) {
       requestAnimationFrame(animate);
@@ -577,7 +565,7 @@ function getStatusLabels() {
     ice: document.getElementById('ice-status-label'),
     iceGathering: document.getElementById('ice-gathering-status-label'),
     signaling: document.getElementById('signaling-status-label'),
-    streaming: document.getElementById('streaming-status-label'),
+    streaming: document.getElementById('streaming-status-label')
   };
 }
 
@@ -671,7 +659,7 @@ async function initializePersistentStream() {
       },
       body: JSON.stringify({
         source_url: avatars[currentAvatar].imageUrl,
-        driver_url: 'bank://lively/driver-06',
+        driver_url: "bank://lively/driver-06",
         output_resolution: 512,
         stream_warmup: true,
         config: {
@@ -687,12 +675,12 @@ async function initializePersistentStream() {
             expressions: [
               {
                 start_frame: 0,
-                expression: 'neutral',
-                intensity: 0.5,
-              },
-            ],
-          },
-        },
+                expression: "neutral",
+                intensity: 0.5
+              }
+            ]
+          }
+        }
       }),
     });
 
@@ -712,7 +700,7 @@ async function initializePersistentStream() {
       throw e;
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/sdp`, {
       method: 'POST',
@@ -781,14 +769,9 @@ function startKeepAlive() {
         logger.warn('Error sending keepalive message:', error);
       }
     } else {
-      logger.debug(
-        'Conditions not met for sending keepalive. isPersistentStreamActive:',
-        isPersistentStreamActive,
-        'peerConnection state:',
-        peerConnection ? peerConnection.connectionState : 'null',
-        'pcDataChannel:',
-        pcDataChannel ? 'exists' : 'null',
-      );
+      logger.debug('Conditions not met for sending keepalive. isPersistentStreamActive:', isPersistentStreamActive,
+        'peerConnection state:', peerConnection ? peerConnection.connectionState : 'null',
+        'pcDataChannel:', pcDataChannel ? 'exists' : 'null');
     }
   }, 30000); // Send keepalive every 30 seconds
 }
@@ -840,7 +823,7 @@ async function createNewPersistentStream() {
       },
       body: JSON.stringify({
         source_url: avatars[currentAvatar].imageUrl,
-        driver_url: 'bank://lively/driver-06',
+        driver_url: "bank://lively/driver-06",
         output_resolution: 512,
         stream_warmup: true,
         config: {
@@ -856,12 +839,12 @@ async function createNewPersistentStream() {
             expressions: [
               {
                 start_frame: 0,
-                expression: 'neutral',
-                intensity: 0.5,
-              },
-            ],
-          },
-        },
+                expression: "neutral",
+                intensity: 0.5
+              }
+            ]
+          }
+        }
       }),
     });
 
@@ -871,7 +854,7 @@ async function createNewPersistentStream() {
 
     const newSessionClientAnswer = await createPeerConnection(offer, iceServers);
 
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${newStreamId}/sdp`, {
       method: 'POST',
@@ -907,7 +890,7 @@ async function backgroundReconnect() {
 
   try {
     await destroyPersistentStream();
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 1000));
     await initializePersistentStream();
     lastConnectionTime = Date.now(); // Update the last connection time
     logger.info('Background reconnection completed successfully');
@@ -1212,7 +1195,7 @@ async function saveAvatar() {
   try {
     const response = await fetch('/avatar', {
       method: 'POST',
-      body: formData,
+      body: formData
     });
 
     const reader = response.body.getReader();
@@ -1407,7 +1390,7 @@ function onIceCandidate(event) {
         sdpMLineIndex,
         session_id: persistentSessionId,
       }),
-    }).catch((error) => {
+    }).catch(error => {
       logger.error('Error sending ICE candidate:', error);
     });
   }
@@ -1538,13 +1521,10 @@ function setStreamVideoElement(stream) {
 
   streamVideoElement.onloadedmetadata = () => {
     logger.debug('Stream video metadata loaded');
-    streamVideoElement
-      .play()
-      .then(() => {
-        logger.debug('Stream video playback started');
-        smoothTransition(true);
-      })
-      .catch((e) => logger.error('Error playing stream video:', e));
+    streamVideoElement.play().then(() => {
+      logger.debug('Stream video playback started');
+      smoothTransition(true);
+    }).catch(e => logger.error('Error playing stream video:', e));
   };
 
   streamVideoElement.oncanplay = () => {
@@ -1646,7 +1626,7 @@ function onTrack(event) {
     } else {
       logger.debug('Peer connection not ready for stats.');
     }
-  }, 250); // Check every 500ms
+  }, 250);  // Check every 500ms
 
   if (event.streams && event.streams.length > 0) {
     const stream = event.streams[0];
@@ -1689,7 +1669,7 @@ function playIdleVideo() {
     logger.error(`Error loading idle video for ${currentAvatar || 'default'}:`, e);
   };
 
-  idleVideoElement.play().catch((e) => logger.error('Error playing idle video:', e));
+  idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e));
 }
 
 function stopAllStreams() {
@@ -1728,7 +1708,7 @@ async function fetchWithRetries(url, options, retries = 0, delayMs = 1000) {
     const timeSinceLastCall = now - lastApiCallTime;
 
     if (timeSinceLastCall < API_CALL_INTERVAL) {
-      await new Promise((resolve) => setTimeout(resolve, API_CALL_INTERVAL - timeSinceLastCall));
+      await new Promise(resolve => setTimeout(resolve, API_CALL_INTERVAL - timeSinceLastCall));
     }
 
     lastApiCallTime = Date.now();
@@ -1739,7 +1719,7 @@ async function fetchWithRetries(url, options, retries = 0, delayMs = 1000) {
         // If rate limited, wait for a longer time before retrying
         const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
         logger.warn(`Rate limited. Retrying after ${retryAfter} seconds.`);
-        await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
+        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
         return fetchWithRetries(url, options, retries, delayMs);
       }
       throw new Error(`HTTP error ${response.status}: ${await response.text()}`);
@@ -1782,7 +1762,7 @@ async function initializeConnection() {
       },
       body: JSON.stringify({
         source_url: avatars[currentAvatar].imageUrl,
-        driver_url: 'bank://lively/driver-06',
+        driver_url: "bank://lively/driver-06",
         output_resolution: 512,
         stream_warmup: true,
         config: {
@@ -1798,12 +1778,12 @@ async function initializeConnection() {
             expressions: [
               {
                 start_frame: 0,
-                expression: 'neutral',
-                intensity: 0.5,
-              },
-            ],
-          },
-        },
+                expression: "neutral",
+                intensity: 0.5
+              }
+            ]
+          }
+        }
       }),
     });
 
@@ -1826,7 +1806,7 @@ async function initializeConnection() {
       throw e;
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 6000));
+    await new Promise(resolve => setTimeout(resolve, 6000));
 
     const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
       method: 'POST',
@@ -1899,7 +1879,7 @@ async function startStreaming(assistantReply) {
         body: JSON.stringify({
           script: {
             type: 'text',
-            input: chunk, // Send the chunk without additional <speak> tags
+            input: chunk,  // Send the chunk without additional <speak> tags
             ssml: true,
             provider: {
               type: 'microsoft',
@@ -1907,7 +1887,7 @@ async function startStreaming(assistantReply) {
             },
           },
           session_id: persistentSessionId,
-          driver_url: 'bank://lively/driver-06',
+          driver_url: "bank://lively/driver-06",
           output_resolution: 512,
           stream_warmup: true,
           config: {
@@ -1919,16 +1899,16 @@ async function startStreaming(assistantReply) {
             normalization_factor: 0.1,
             align_expand_factor: 0.3,
             motion_factor: 0.55,
-            result_format: 'mp4',
+            result_format: "mp4",
             driver_expressions: {
               expressions: [
                 {
                   start_frame: 0,
-                  expression: 'neutral',
-                  intensity: 0.5,
-                },
-              ],
-            },
+                  expression: "neutral",
+                  intensity: 0.5
+                }
+              ]
+            }
           },
         }),
       });
@@ -1953,7 +1933,7 @@ async function startStreaming(assistantReply) {
           // Perform the transition
           smoothTransition(true);
 
-          await new Promise((resolve) => {
+          await new Promise(resolve => {
             streamVideoElement.onended = resolve;
           });
         } else {
@@ -1972,6 +1952,7 @@ async function startStreaming(assistantReply) {
       logger.info('Approaching reconnection threshold. Initiating background reconnect.');
       await backgroundReconnect();
     }
+
   } catch (error) {
     logger.error('Error during streaming:', error);
     if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
@@ -2065,10 +2046,7 @@ function startSendingAudioData() {
         logger.error('Error sending audio data to Deepgram:', error);
       }
     } else {
-      logger.warn(
-        'Deepgram connection not open, cannot send audio data. ReadyState:',
-        deepgramConnection ? deepgramConnection.getReadyState() : 'undefined',
-      );
+      logger.warn('Deepgram connection not open, cannot send audio data. ReadyState:', deepgramConnection ? deepgramConnection.getReadyState() : 'undefined');
     }
   };
 
@@ -2130,16 +2108,16 @@ async function startRecording() {
     logger.debug('Media stream source connected to audio worklet node');
 
     const deepgramOptions = {
-      model: 'nova-2',
-      language: 'en-US',
+      model: "nova-2",
+      language: "en-US",
       smart_format: true,
       interim_results: true,
       utterance_end_ms: 2500,
       punctuate: true,
       // endpointing: 300,
       vad_events: true,
-      encoding: 'linear16',
-      sample_rate: audioContext.sampleRate,
+      encoding: "linear16",
+      sample_rate: audioContext.sampleRate
     };
 
     logger.debug('Creating Deepgram connection with options:', deepgramOptions);
@@ -2208,7 +2186,7 @@ function handleDeepgramError(err) {
   }
 
   if (audioContext) {
-    audioContext.close().catch((closeError) => {
+    audioContext.close().catch(closeError => {
       logger.warn('Error while closing AudioContext:', closeError);
     });
   }
@@ -2345,6 +2323,7 @@ async function sendChatToGroq() {
 
     // Start streaming the entire response
     await startStreaming(assistantReply);
+
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
     const msgHistory = document.getElementById('msgHistory');
@@ -2382,7 +2361,7 @@ async function reinitializeConnection() {
 
   try {
     await destroyPersistentStream();
-    await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait for 1 second
+    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second
 
     stopAllStreams();
     closePC();
@@ -2411,7 +2390,7 @@ async function reinitializeConnection() {
     if (idleVideoElement) idleVideoElement.style.display = 'block';
 
     // Add a delay before initializing to avoid rapid successive calls
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     await initializePersistentStream();
 
@@ -2446,7 +2425,7 @@ async function cleanupOldStream() {
 
     // Stop all tracks in the streamVideoElement
     if (streamVideoElement && streamVideoElement.srcObject) {
-      streamVideoElement.srcObject.getTracks().forEach((track) => track.stop());
+      streamVideoElement.srcObject.getTracks().forEach(track => track.stop());
     }
 
     // Clear any ongoing intervals or timeouts
@@ -2483,6 +2462,7 @@ destroyButton.onclick = async () => {
     closePC();
   }
 };
+
 
 const startButton = document.getElementById('start-button');
 

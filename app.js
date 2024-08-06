@@ -22,32 +22,26 @@ app.use(compression());
 app.use(cors());
 app.use(express.json());
 
-app.use(
-  '/',
-  express.static(__dirname, {
-    setHeaders: (res, path) => {
-      if (path.endsWith('.js')) {
-        res.setHeader('Content-Type', 'application/javascript');
-      }
-    },
-  }),
-);
+app.use('/', express.static(__dirname, {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    }
+  }
+}));
 
-app.get('/', function (req, res) {
+app.get('/', function(req, res) {
   res.sendFile(join(__dirname, 'index.html'));
 });
 
-app.get('/agents', function (req, res) {
+app.get('/agents', function(req, res) {
   res.sendFile(join(__dirname, 'index-agents.html'));
 });
 
-app.use(
-  '/chat',
-  createProxyMiddleware({
-    target: 'http://localhost:3001',
-    changeOrigin: true,
-  }),
-);
+app.use('/chat', createProxyMiddleware({ 
+  target: 'http://localhost:3001', 
+  changeOrigin: true 
+}));
 
 app.post('/avatar', upload.single('image'), async (req, res) => {
   try {
@@ -55,12 +49,12 @@ app.post('/avatar', upload.single('image'), async (req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
+      'Connection': 'keep-alive'
     });
     res.write('data: {"status": "processing"}\n\n');
 
     const avatar = await createOrUpdateAvatar(name, req.file, voiceId || 'en-US-GuyNeural');
-
+    
     res.write('data: {"status": "completed", "avatar": ' + JSON.stringify(avatar) + '}\n\n');
     res.end();
   } catch (error) {
