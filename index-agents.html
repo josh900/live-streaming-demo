@@ -7,13 +7,42 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@300;400;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/style-agents.css" />
+    <link rel="stylesheet" href="style-agents.css" />
     <link
       rel="icon"
       type="image/png"
       sizes="192x192"
       href="https://cdn.prod.website-files.com/6316d11d553f411d6f1fa732/6343f55adbb1a12a532f2769_skoop-favicon.png"
     />
+    <style>
+      body,
+      html {
+        margin: 0;
+        padding: 0;
+      }
+      .header {
+        display: flex;
+        align-items: flex-end;
+        padding: 15px;
+        background-color: #f5f5f5;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      .header img {
+        height: 30px;
+        margin-right: 15px;
+      }
+      .header h1 {
+        font-family: 'Mulish', sans-serif;
+        font-weight: 700;
+        font-size: 20px;
+        margin: 0;
+        line-height: 1;
+      }
+      #content {
+        padding: 20px;
+      }
+    </style>
   </head>
   <body>
     <div class="header">
@@ -87,14 +116,66 @@
       </div>
     </div>
 
+    <script>
+      // AudioWorklet implementation
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
+      // AudioWorklet processor code
+      const workletCode = `
+            class AudioProcessor extends AudioWorkletProcessor {
+                process(inputs, outputs, parameters) {
+                    const input = inputs[0];
+                    const output = outputs[0];
+
+                    for (let channel = 0; channel < input.length; channel++) {
+                        const inputChannel = input[channel];
+                        const outputChannel = output[channel];
+                        for (let i = 0; i < inputChannel.length; i++) {
+                            outputChannel[i] = inputChannel[i];
+                        }
+                    }
+
+                    return true;
+                }
+            }
+
+            registerProcessor('audio-processor', AudioProcessor);
+        `;
+
+      const blob = new Blob([workletCode], { type: 'application/javascript' });
+      const workletUrl = URL.createObjectURL(blob);
+
+      audioContext.audioWorklet
+        .addModule(workletUrl)
+        .then(() => {
+          const audioProcessor = new AudioWorkletNode(audioContext, 'audio-processor');
+          // Connect the audio processor to the audio context destination
+          audioProcessor.connect(audioContext.destination);
+        })
+        .catch((err) => console.error('Error loading AudioWorklet:', err));
+    </script>
 
     <script src="https://cdn.jsdelivr.net/npm/@deepgram/sdk"></script>
+    <script type="module">
+      import {
+        initialize,
+        handleAvatarChange,
+        openAvatarModal,
+        closeAvatarModal,
+        saveAvatar,
+        updateContext,
+        handleTextInput,
+        toggleAutoSpeak,
+      } from './agents-client-api.js';
 
+      // Make closeAvatarModal available globally
+      window.closeAvatarModal = closeAvatarModal;
+    </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dom-parser/0.1.5/dom-parser.min.js"></script>
-    
-    <script type="module" src="/src/main.js"></script>
 
-
+    <script type="module">
+      import { toggleSimpleMode } from './agents-client-api.js';
+      document.getElementById('simple-mode-button').addEventListener('click', toggleSimpleMode);
+    </script>
   </body>
 </html>

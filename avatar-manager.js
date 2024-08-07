@@ -164,7 +164,7 @@ async function generateSilentVideo(imageUrl, voiceId, name) {
 }
 
 async function saveAvatarDetails(name, avatar) {
-  const avatarsFile = path.join(__dirname, '/avatars.json');
+  const avatarsFile = path.join(__dirname, 'avatars.json');
   let avatars = {};
 
   try {
@@ -184,7 +184,7 @@ async function saveAvatarDetails(name, avatar) {
 
 export async function getAvatars() {
   try {
-    const data = await fs.readFile(path.join(__dirname, '/avatars.json'), 'utf8');
+    const data = await fs.readFile(path.join(__dirname, 'avatars.json'), 'utf8');
     return JSON.parse(data);
   } catch (err) {
     if (err.code === 'ENOENT') {
