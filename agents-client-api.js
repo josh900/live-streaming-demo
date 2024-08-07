@@ -12,6 +12,9 @@ let socket;
 let isDebugMode = false;
 let isAvatarSpeaking = false;
 let autoSpeakInProgress = false;
+let isRecording = false;
+let autoSpeakMode = true;
+
 
 let idleVideoElement;
 let streamVideoElement;
@@ -495,6 +498,24 @@ function onStreamEvent(message) {
     }
   }
 }
+
+function handleTextInput(text) {
+  if (text.trim() === '') return;
+
+  const textInput = document.getElementById('text-input');
+  textInput.value = '';
+
+  updateTranscript(text, true);
+
+  chatHistory.push({
+    role: 'user',
+    content: text,
+  });
+
+  sendChatToGroq();
+}
+
+
 
 async function startStreaming(assistantReply) {
   try {
