@@ -32,6 +32,7 @@ const ConnectionState = {
   RECONNECTING: 'reconnecting',
 };
 
+let connectionState = ConnectionState.DISCONNECTED;
 
 
 async function initializePersistentStream() {
@@ -699,13 +700,6 @@ function onTrack(event) {
         logger.error('Error cleaning up old stream:', error);
       }
     }
-
-    let connectionState = ConnectionState.DISCONNECTED;
-
-    function setConnectionState(state) {
-        connectionState = state;
-      }
-      
     
     export {
         initializePersistentStream,
