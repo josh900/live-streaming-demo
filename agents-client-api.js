@@ -1,4 +1,4 @@
-import { ConnectionState, initializePersistentStream, destroyPersistentStream, reinitializePersistentStream, createNewPersistentStream, backgroundReconnect, createPeerConnection, onIceGatheringStateChange, onIceCandidate, onIceConnectionStateChange, onConnectionStateChange, onSignalingStateChange, onTrack, startConnectionHealthCheck, attemptReconnect, stopAllStreams, closePC, fetchWithRetries, initializeConnection, reinitializeConnection, cleanupOldStream, connectionState } from './connection-manager.js';
+import { ConnectionState, initializePersistentStream, destroyPersistentStream, reinitializePersistentStream, createNewPersistentStream, backgroundReconnect, createPeerConnection, onIceGatheringStateChange, onIceCandidate, onIceConnectionStateChange, onConnectionStateChange, onSignalingStateChange, onTrack, startConnectionHealthCheck, attemptReconnect, stopAllStreams, closePC, fetchWithRetries, initializeConnection, reinitializeConnection, cleanupOldStream, setConnectionState } from './connection-manager.js';
 import { initializeTransitionCanvas, smoothTransition, getVideoElements, onVideoStatusChange, setStreamVideoElement, playIdleVideo, prepareForStreaming } from './video-manager.js';
 import logger from './logger.js';
 import DID_API from './api.js';
@@ -118,7 +118,7 @@ async function sendSDPAnswer(streamId, sessionId, answer) {
 
 async function initialize() {
   logger.setLogLevel('DEBUG');
-  connectionState = ConnectionState.DISCONNECTED;
+  setConnectionState(ConnectionState.DISCONNECTED);
 
   const { idle, stream } = getVideoElements();
   idleVideoElement = idle;
