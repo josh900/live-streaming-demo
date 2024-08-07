@@ -15,7 +15,6 @@ let inactivityTimeout;
 let keepAliveInterval;
 let isInitializing = false;
 let streamVideoElement;
-let connectionState = ConnectionState.DISCONNECTED;
 let lastConnectionTime = Date.now();
 let reconnectAttempts = 10;
 let isPersistentStreamActive = false;
@@ -32,6 +31,9 @@ const ConnectionState = {
   CONNECTED: 'connected',
   RECONNECTING: 'reconnecting',
 };
+
+let connectionState = ConnectionState.DISCONNECTED;
+
 
 async function initializePersistentStream() {
   logger.info('Initializing persistent stream...');

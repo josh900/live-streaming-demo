@@ -1134,7 +1134,6 @@ export {
   closeAvatarModal,
   saveAvatar,
   updateContext,
-  handleTextInput,
   toggleAutoSpeak,
   initializePersistentStream,
   destroyPersistentStream,
