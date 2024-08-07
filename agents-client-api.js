@@ -15,7 +15,6 @@ let autoSpeakInProgress = false;
 let isRecording = false;
 let autoSpeakMode = true;
 
-let streamVideoElement;
 
 let avatars = {};
 let currentAvatar = '';
