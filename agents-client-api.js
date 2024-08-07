@@ -17,7 +17,6 @@ let autoSpeakMode = true;
 
 
 let avatars = {};
-let currentAvatar = '';
 
 const avatarSelect = document.getElementById('avatar-select');
 avatarSelect.addEventListener('change', handleAvatarChange);
