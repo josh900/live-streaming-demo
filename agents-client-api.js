@@ -15,6 +15,7 @@ let autoSpeakInProgress = false;
 let isRecording = false;
 let autoSpeakMode = true;
 
+
 let idleVideoElement;
 let streamVideoElement;
 
@@ -516,6 +517,8 @@ function handleTextInput(text) {
 
   sendChatToGroq();
 }
+
+
 
 async function startStreaming(assistantReply) {
   try {
