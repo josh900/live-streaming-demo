@@ -255,6 +255,9 @@ async function prepareForStreaming() {
   logger.debug('Prepared for streaming');
 }
 
+let idleVideoElement;
+let streamVideoElement;
+
 export {
   initializeTransitionCanvas,
   smoothTransition,
@@ -263,4 +266,6 @@ export {
   setStreamVideoElement,
   playIdleVideo,
   prepareForStreaming,
+  idleVideoElement,
+  streamVideoElement,
 };
