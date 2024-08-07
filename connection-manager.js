@@ -730,4 +730,5 @@ function onTrack(event) {
         cleanupOldStream,
         ConnectionState,
         connectionState,
+        setConnectionState,
     };
