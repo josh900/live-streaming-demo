@@ -15,8 +15,11 @@ let autoSpeakInProgress = false;
 let isRecording = false;
 let autoSpeakMode = true;
 
+let idleVideoElement;
+let streamVideoElement;
 
 let avatars = {};
+let currentAvatar = '';
 
 const avatarSelect = document.getElementById('avatar-select');
 avatarSelect.addEventListener('change', handleAvatarChange);
