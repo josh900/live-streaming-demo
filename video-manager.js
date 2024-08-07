@@ -1,7 +1,6 @@
 import logger from './logger.js';
 import { currentAvatar } from './agents-client-api.js';
 
-
 let transitionCanvas;
 let transitionCtx;
 let isTransitioning = false;
@@ -9,8 +8,6 @@ let lastVideoStatus = null;
 let isCurrentlyStreaming = false;
 let currentUtterance = '';
 let interimMessageAdded = false;
-
-
 
 function initializeTransitionCanvas() {
   const videoWrapper = document.querySelector('#video-wrapper');
