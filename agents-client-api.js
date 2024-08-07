@@ -1,6 +1,7 @@
 import { ConnectionState, initializePersistentStream, destroyPersistentStream, reinitializePersistentStream, createNewPersistentStream, backgroundReconnect, createPeerConnection, onIceGatheringStateChange, onIceCandidate, onIceConnectionStateChange, onConnectionStateChange, onSignalingStateChange, onTrack, startConnectionHealthCheck, attemptReconnect, stopAllStreams, closePC, fetchWithRetries, initializeConnection, reinitializeConnection, cleanupOldStream, setConnectionState } from './connection-manager.js';
 import { initializeTransitionCanvas, smoothTransition, getVideoElements, onVideoStatusChange, setStreamVideoElement, playIdleVideo, prepareForStreaming } from './video-manager.js';
 import logger from './logger.js';
+
 import DID_API from './api.js';
 
 const { createClient, LiveTranscriptionEvents } = deepgram;
@@ -11,6 +12,9 @@ let socket;
 let isDebugMode = false;
 let isAvatarSpeaking = false;
 let autoSpeakInProgress = false;
+
+let idleVideoElement;
+let streamVideoElement;
 
 let avatars = {};
 let currentAvatar = '';
