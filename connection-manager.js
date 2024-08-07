@@ -32,8 +32,6 @@ const ConnectionState = {
   RECONNECTING: 'reconnecting',
 };
 
-
-
 async function initializePersistentStream() {
   logger.info('Initializing persistent stream...');
   connectionState = ConnectionState.CONNECTING;
@@ -421,314 +419,313 @@ function onTrack(event) {
       logger.debug('Peer connection not ready for stats.');
     }
   }, 250); // Check every 500ms
-    if (event.streams && event.streams.length > 0) {
-        const stream = event.streams[0];
-        if (stream.getVideoTracks().length > 0) {
-          logger.debug('Setting stream video element with track:', event.track.id);
-          setStreamVideoElement(stream);
-        } else {
-          logger.warn('Stream does not contain any video tracks');
-        }
-      } else {
-        logger.warn('No streams found in onTrack event');
-      }
-    
-      if (isDebugMode) {
-        // downloadStreamVideo(event.streams[0]);
-      }
+  if (event.streams && event.streams.length > 0) {
+    const stream = event.streams[0];
+    if (stream.getVideoTracks().length > 0) {
+      logger.debug('Setting stream video element with track:', event.track.id);
+      setStreamVideoElement(stream);
+    } else {
+      logger.warn('Stream does not contain any video tracks');
     }
-    
-    async function attemptReconnect() {
-      logger.debug('Attempting to reconnect...');
-      try {
-        await reinitializeConnection();
-        logger.debug('Reconnection successful');
-        reconnectAttempts = 0;
-      } catch (error) {
-        logger.error('Reconnection attempt failed:', error);
-        scheduleReconnect();
-      }
+  } else {
+    logger.warn('No streams found in onTrack event');
+  }
+
+  if (isDebugMode) {
+    // downloadStreamVideo(event.streams[0]);
+  }
+}
+
+async function attemptReconnect() {
+  logger.debug('Attempting to reconnect...');
+  try {
+    await reinitializeConnection();
+    logger.debug('Reconnection successful');
+    reconnectAttempts = 0;
+  } catch (error) {
+    logger.error('Reconnection attempt failed:', error);
+    scheduleReconnect();
+  }
+}
+
+function stopAllStreams() {
+  if (streamVideoElement && streamVideoElement.srcObject) {
+    logger.debug('Stopping video streams');
+    streamVideoElement.srcObject.getTracks().forEach((track) => track.stop());
+    streamVideoElement.srcObject = null;
+  }
+}
+
+function closePC(pc = peerConnection) {
+  if (!pc) return;
+  logger.debug('Stopping peer connection');
+  pc.close();
+  pc.removeEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
+  pc.removeEventListener('icecandidate', onIceCandidate, true);
+  pc.removeEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
+  pc.removeEventListener('connectionstatechange', onConnectionStateChange, true);
+  pc.removeEventListener('signalingstatechange', onSignalingStateChange, true);
+  pc.removeEventListener('track', onTrack, true);
+  clearInterval(statsIntervalId);
+  const labels = getStatusLabels();
+  if (labels.iceGathering) labels.iceGathering.innerText = '';
+  if (labels.signaling) labels.signaling.innerText = '';
+  if (labels.ice) labels.ice.innerText = '';
+  if (labels.peer) labels.peer.innerText = '';
+  logger.debug('Stopped peer connection');
+  if (pc === peerConnection) {
+    peerConnection = null;
+  }
+}
+
+async function fetchWithRetries(url, options, retries = 0, delayMs = 1000) {
+  try {
+    const now = Date.now();
+    const timeSinceLastCall = now - lastApiCallTime;
+
+    if (timeSinceLastCall < API_CALL_INTERVAL) {
+      await new Promise((resolve) => setTimeout(resolve, API_CALL_INTERVAL - timeSinceLastCall));
     }
-    
-    function stopAllStreams() {
-      if (streamVideoElement && streamVideoElement.srcObject) {
-        logger.debug('Stopping video streams');
-        streamVideoElement.srcObject.getTracks().forEach((track) => track.stop());
-        streamVideoElement.srcObject = null;
+
+    lastApiCallTime = Date.now();
+
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      if (response.status === 429) {
+        // If rate limited, wait for a longer time before retrying
+        const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
+        logger.warn(`Rate limited. Retrying after ${retryAfter} seconds.`);
+        await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
+        return fetchWithRetries(url, options, retries, delayMs);
       }
+      throw new Error(`HTTP error ${response.status}: ${await response.text()}`);
     }
-    
-    function closePC(pc = peerConnection) {
-      if (!pc) return;
-      logger.debug('Stopping peer connection');
-      pc.close();
-      pc.removeEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
-      pc.removeEventListener('icecandidate', onIceCandidate, true);
-      pc.removeEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
-      pc.removeEventListener('connectionstatechange', onConnectionStateChange, true);
-      pc.removeEventListener('signalingstatechange', onSignalingStateChange, true);
-      pc.removeEventListener('track', onTrack, true);
-      clearInterval(statsIntervalId);
-      const labels = getStatusLabels();
-      if (labels.iceGathering) labels.iceGathering.innerText = '';
-      if (labels.signaling) labels.signaling.innerText = '';
-      if (labels.ice) labels.ice.innerText = '';
-      if (labels.peer) labels.peer.innerText = '';
-      logger.debug('Stopped peer connection');
-      if (pc === peerConnection) {
-        peerConnection = null;
-      }
+    return response;
+  } catch (err) {
+    if (retries < maxRetryCount) {
+      const delay = Math.min(Math.pow(2, retries) * delayMs + Math.random() * 1000, maxDelaySec * 1000);
+      logger.warn(`Request failed, retrying ${retries + 1}/${maxRetryCount} in ${delay}ms. Error: ${err.message}`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return fetchWithRetries(url, options, retries + 1, delayMs);
+    } else {
+      throw err;
     }
-    
-    async function fetchWithRetries(url, options, retries = 0, delayMs = 1000) {
-      try {
-        const now = Date.now();
-        const timeSinceLastCall = now - lastApiCallTime;
-    
-        if (timeSinceLastCall < API_CALL_INTERVAL) {
-          await new Promise((resolve) => setTimeout(resolve, API_CALL_INTERVAL - timeSinceLastCall));
-        }
-    
-        lastApiCallTime = Date.now();
-    
-        const response = await fetch(url, options);
-        if (!response.ok) {
-          if (response.status === 429) {
-            // If rate limited, wait for a longer time before retrying
-            const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
-            logger.warn(`Rate limited. Retrying after ${retryAfter} seconds.`);
-            await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
-            return fetchWithRetries(url, options, retries, delayMs);
-          }
-          throw new Error(`HTTP error ${response.status}: ${await response.text()}`);
-        }
-        return response;
-      } catch (err) {
-        if (retries < maxRetryCount) {
-          const delay = Math.min(Math.pow(2, retries) * delayMs + Math.random() * 1000, maxDelaySec * 1000);
-          logger.warn(`Request failed, retrying ${retries + 1}/${maxRetryCount} in ${delay}ms. Error: ${err.message}`);
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          return fetchWithRetries(url, options, retries + 1, delayMs);
-        } else {
-          throw err;
-        }
-      }
+  }
+}
+
+async function initializeConnection() {
+  if (isInitializing) {
+    logger.warn('Connection initialization already in progress. Skipping initialize.');
+    return;
+  }
+
+  isInitializing = true;
+  logger.info('Initializing connection...');
+
+  try {
+    stopAllStreams();
+    closePC();
+
+    if (!currentAvatar || !avatars[currentAvatar]) {
+      throw new Error('No avatar selected or avatar not found');
     }
-    
-    async function initializeConnection() {
-      if (isInitializing) {
-        logger.warn('Connection initialization already in progress. Skipping initialize.');
-        return;
-      }
-    
-      isInitializing = true;
-      logger.info('Initializing connection...');
-    
-      try {
-        stopAllStreams();
-        closePC();
-    
-        if (!currentAvatar || !avatars[currentAvatar]) {
-          throw new Error('No avatar selected or avatar not found');
-        }
-    
-        const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Basic ${DID_API.key}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            source_url: avatars[currentAvatar].imageUrl,
-            driver_url: 'bank://lively/driver-06',
-            output_resolution: 512,
-            stream_warmup: true,
-            config: {
-              stitch: true,
-              fluent: true,
-              auto_match: true,
-              pad_audio: 0.5,
-              normalization_factor: 0.1,
-              align_driver: true,
-              motion_factor: 0.55,
-              align_expand_factor: 0.3,
-              driver_expressions: {
-                expressions: [
-                  {
-                    start_frame: 0,
-                    expression: 'neutral',
-                    intensity: 0.5,
-                  },
-                ],
+
+    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        source_url: avatars[currentAvatar].imageUrl,
+        driver_url: 'bank://lively/driver-06',
+        output_resolution: 512,
+        stream_warmup: true,
+        config: {
+          stitch: true,
+          fluent: true,
+          auto_match: true,
+          pad_audio: 0.5,
+          normalization_factor: 0.1,
+          align_driver: true,
+          motion_factor: 0.55,
+          align_expand_factor: 0.3,
+          driver_expressions: {
+            expressions: [
+              {
+                start_frame: 0,
+                expression: 'neutral',
+                intensity: 0.5,
               },
-            },
-          }),
-        });
-    
-        const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
-    
-        if (!newStreamId || !newSessionId) {
-          throw new Error('Failed to get valid stream ID or session ID from API');
-        }
-    
-        streamId = newStreamId;
-        sessionId = newSessionId;
-        logger.info('Stream created:', { streamId, sessionId });
-    
-        try {
-          sessionClientAnswer = await createPeerConnection(offer, iceServers);
-        } catch (e) {
-          logger.error('Error during streaming setup:', e);
-          stopAllStreams();
-          closePC();
-          throw e;
-        }
-    
-        await new Promise((resolve) => setTimeout(resolve, 6000));
-    
-        const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Basic ${DID_API.key}`,
-            'Content-Type': 'application/json',
+            ],
           },
-          body: JSON.stringify({
-            answer: sessionClientAnswer,
-            session_id: sessionId,
-          }),
-        });
-    
-        if (!sdpResponse.ok) {
-          throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
-        }
-    
-        logger.info('Connection initialized successfully');
-      } catch (error) {
-        logger.error('Failed to initialize connection:', error);
-        throw error;
-      } finally {
-        isInitializing = false;
-      }
-    }
-    
-    async function reinitializeConnection() {
-      if (connectionState === ConnectionState.RECONNECTING) {
-        logger.warn('Connection reinitialization already in progress. Skipping reinitialize.');
-        return;
-      }
-    
-      connectionState = ConnectionState.RECONNECTING;
-      logger.debug('Reinitializing connection...');
-    
-      try {
-        await destroyPersistentStream();
-        await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait for 1 second
-    
-        stopAllStreams();
-        closePC();
-    
-        clearInterval(statsIntervalId);
-        clearTimeout(inactivityTimeout);
-        clearInterval(keepAliveInterval);
-    
-        streamId = null;
-        sessionId = null;
-        peerConnection = null;
-        lastBytesReceived = 0;
-        videoIsPlaying = false;
-    
-        currentUtterance = '';
-        interimMessageAdded = false;
-    
-        const msgHistory = document.getElementById('msgHistory');
-        msgHistory.innerHTML = '';
-        chatHistory = [];
-    
-        // Reset video elements
-        const streamVideoElement = document.getElementById('stream-video-element');
-        const idleVideoElement = document.getElementById('idle-video-element');
-        if (streamVideoElement) streamVideoElement.srcObject = null;
-        if (idleVideoElement) idleVideoElement.style.display = 'block';
-    
-        // Add a delay before initializing to avoid rapid successive calls
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-    
-        await initializePersistentStream();
-    
-        if (!persistentStreamId || !persistentSessionId) {
-          throw new Error('Persistent Stream ID or Session ID is missing after initialization');
-        }
-    
-        await prepareForStreaming();
-    
-        logger.info('Connection reinitialized successfully');
-        logger.debug(`New Persistent Stream ID: ${persistentStreamId}, New Persistent Session ID: ${persistentSessionId}`);
-        reconnectAttempts = 0; // Reset reconnect attempts on successful connection
-        connectionState = ConnectionState.CONNECTED;
-      } catch (error) {
-        logger.error('Error during reinitialization:', error);
-        showErrorMessage('Failed to reconnect. Please refresh the page.');
-        connectionState = ConnectionState.DISCONNECTED;
-      }
-    }
-    
-    async function cleanupOldStream() {
-      logger.debug('Cleaning up old stream...');
-    
-      try {
-        if (peerConnection) {
-          peerConnection.close();
-        }
-    
-        if (pcDataChannel) {
-          pcDataChannel.close();
-        }
-    
-        // Stop all tracks in the streamVideoElement
-        if (streamVideoElement && streamVideoElement.srcObject) {
-          streamVideoElement.srcObject.getTracks().forEach((track) => track.stop());
-        }
-    
-        // Clear any ongoing intervals or timeouts
-        clearInterval(statsIntervalId);
-        clearTimeout(inactivityTimeout);
-        clearInterval(keepAliveInterval);
-    
-        logger.debug('Old stream cleaned up successfully');
-      } catch (error) {
-        logger.error('Error cleaning up old stream:', error);
-      }
+        },
+      }),
+    });
+
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+
+    if (!newStreamId || !newSessionId) {
+      throw new Error('Failed to get valid stream ID or session ID from API');
     }
 
-    let connectionState = ConnectionState.DISCONNECTED;
+    streamId = newStreamId;
+    sessionId = newSessionId;
+    logger.info('Stream created:', { streamId, sessionId });
 
-    function setConnectionState(state) {
-        connectionState = state;
-      }
-      
-    
-    export {
-        initializePersistentStream,
-        destroyPersistentStream,
-        reinitializePersistentStream,
-        createNewPersistentStream,
-        backgroundReconnect,
-        createPeerConnection,
-        onIceGatheringStateChange,
-        onIceCandidate,
-        onIceConnectionStateChange,
-        onConnectionStateChange,
-        onSignalingStateChange,
-        onTrack,
-        startConnectionHealthCheck,
-        attemptReconnect,
-        stopAllStreams,
-        closePC,
-        fetchWithRetries,
-        initializeConnection,
-        reinitializeConnection,
-        cleanupOldStream,
-        ConnectionState,
-        connectionState,
-        setConnectionState,
-    };
+    try {
+      sessionClientAnswer = await createPeerConnection(offer, iceServers);
+    } catch (e) {
+      logger.error('Error during streaming setup:', e);
+      stopAllStreams();
+      closePC();
+      throw e;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 6000));
+
+    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        answer: sessionClientAnswer,
+        session_id: sessionId,
+      }),
+    });
+
+    if (!sdpResponse.ok) {
+      throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
+    }
+
+    logger.info('Connection initialized successfully');
+  } catch (error) {
+    logger.error('Failed to initialize connection:', error);
+    throw error;
+  } finally {
+    isInitializing = false;
+  }
+}
+
+async function reinitializeConnection() {
+  if (connectionState === ConnectionState.RECONNECTING) {
+    logger.warn('Connection reinitialization already in progress. Skipping reinitialize.');
+    return;
+  }
+
+  connectionState = ConnectionState.RECONNECTING;
+  logger.debug('Reinitializing connection...');
+
+  try {
+    await destroyPersistentStream();
+    await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait for 1 second
+
+    stopAllStreams();
+    closePC();
+
+    clearInterval(statsIntervalId);
+    clearTimeout(inactivityTimeout);
+    clearInterval(keepAliveInterval);
+
+    streamId = null;
+    sessionId = null;
+    peerConnection = null;
+    lastBytesReceived = 0;
+    videoIsPlaying = false;
+
+    currentUtterance = '';
+    interimMessageAdded = false;
+
+    const msgHistory = document.getElementById('msgHistory');
+    msgHistory.innerHTML = '';
+    chatHistory = [];
+
+    // Reset video elements
+    const streamVideoElement = document.getElementById('stream-video-element');
+    const idleVideoElement = document.getElementById('idle-video-element');
+    if (streamVideoElement) streamVideoElement.srcObject = null;
+    if (idleVideoElement) idleVideoElement.style.display = 'block';
+
+    // Add a delay before initializing to avoid rapid successive calls
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    await initializePersistentStream();
+
+    if (!persistentStreamId || !persistentSessionId) {
+      throw new Error('Persistent Stream ID or Session ID is missing after initialization');
+    }
+
+    await prepareForStreaming();
+
+    logger.info('Connection reinitialized successfully');
+    logger.debug(`New Persistent Stream ID: ${persistentStreamId}, New Persistent Session ID: ${persistentSessionId}`);
+    reconnectAttempts = 0; // Reset reconnect attempts on successful connection
+    connectionState = ConnectionState.CONNECTED;
+  } catch (error) {
+    logger.error('Error during reinitialization:', error);
+    showErrorMessage('Failed to reconnect. Please refresh the page.');
+    connectionState = ConnectionState.DISCONNECTED;
+  }
+}
+
+async function cleanupOldStream() {
+  logger.debug('Cleaning up old stream...');
+
+  try {
+    if (peerConnection) {
+      peerConnection.close();
+    }
+
+    if (pcDataChannel) {
+      pcDataChannel.close();
+    }
+
+    // Stop all tracks in the streamVideoElement
+    if (streamVideoElement && streamVideoElement.srcObject) {
+      streamVideoElement.srcObject.getTracks().forEach((track) => track.stop());
+    }
+
+    // Clear any ongoing intervals or timeouts
+    clearInterval(statsIntervalId);
+    clearTimeout(inactivityTimeout);
+    clearInterval(keepAliveInterval);
+
+    logger.debug('Old stream cleaned up successfully');
+  } catch (error) {
+    logger.error('Error cleaning up old stream:', error);
+  }
+}
+
+let connectionState = ConnectionState.DISCONNECTED;
+
+function setConnectionState(state) {
+  connectionState = state;
+}
+
+export {
+  initializePersistentStream,
+  destroyPersistentStream,
+  reinitializePersistentStream,
+  createNewPersistentStream,
+  backgroundReconnect,
+  createPeerConnection,
+  onIceGatheringStateChange,
+  onIceCandidate,
+  onIceConnectionStateChange,
+  onConnectionStateChange,
+  onSignalingStateChange,
+  onTrack,
+  startConnectionHealthCheck,
+  attemptReconnect,
+  stopAllStreams,
+  closePC,
+  fetchWithRetries,
+  initializeConnection,
+  reinitializeConnection,
+  cleanupOldStream,
+  ConnectionState,
+  connectionState,
+  setConnectionState,
+};

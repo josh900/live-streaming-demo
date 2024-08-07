@@ -1,5 +1,36 @@
-import { ConnectionState, initializePersistentStream, destroyPersistentStream, reinitializePersistentStream, createNewPersistentStream, backgroundReconnect, createPeerConnection, onIceGatheringStateChange, onIceCandidate, onIceConnectionStateChange, onConnectionStateChange, onSignalingStateChange, onTrack, startConnectionHealthCheck, attemptReconnect, stopAllStreams, closePC, fetchWithRetries, initializeConnection, reinitializeConnection, cleanupOldStream, setConnectionState } from './connection-manager.js';
-import { initializeTransitionCanvas, smoothTransition, getVideoElements, onVideoStatusChange, setStreamVideoElement, playIdleVideo, prepareForStreaming } from './video-manager.js';
+import {
+  ConnectionState,
+  initializePersistentStream,
+  destroyPersistentStream,
+  reinitializePersistentStream,
+  createNewPersistentStream,
+  backgroundReconnect,
+  createPeerConnection,
+  onIceGatheringStateChange,
+  onIceCandidate,
+  onIceConnectionStateChange,
+  onConnectionStateChange,
+  onSignalingStateChange,
+  onTrack,
+  startConnectionHealthCheck,
+  attemptReconnect,
+  stopAllStreams,
+  closePC,
+  fetchWithRetries,
+  initializeConnection,
+  reinitializeConnection,
+  cleanupOldStream,
+  setConnectionState,
+} from './connection-manager.js';
+import {
+  initializeTransitionCanvas,
+  smoothTransition,
+  getVideoElements,
+  onVideoStatusChange,
+  setStreamVideoElement,
+  playIdleVideo,
+  prepareForStreaming,
+} from './video-manager.js';
 import logger from './logger.js';
 
 import DID_API from './api.js';
@@ -14,7 +45,6 @@ let isAvatarSpeaking = false;
 let autoSpeakInProgress = false;
 let isRecording = false;
 let autoSpeakMode = true;
-
 
 let idleVideoElement;
 let streamVideoElement;
@@ -514,8 +544,6 @@ function handleTextInput(text) {
 
   sendChatToGroq();
 }
-
-
 
 async function startStreaming(assistantReply) {
   try {
