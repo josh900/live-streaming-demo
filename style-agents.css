@@ -170,6 +170,23 @@ select {
   cursor: pointer;
 }
 
+#push-to-talk-button {
+  transition: background-color 0.2s ease;
+}
+
+#push-to-talk-button:active {
+  background-color: #ff4081;
+}
+
+.recording-indicator {
+  display: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: red;
+  margin-left: 10px;
+}
+
 #text-input-controls {
   display: flex;
   align-items: center;
