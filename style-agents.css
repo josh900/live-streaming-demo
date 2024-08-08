@@ -418,3 +418,11 @@ body {
   #video-wrapper {
   }
 }
+
+#push-to-talk-wrapper {
+  margin-top: 10px;
+}
+
+#push-to-talk-wrapper.hidden {
+  display: none;
+}
