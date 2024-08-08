@@ -37,19 +37,21 @@ export async function prepareForPushToTalk() {
       sample_rate: audioContext.sampleRate,
     };
 
-    deepgramConnection = await deepgramClient.listen.live(deepgramOptions);
+    if (!deepgramConnection || deepgramConnection.getReadyState() !== WebSocket.OPEN) {
+      deepgramConnection = await deepgramClient.listen.live(deepgramOptions);
 
-    deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
-      logger.debug('Deepgram WebSocket Connection opened for Push to Talk');
-    });
+      deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
+        logger.debug('Deepgram WebSocket Connection opened for Push to Talk');
+      });
 
-    deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
-      handlePushToTalkTranscription(data);
-    });
+      deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
+        handlePushToTalkTranscription(data);
+      });
 
-    deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
-      logger.error('Deepgram error in Push to Talk mode:', err);
-    });
+      deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
+        logger.error('Deepgram error in Push to Talk mode:', err);
+      });
+    }
 
     updatePushToTalkUI(true);
   } catch (error) {
@@ -60,13 +62,15 @@ export async function prepareForPushToTalk() {
 }
 
 export function cleanupPushToTalk() {
+  if (audioContext) {
+    audioContext.close().catch(err => logger.error('Error closing AudioContext:', err));
+  }
   if (deepgramConnection) {
     deepgramConnection.finish();
   }
-  if (audioContext) {
-    audioContext.close();
-  }
-  audioWorkletNode = null;
+  isPushToTalkMode = false;
+  isPushToTalkActive = false;
+  pushToTalkTranscript = '';
 }
 
 export function startPushToTalk() {
