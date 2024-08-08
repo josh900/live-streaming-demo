@@ -170,26 +170,6 @@ select {
   cursor: pointer;
 }
 
-#push-to-talk-button:disabled {
-  background-color: #cccccc;
-  cursor: not-allowed;
-}
-
-#push-to-talk-button.active {
-  animation: pulse 1s infinite;
-}
-
-@keyframes pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.05); }
-  100% { transform: scale(1); }
-}
-
-#push-to-talk-toggle,
-#push-to-talk-button {
-  margin-left: 10px;
-}
-
 #text-input-controls {
   display: flex;
   align-items: center;
