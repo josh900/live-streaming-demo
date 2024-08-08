@@ -2149,21 +2149,26 @@ async function startRecording(pushToTalkMode = false) {
 
     logger.debug('Creating Deepgram connection with options:', deepgramOptions);
 
-    deepgramConnection = await deepgramClient.listen.live(deepgramOptions);
+    try {
+      deepgramConnection = await deepgramClient.listen.live(deepgramOptions);
 
-    deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
-      logger.debug('Deepgram WebSocket Connection opened');
-      startSendingAudioData();
-    });
+      deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
+        logger.debug('Deepgram WebSocket Connection opened');
+        startSendingAudioData();
+      });
 
-    deepgramConnection.addListener(LiveTranscriptionEvents.Close, () => {
-      logger.debug('Deepgram WebSocket connection closed');
-    });
+      deepgramConnection.addListener(LiveTranscriptionEvents.Close, () => {
+        logger.debug('Deepgram WebSocket connection closed');
+      });
 
-    deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
-      logger.debug('Received transcription:', JSON.stringify(data));
-      handleTranscription(data);
-    });
+      deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
+        logger.debug('Received transcription:', JSON.stringify(data));
+        handleTranscription(data);
+      });
+    } catch (error) {
+      logger.error('Error creating Deepgram connection:', error);
+      throw error;
+    }
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
       logger.error('Deepgram error:', err);
