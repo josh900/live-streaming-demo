@@ -92,14 +92,6 @@ button#destroy-button {
   background-color: #f44336;
 }
 
-#speak-button.active {
-  background-color: #ff4500;
-}
-
-#mode-toggle {
-  margin-left: 10px;
-}
-
 #start-button {
   padding: 12px 24px;
   font-size: 18px;
