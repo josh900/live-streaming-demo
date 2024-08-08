@@ -39,6 +39,8 @@ let isDebugMode = false;
 let isTransitioning = false;
 let lastVideoStatus = null;
 let isCurrentlyStreaming = false;
+let isPushToTalkMode = false;
+let isPushToTalkActive = false;
 let reconnectAttempts = 10;
 let persistentStreamId = null;
 let persistentSessionId = null;
@@ -2098,7 +2100,7 @@ function handleTranscription(data) {
   }
 }
 
-async function startRecording() {
+async function startRecording(pushToTalkMode = false) {
   if (isRecording) {
     logger.warn('Recording is already in progress. Stopping current recording.');
     await stopRecording();
@@ -2136,11 +2138,14 @@ async function startRecording() {
       interim_results: true,
       utterance_end_ms: 2500,
       punctuate: true,
-      // endpointing: 300,
-      vad_events: true,
       encoding: 'linear16',
       sample_rate: audioContext.sampleRate,
     };
+
+    if (!pushToTalkMode) {
+      deepgramOptions.utterance_end_ms = 2500;
+      deepgramOptions.vad_events = true;
+    }
 
     logger.debug('Creating Deepgram connection with options:', deepgramOptions);
 
@@ -2158,11 +2163,6 @@ async function startRecording() {
     deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
       logger.debug('Received transcription:', JSON.stringify(data));
       handleTranscription(data);
-    });
-
-    deepgramConnection.addListener(LiveTranscriptionEvents.UtteranceEnd, (data) => {
-      logger.debug('Utterance end event received:', data);
-      handleUtteranceEnd(data);
     });
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
@@ -2192,6 +2192,52 @@ async function startRecording() {
   }
 }
 
+async function startPushToTalkRecording() {
+  if (!isPushToTalkMode || isPushToTalkActive) return;
+
+  isPushToTalkActive = true;
+  logger.debug('Starting Push to Talk recording');
+  await startRecording(true);
+}
+
+async function stopPushToTalkRecording() {
+  if (!isPushToTalkMode || !isPushToTalkActive) return;
+
+  isPushToTalkActive = false;
+  logger.debug('Stopping Push to Talk recording');
+  await stopRecording();
+
+  if (currentUtterance.trim()) {
+    updateTranscript(currentUtterance.trim(), true);
+    chatHistory.push({
+      role: 'user',
+      content: currentUtterance.trim(),
+    });
+    sendChatToGroq();
+    currentUtterance = '';
+  }
+}
+
+function togglePushToTalkMode() {
+  isPushToTalkMode = !isPushToTalkMode;
+  const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
+  const pushToTalkButton = document.getElementById('push-to-talk-button');
+  const autoSpeakToggle = document.getElementById('auto-speak-toggle');
+
+  pushToTalkToggle.textContent = `Push to Talk: ${isPushToTalkMode ? 'On' : 'Off'}`;
+  pushToTalkButton.disabled = !isPushToTalkMode;
+
+  if (isPushToTalkMode) {
+    autoSpeakToggle.textContent = 'Auto-Speak: Off';
+    autoSpeakMode = false;
+    if (isRecording) {
+      stopRecording();
+    }
+  }
+
+  logger.debug(`Push to Talk mode ${isPushToTalkMode ? 'enabled' : 'disabled'}`);
+}
+
 function handleDeepgramError(err) {
   logger.error('Deepgram error:', err);
   isRecording = false;
@@ -2211,22 +2257,6 @@ function handleDeepgramError(err) {
     audioContext.close().catch((closeError) => {
       logger.warn('Error while closing AudioContext:', closeError);
     });
-  }
-}
-
-function handleUtteranceEnd(data) {
-  if (!isRecording) return;
-
-  logger.debug('Utterance end detected:', data);
-  if (currentUtterance.trim()) {
-    updateTranscript(currentUtterance.trim(), true);
-    chatHistory.push({
-      role: 'user',
-      content: currentUtterance.trim(),
-    });
-    sendChatToGroq();
-    currentUtterance = '';
-    interimMessageAdded = false;
   }
 }
 
@@ -2250,6 +2280,14 @@ async function stopRecording() {
     startButton.textContent = 'Speak';
 
     logger.debug('Recording and transcription stopped');
+  const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
+  const pushToTalkButton = document.getElementById('push-to-talk-button');
+
+  pushToTalkToggle.addEventListener('click', togglePushToTalkMode);
+  pushToTalkButton.addEventListener('mousedown', startPushToTalkRecording);
+  pushToTalkButton.addEventListener('mouseup', stopPushToTalkRecording);
+  pushToTalkButton.addEventListener('mouseleave', stopPushToTalkRecording);
+
   }
 }
 
@@ -2357,12 +2395,21 @@ function toggleAutoSpeak() {
   autoSpeakMode = !autoSpeakMode;
   const toggleButton = document.getElementById('auto-speak-toggle');
   const startButton = document.getElementById('start-button');
+  const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
+  const pushToTalkButton = document.getElementById('push-to-talk-button');
+
   toggleButton.textContent = `Auto-Speak: ${autoSpeakMode ? 'On' : 'Off'}`;
   if (autoSpeakMode) {
     startButton.textContent = 'Stop';
     if (!isRecording) {
       startRecording();
     }
+    // Disable Push to Talk mode when Auto-Speak is enabled
+    if (isPushToTalkMode) {
+      togglePushToTalkMode();
+    }
+    pushToTalkToggle.disabled = true;
+    pushToTalkButton.disabled = true;
   } else {
     startButton.textContent = isRecording ? 'Stop' : 'Speak';
     if (isRecording) {
