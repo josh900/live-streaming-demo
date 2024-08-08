@@ -92,22 +92,6 @@ button#destroy-button {
   background-color: #f44336;
 }
 
-#push-to-talk-button {
-  padding: 12px 24px;
-  font-size: 18px;
-  margin-right: 10px;
-  background-color: #4caf50;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-}
-
-#push-to-talk-button.active {
-  background-color: #45a049;
-  box-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
-}
-
 #start-button {
   padding: 12px 24px;
   font-size: 18px;
