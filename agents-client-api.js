@@ -2290,8 +2290,7 @@ async function stopRecording() {
 
   }
 }
-  }
-}
+
 
 function togglePushToTalkMode() {
   isPushToTalkMode = !isPushToTalkMode;
