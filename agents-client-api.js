@@ -2192,24 +2192,6 @@ async function startRecording(pushToTalkMode = false) {
   }
 }
 
-async function stopPushToTalkRecording() {
-  if (!isPushToTalkMode || !isPushToTalkActive) return;
-
-  isPushToTalkActive = false;
-  logger.debug('Stopping Push to Talk recording');
-  await stopRecording();
-
-  if (currentUtterance.trim()) {
-    updateTranscript(currentUtterance.trim(), true);
-    chatHistory.push({
-      role: 'user',
-      content: currentUtterance.trim(),
-    });
-    sendChatToGroq();
-    currentUtterance = '';
-  }
-}
-
 function handleDeepgramError(err) {
   logger.error('Deepgram error:', err);
   isRecording = false;
