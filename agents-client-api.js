@@ -2192,14 +2192,6 @@ async function startRecording(pushToTalkMode = false) {
   }
 }
 
-async function startPushToTalkRecording() {
-  if (!isPushToTalkMode || isPushToTalkActive) return;
-
-  isPushToTalkActive = true;
-  logger.debug('Starting Push to Talk recording');
-  await startRecording(true);
-}
-
 async function stopPushToTalkRecording() {
   if (!isPushToTalkMode || !isPushToTalkActive) return;
 
