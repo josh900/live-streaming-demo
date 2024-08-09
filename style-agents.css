@@ -196,32 +196,6 @@ select {
   background-color: #4caf50;
 }
 
-#push-to-talk-toggle,
-#push-to-talk-button {
-  margin-left: 10px;
-  padding: 10px 20px;
-  font-size: 16px;
-  background-color: #7459fe;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-}
-
-#push-to-talk-toggle:hover,
-#push-to-talk-button:hover {
-  background-color: #5a3dd3;
-}
-
-#push-to-talk-button:disabled {
-  background-color: #cccccc;
-  cursor: not-allowed;
-}
-
-#push-to-talk-button:active:not(:disabled) {
-  background-color: #4caf50;
-}
-
 #text-input-controls {
   display: flex;
   align-items: center;
