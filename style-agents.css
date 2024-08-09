@@ -259,62 +259,6 @@ select {
   background-color: #45a049;
 }
 
-#push-to-talk-toggle,
-#push-to-talk-button {
-  margin-left: 10px;
-  padding: 10px 20px;
-  font-size: 16px;
-  background-color: #7459fe;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-}
-
-#push-to-talk-toggle:hover,
-#push-to-talk-button:hover {
-  background-color: #5a3dd3;
-}
-
-#push-to-talk-button:disabled {
-  background-color: #cccccc;
-  cursor: not-allowed;
-}
-
-#push-to-talk-button:active:not(:disabled) {
-  background-color: #4caf50;
-}
-
-#text-input-controls {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  margin-top: 10px;
-}
-
-#text-input {
-  flex-grow: 1;
-  padding: 10px;
-  font-size: 16px;
-  border: 1px solid #ccc;
-  border-radius: 5px;
-  margin-right: 10px;
-}
-
-#send-text-button {
-  padding: 10px 20px;
-  font-size: 16px;
-  background-color: #4caf50;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-}
-
-#send-text-button:hover {
-  background-color: #45a049;
-}
-
 #avatar-select:focus {
   outline: none;
   border-color: #7459fe;
