@@ -2234,17 +2234,15 @@ async function stopRecording() {
     startButton.textContent = 'Speak';
 
     logger.debug('Recording and transcription stopped');
-  const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
-  const pushToTalkButton = document.getElementById('push-to-talk-button');
+    const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
+    const pushToTalkButton = document.getElementById('push-to-talk-button');
 
-  pushToTalkToggle.addEventListener('click', togglePushToTalkMode);
-  pushToTalkButton.addEventListener('mousedown', startPushToTalkRecording);
-  pushToTalkButton.addEventListener('mouseup', stopPushToTalkRecording);
-  pushToTalkButton.addEventListener('mouseleave', stopPushToTalkRecording);
-
+    pushToTalkToggle.addEventListener('click', togglePushToTalkMode);
+    pushToTalkButton.addEventListener('mousedown', startPushToTalkRecording);
+    pushToTalkButton.addEventListener('mouseup', stopPushToTalkRecording);
+    pushToTalkButton.addEventListener('mouseleave', stopPushToTalkRecording);
   }
 }
-
 
 function togglePushToTalkMode() {
   isPushToTalkMode = !isPushToTalkMode;
