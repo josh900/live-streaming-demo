@@ -2231,7 +2231,7 @@ async function stopRecording() {
     isRecording = false;
     autoSpeakInProgress = false;
     const startButton = document.getElementById('start-button');
-    startButton.textContent = 'Speak';
+    startButton.textContent = isPushToTalkMode ? 'Push to Talk' : 'Speak';
 
     logger.debug('Recording and transcription stopped');
   const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
@@ -2240,6 +2240,8 @@ async function stopRecording() {
   pushToTalkToggle.addEventListener('click', togglePushToTalkMode);
   pushToTalkButton.addEventListener('mousedown', startPushToTalkRecording);
   pushToTalkButton.addEventListener('mouseup', stopPushToTalkRecording);
+  pushToTalkButton.addEventListener('touchstart', startPushToTalkRecording);
+  pushToTalkButton.addEventListener('touchend', stopPushToTalkRecording);
   pushToTalkButton.addEventListener('mouseleave', stopPushToTalkRecording);
 
   }
@@ -2250,10 +2252,12 @@ function togglePushToTalkMode() {
   isPushToTalkMode = !isPushToTalkMode;
   const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
   const pushToTalkButton = document.getElementById('push-to-talk-button');
+  const startButton = document.getElementById('start-button');
   const autoSpeakToggle = document.getElementById('auto-speak-toggle');
 
   pushToTalkToggle.textContent = `Push to Talk: ${isPushToTalkMode ? 'On' : 'Off'}`;
   pushToTalkButton.disabled = !isPushToTalkMode;
+  startButton.textContent = isPushToTalkMode ? 'Push to Talk' : 'Speak';
 
   if (isPushToTalkMode) {
     autoSpeakToggle.textContent = 'Auto-Speak: Off';
@@ -2261,6 +2265,11 @@ function togglePushToTalkMode() {
     if (isRecording) {
       stopRecording();
     }
+    pushToTalkButton.style.display = 'inline-block';
+    startButton.style.display = 'none';
+  } else {
+    pushToTalkButton.style.display = 'none';
+    startButton.style.display = 'inline-block';
   }
 
   logger.debug(`Push to Talk mode ${isPushToTalkMode ? 'enabled' : 'disabled'}`);
@@ -2270,6 +2279,7 @@ async function startPushToTalkRecording() {
   if (!isPushToTalkMode || isPushToTalkActive) return;
 
   isPushToTalkActive = true;
+  const pushToTalkButton = document.getElementById('push-to-talk-button');
   logger.debug('Starting Push to Talk recording');
   await startRecording(true);
 }
@@ -2278,6 +2288,7 @@ async function stopPushToTalkRecording() {
   if (!isPushToTalkMode || !isPushToTalkActive) return;
 
   isPushToTalkActive = false;
+  const pushToTalkButton = document.getElementById('push-to-talk-button');
   logger.debug('Stopping Push to Talk recording');
   await stopRecording();
 
@@ -2299,6 +2310,8 @@ document.addEventListener('DOMContentLoaded', () => {
   pushToTalkToggle.addEventListener('click', togglePushToTalkMode);
   pushToTalkButton.addEventListener('mousedown', startPushToTalkRecording);
   pushToTalkButton.addEventListener('mouseup', stopPushToTalkRecording);
+  pushToTalkButton.addEventListener('touchstart', startPushToTalkRecording);
+  pushToTalkButton.addEventListener('touchend', stopPushToTalkRecording);
   pushToTalkButton.addEventListener('mouseleave', stopPushToTalkRecording);
 });
 
@@ -2408,6 +2421,7 @@ function toggleAutoSpeak() {
   const startButton = document.getElementById('start-button');
   const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
   const pushToTalkButton = document.getElementById('push-to-talk-button');
+  const pushToTalkButtonContainer = document.getElementById('push-to-talk-button-container');
 
   toggleButton.textContent = `Auto-Speak: ${autoSpeakMode ? 'On' : 'Off'}`;
   if (autoSpeakMode) {
@@ -2419,13 +2433,15 @@ function toggleAutoSpeak() {
     if (isPushToTalkMode) {
       togglePushToTalkMode();
     }
-    pushToTalkToggle.disabled = true;
-    pushToTalkButton.disabled = true;
+    pushToTalkToggle.style.display = 'none';
+    pushToTalkButtonContainer.style.display = 'none';
   } else {
     startButton.textContent = isRecording ? 'Stop' : 'Speak';
     if (isRecording) {
       stopRecording();
     }
+    pushToTalkToggle.style.display = 'inline-block';
+    pushToTalkButtonContainer.style.display = 'inline-block';
   }
 }
 
@@ -2548,6 +2564,7 @@ startButton.onclick = async () => {
   logger.info('Start button clicked. Current state:', isRecording ? 'Recording' : 'Not recording');
   if (!isRecording) {
     try {
+      if (isPushToTalkMode) return; // Don't start recording if in Push to Talk mode
       await startRecording();
     } catch (error) {
       logger.error('Failed to start recording:', error);
@@ -2557,6 +2574,80 @@ startButton.onclick = async () => {
     await stopRecording();
   }
 };
+
+const pushToTalkButton = document.getElementById('push-to-talk-button');
+
+// Mouse events for desktop
+pushToTalkButton.addEventListener('mousedown', async (event) => {
+  event.preventDefault(); // Prevent default behavior
+  if (isPushToTalkMode && !isPushToTalkActive) {
+    try {
+      await startPushToTalkRecording();
+      pushToTalkButton.classList.add('active');
+    } catch (error) {
+      logger.error('Failed to start push-to-talk recording:', error);
+      showErrorMessage('Failed to start recording. Please try again.');
+    }
+  }
+});
+
+pushToTalkButton.addEventListener('mouseup', async (event) => {
+  event.preventDefault(); // Prevent default behavior
+  if (isPushToTalkMode && isPushToTalkActive) {
+    await stopPushToTalkRecording();
+    pushToTalkButton.classList.remove('active');
+  }
+});
+
+pushToTalkButton.addEventListener('mouseleave', async (event) => {
+  event.preventDefault(); // Prevent default behavior
+  if (isPushToTalkMode && isPushToTalkActive) {
+    await stopPushToTalkRecording();
+    pushToTalkButton.classList.remove('active');
+  }
+});
+
+// Touch events for mobile
+pushToTalkButton.addEventListener('touchstart', async (event) => {
+  event.preventDefault(); // Prevent default behavior
+  if (isPushToTalkMode && !isPushToTalkActive) {
+    try {
+      await startPushToTalkRecording();
+      pushToTalkButton.classList.add('active');
+    } catch (error) {
+      logger.error('Failed to start push-to-talk recording:', error);
+      showErrorMessage('Failed to start recording. Please try again.');
+    }
+  }
+});
+
+pushToTalkButton.addEventListener('touchend', async (event) => {
+  event.preventDefault(); // Prevent default behavior
+  if (isPushToTalkMode && isPushToTalkActive) {
+    await stopPushToTalkRecording();
+    pushToTalkButton.classList.remove('active');
+  }
+});
+
+// Prevent context menu on long press for mobile devices
+pushToTalkButton.addEventListener('contextmenu', (event) => {
+  event.preventDefault();
+});
+
+// Update UI when switching between modes
+function updateUIForMode() {
+  const startButton = document.getElementById('start-button');
+  const pushToTalkButton = document.getElementById('push-to-talk-button');
+  const pushToTalkButtonContainer = document.getElementById('push-to-talk-button-container');
+
+  if (isPushToTalkMode) {
+    startButton.style.display = 'none';
+    pushToTalkButtonContainer.style.display = 'inline-block';
+  } else {
+    startButton.style.display = 'inline-block';
+    pushToTalkButtonContainer.style.display = 'none';
+  }
+}
 
 const saveAvatarButton = document.getElementById('save-avatar-button');
 saveAvatarButton.onclick = saveAvatar;
