@@ -68,6 +68,7 @@ let lastConnectionTime = Date.now();
 
 let connectionState = ConnectionState.DISCONNECTED;
 
+
 export function setLogLevel(level) {
   logger.setLogLevel(level);
   isDebugMode = level === 'DEBUG';
