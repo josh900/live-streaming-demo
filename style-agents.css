@@ -128,23 +128,6 @@ h4 {
   font-size: 16px;
 }
 
-#push-to-talk-toggle, #push-to-talk-button {
-  padding: 10px 20px;
-  font-size: 16px;
-  margin-left: 10px;
-}
-
-#push-to-talk-button {
-  display: block;
-  margin-top: 10px;
-  width: 100%;
-}
-
-#push-to-talk-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 #status {
   margin-bottom: 20px;
 }
