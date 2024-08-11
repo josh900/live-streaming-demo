@@ -55,15 +55,14 @@
   color: grey;
 }
 
-#left-column, #right-column {
+#left-column,
+#right-column {
   width: 48%;
 }
 
 body * {
   font-family: 'Mulish', sans-serif;
 }
-
-
 
 #buttons {
   clear: both;
@@ -86,7 +85,7 @@ button:hover {
 }
 
 button#connect-button {
-  background-color: #4CAF50;
+  background-color: #4caf50;
 }
 
 button#destroy-button {
@@ -104,7 +103,8 @@ h4 {
   margin-bottom: 10px;
 }
 
-#destroy-button, #connect-button {
+#destroy-button,
+#connect-button {
   display: inline-block;
 }
 
@@ -149,7 +149,6 @@ h4 {
   padding-bottom: 10px;
 }
 
-
 .chat {
   width: 400px;
 }
@@ -190,7 +189,7 @@ select {
 #send-text-button {
   padding: 10px 20px;
   font-size: 16px;
-  background-color: #4CAF50;
+  background-color: #4caf50;
   color: white;
   border: none;
   border-radius: 5px;
@@ -205,8 +204,6 @@ select {
   outline: none;
   border-color: #7459fe;
 }
-
-
 
 #idle-video-element {
   z-index: 1;
@@ -261,8 +258,12 @@ select {
 }
 
 @keyframes fadeInOut {
-  0% { opacity: 0; }
-  100% { opacity: 1; }
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 
 .error-message {
@@ -293,7 +294,7 @@ select {
   width: 100%;
   height: 100%;
   overflow: auto;
-  background-color: rgba(0,0,0,0.4);
+  background-color: rgba(0, 0, 0, 0.4);
 }
 
 .modal-content {
@@ -328,10 +329,6 @@ body {
   background-color: #e0e0e0;
 }
 
-
-
-
-
 #content {
   flex: 1;
   display: flex;
@@ -340,11 +337,9 @@ body {
   margin: 0 5%;
   padding: 20px;
 }
- 
 
 #idle-video-element,
-#stream-video-element
-{
+#stream-video-element {
   position: absolute;
   top: 0;
   left: 0;
@@ -352,8 +347,8 @@ body {
   height: 100%;
   object-fit: cover;
   transition: opacity 0.1s ease-in-out;
-  background: transparent; 
-/*
+  background: transparent;
+  /*
   max-width: 550px;
   max-height: 550px;
   aspect-ratio: 1 / 1;
@@ -361,16 +356,11 @@ body {
   overflow: hidden;
   border-radius: 13%;
   */
-
-
 }
-
-
 
 .animated {
   transition: opacity 0.1s ease-in-out;
 }
-
 
 #video-wrapper {
   position: relative;
@@ -381,30 +371,27 @@ body {
   margin: 0 auto;
   overflow: hidden;
   border-radius: 13%;
-  background: transparent; 
-
+  background: transparent;
 }
 
 #video-wrapper::before {
-  content: "";
+  content: '';
   display: block;
   padding-top: 100%;
 }
 
-
 #preload-video-element {
   visibility: hidden;
-  background: transparent; 
+  background: transparent;
 }
-
-
 
 @media (max-width: 1024px) {
   #content {
     flex-direction: column;
   }
 
-  #left-column, #right-column {
+  #left-column,
+  #right-column {
     width: 100%;
   }
 
