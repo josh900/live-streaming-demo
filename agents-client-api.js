@@ -428,7 +428,7 @@ async function prepareForStreaming() {
   streamVideoElement.style.display = 'none';
 
   idleVideoElement.style.display = 'block';
-  idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e));
+  idleVideoElement.play().catch((e) => logger.error('Error playing idle video:', e));
 
   logger.debug('Prepared for streaming');
 }
@@ -453,7 +453,7 @@ function initializeTransitionCanvas() {
     maxHeight: '550px',
     zIndex: '3',
     borderRadius: '13%',
-    objectFit: 'cover'
+    objectFit: 'cover',
   });
 
   videoWrapper.appendChild(transitionCanvas);
@@ -462,15 +462,11 @@ function initializeTransitionCanvas() {
     const videoWrapper = document.querySelector('#video-wrapper');
     const rect = videoWrapper.getBoundingClientRect();
     const size = Math.min(rect.width, rect.height, 550);
-  
+
     transitionCanvas.width = size;
     transitionCanvas.height = size;
   });
-
-
 }
-
-
 
 async function destroyConnection() {
   if (streamId) {
@@ -552,7 +548,6 @@ function smoothTransition(toStreaming, duration = 250) {
       // Update the opacity of the video elements
       streamVideoElement.style.opacity = toStreaming ? progress.toString() : (1 - progress).toString();
       idleVideoElement.style.opacity = toStreaming ? (1 - progress).toString() : progress.toString();
-
     } catch (error) {
       logger.error('Error during transition animation:', error);
       isTransitioning = false;
@@ -604,7 +599,7 @@ function getStatusLabels() {
     ice: document.getElementById('ice-status-label'),
     iceGathering: document.getElementById('ice-gathering-status-label'),
     signaling: document.getElementById('signaling-status-label'),
-    streaming: document.getElementById('streaming-status-label')
+    streaming: document.getElementById('streaming-status-label'),
   };
 }
 
@@ -702,7 +697,7 @@ async function initializePersistentStream() {
       },
       body: JSON.stringify({
         source_url: avatars[currentAvatar].imageUrl,
-        driver_url: "bank://lively/driver-06",
+        driver_url: 'bank://lively/driver-06',
         stream_warmup: true,
         config: {
           stitch: true,
@@ -716,12 +711,12 @@ async function initializePersistentStream() {
             expressions: [
               {
                 start_frame: 0,
-                expression: "neutral",
-                intensity: 1
-              }
-            ]
-          }
-        }
+                expression: 'neutral',
+                intensity: 1,
+              },
+            ],
+          },
+        },
       }),
     });
 
@@ -741,7 +736,7 @@ async function initializePersistentStream() {
       throw e;
     }
 
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
     const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/sdp`, {
       method: 'POST',
@@ -1003,7 +998,7 @@ async function saveAvatar() {
   try {
     const response = await fetch('/avatar', {
       method: 'POST',
-      body: formData
+      body: formData,
     });
 
     const reader = response.body.getReader();
@@ -1188,7 +1183,7 @@ function onIceCandidate(event) {
         sdpMLineIndex,
         session_id: persistentSessionId,
       }),
-    }).catch(error => {
+    }).catch((error) => {
       logger.error('Error sending ICE candidate:', error);
     });
   } else {
@@ -1202,7 +1197,7 @@ function onIceCandidate(event) {
       body: JSON.stringify({
         session_id: persistentSessionId,
       }),
-    }).catch(error => {
+    }).catch((error) => {
       logger.error('Error sending null ICE candidate:', error);
     });
   }
@@ -1236,7 +1231,6 @@ function scheduleReconnect() {
   reconnectAttempts++;
 }
 
-
 async function attemptReconnect() {
   logger.debug('Attempting to reconnect...');
   try {
@@ -1247,7 +1241,6 @@ async function attemptReconnect() {
     scheduleReconnect();
   }
 }
-
 
 function onConnectionStateChange() {
   const { peer: peerStatusLabel } = getStatusLabels();
@@ -1329,9 +1322,12 @@ function setStreamVideoElement(stream) {
 
   streamVideoElement.onloadedmetadata = () => {
     logger.debug('Stream video metadata loaded');
-    streamVideoElement.play().then(() => {
-      logger.debug('Stream video playback started');
-    }).catch(e => logger.error('Error playing stream video:', e));
+    streamVideoElement
+      .play()
+      .then(() => {
+        logger.debug('Stream video playback started');
+      })
+      .catch((e) => logger.error('Error playing stream video:', e));
   };
 
   streamVideoElement.oncanplay = () => {
@@ -1413,7 +1409,7 @@ function onTrack(event) {
               bytesReceived: report.bytesReceived,
               lastBytesReceived,
               videoIsPlaying,
-              videoStatusChanged
+              videoStatusChanged,
             });
 
             if (videoStatusChanged) {
@@ -1433,7 +1429,7 @@ function onTrack(event) {
     } else {
       logger.debug('Peer connection not ready for stats.');
     }
-  }, 500);  // Check every 500ms
+  }, 500); // Check every 500ms
 
   if (event.streams && event.streams.length > 0) {
     const stream = event.streams[0];
@@ -1476,7 +1472,7 @@ function playIdleVideo() {
     logger.error(`Error loading idle video for ${currentAvatar || 'default'}:`, e);
   };
 
-  idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e));
+  idleVideoElement.play().catch((e) => logger.error('Error playing idle video:', e));
 }
 
 function stopAllStreams() {
@@ -1554,7 +1550,7 @@ async function initializeConnection() {
       },
       body: JSON.stringify({
         source_url: avatars[currentAvatar].imageUrl,
-        driver_url: "bank://lively/driver-06",
+        driver_url: 'bank://lively/driver-06',
         stream_warmup: true,
         output_resolution: 512,
         config: {
@@ -1569,12 +1565,12 @@ async function initializeConnection() {
             expressions: [
               {
                 start_frame: 0,
-                expression: "neutral",
-                intensity: 1
-              }
-            ]
-          }
-        }
+                expression: 'neutral',
+                intensity: 1,
+              },
+            ],
+          },
+        },
       }),
     });
 
@@ -1597,7 +1593,7 @@ async function initializeConnection() {
       throw e;
     }
 
-    await new Promise(resolve => setTimeout(resolve, 6000));
+    await new Promise((resolve) => setTimeout(resolve, 6000));
 
     const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
       method: 'POST',
@@ -1623,7 +1619,6 @@ async function initializeConnection() {
     isInitializing = false;
   }
 }
-
 
 async function startStreaming(assistantReply) {
   try {
@@ -1678,10 +1673,10 @@ async function startStreaming(assistantReply) {
             align_driver: true,
             align_expand_factor: 0.3,
             motion_factor: 0.7,
-            result_format: "mp4",
+            result_format: 'mp4',
           },
           session_id: persistentSessionId,
-          driver_url: "bank://lively/driver-06",
+          driver_url: 'bank://lively/driver-06',
           stream_warmup: true,
         }),
       });
@@ -1705,7 +1700,7 @@ async function startStreaming(assistantReply) {
 
           // Play the video as soon as it's ready
           streamVideoElement.oncanplay = () => {
-            streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
+            streamVideoElement.play().catch((e) => logger.error('Error playing stream video:', e));
           };
 
           // Ensure the streaming video is visible
@@ -1715,7 +1710,7 @@ async function startStreaming(assistantReply) {
           });
 
           // Wait for this chunk to finish playing before moving to the next
-          await new Promise(resolve => {
+          await new Promise((resolve) => {
             streamVideoElement.onended = resolve;
           });
         } else {
@@ -1728,7 +1723,6 @@ async function startStreaming(assistantReply) {
 
     // Switch back to idle video after all chunks have played
     smoothTransition(false);
-
   } catch (error) {
     logger.error('Error during streaming:', error);
     if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
@@ -1831,7 +1825,10 @@ function startSendingAudioData() {
         logger.error('Error sending audio data to Deepgram:', error);
       }
     } else {
-      logger.warn('Deepgram connection not open, cannot send audio data. ReadyState:', deepgramConnection ? deepgramConnection.getReadyState() : 'undefined');
+      logger.warn(
+        'Deepgram connection not open, cannot send audio data. ReadyState:',
+        deepgramConnection ? deepgramConnection.getReadyState() : 'undefined',
+      );
     }
   };
 
@@ -1893,16 +1890,16 @@ async function startRecording() {
     logger.debug('Media stream source connected to audio worklet node');
 
     const deepgramOptions = {
-      model: "nova-2",
-      language: "en-US",
+      model: 'nova-2',
+      language: 'en-US',
       smart_format: true,
       interim_results: true,
       utterance_end_ms: 2500,
       punctuate: true,
       // endpointing: 300,
       vad_events: true,
-      encoding: "linear16",
-      sample_rate: audioContext.sampleRate
+      encoding: 'linear16',
+      sample_rate: audioContext.sampleRate,
     };
 
     logger.debug('Creating Deepgram connection with options:', deepgramOptions);
@@ -1971,7 +1968,7 @@ function handleDeepgramError(err) {
   }
 
   if (audioContext) {
-    audioContext.close().catch(closeError => {
+    audioContext.close().catch((closeError) => {
       logger.warn('Error while closing AudioContext:', closeError);
     });
   }
@@ -2108,7 +2105,6 @@ async function sendChatToGroq() {
 
     // Start streaming the entire response
     await startStreaming(assistantReply);
-
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
     const msgHistory = document.getElementById('msgHistory');
@@ -2159,7 +2155,7 @@ async function reinitializeConnection() {
     currentUtterance = '';
 
     // Add a delay before initializing to avoid rapid successive calls
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
     await initializeConnection();
 
