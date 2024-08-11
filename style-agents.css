@@ -92,6 +92,25 @@ button#destroy-button {
   background-color: #f44336;
 }
 
+#push-to-talk-toggle,
+#push-to-talk-button {
+  margin-left: 10px;
+}
+
+#push-to-talk-button {
+  background-color: #2196F3;
+  transition: background-color 0.3s ease;
+}
+
+#push-to-talk-button:hover {
+  background-color: #1976D2;
+}
+
+#push-to-talk-button:disabled {
+  background-color: #BDBDBD;
+  cursor: not-allowed;
+}
+
 #start-button {
   padding: 12px 24px;
   font-size: 18px;
