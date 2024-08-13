@@ -1,33 +1,3 @@
-[2024-08-13 10:07:00] [DEBUG] Applying change type: append
-[2024-08-13 10:07:00] [DEBUG] Context before: ''
-[2024-08-13 10:07:00] [DEBUG] Context after: ''
-[2024-08-13 10:07:00] [DEBUG] Content to insert/replace:
-[2024-08-13 10:07:00] [DEBUG]   
-[2024-08-13 10:07:00] [DEBUG]   #push-to-talk-toggle,
-[2024-08-13 10:07:00] [DEBUG]   #push-to-talk-button {
-[2024-08-13 10:07:00] [DEBUG]     margin-left: 10px;
-[2024-08-13 10:07:00] [DEBUG]   }
-[2024-08-13 10:07:00] [DEBUG]   
-[2024-08-13 10:07:00] [DEBUG]   #push-to-talk-button {
-[2024-08-13 10:07:00] [DEBUG]     background-color: #4CAF50;
-[2024-08-13 10:07:00] [DEBUG]     color: white;
-[2024-08-13 10:07:00] [DEBUG]     padding: 15px 25px;
-[2024-08-13 10:07:00] [DEBUG]     font-size: 18px;
-[2024-08-13 10:07:00] [DEBUG]     border: none;
-[2024-08-13 10:07:00] [DEBUG]     border-radius: 5px;
-[2024-08-13 10:07:00] [DEBUG]     cursor: pointer;
-[2024-08-13 10:07:00] [DEBUG]     transition: background-color 0.3s;
-[2024-08-13 10:07:00] [DEBUG]   }
-[2024-08-13 10:07:00] [DEBUG]   
-[2024-08-13 10:07:00] [DEBUG]   #push-to-talk-button:hover {
-[2024-08-13 10:07:00] [DEBUG]     background-color: #45a049;
-[2024-08-13 10:07:00] [DEBUG]   }
-[2024-08-13 10:07:00] [DEBUG]   
-[2024-08-13 10:07:00] [DEBUG]   #push-to-talk-button:disabled {
-[2024-08-13 10:07:00] [DEBUG]     background-color: #cccccc;
-[2024-08-13 10:07:00] [DEBUG]     cursor: not-allowed;
-[2024-08-13 10:07:00] [DEBUG]   }
-[2024-08-13 10:07:00] [DEBUG] Appending content to the end of the file
 .peerConnectionState-new {
   color: cornflowerblue;
 }
@@ -447,29 +417,4 @@ body {
 @media (max-width: 480px) {
   #video-wrapper {
   }
-}
-
-#push-to-talk-toggle,
-#push-to-talk-button {
-  margin-left: 10px;
-}
-
-#push-to-talk-button {
-  background-color: #4CAF50;
-  color: white;
-  padding: 15px 25px;
-  font-size: 18px;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  transition: background-color 0.3s;
-}
-
-#push-to-talk-button:hover {
-  background-color: #45a049;
-}
-
-#push-to-talk-button:disabled {
-  background-color: #cccccc;
-  cursor: not-allowed;
 }
