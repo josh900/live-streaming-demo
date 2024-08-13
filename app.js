@@ -59,8 +59,7 @@ app.post('/avatar', upload.single('image'), async (req, res) => {
     });
     res.write('data: {"status": "processing"}\n\n');
 
-    const avatar = await createOrUpdateAvatar(name, req.file, voiceId || 'en-US-GuyNeural');
-
+const avatar = await createOrUpdateAvatar(name, req.file, voiceId || 'en-US-GuyNeural', req.body.voiceSpeed || 1);
     res.write('data: {"status": "completed", "avatar": ' + JSON.stringify(avatar) + '}\n\n');
     res.end();
   } catch (error) {
