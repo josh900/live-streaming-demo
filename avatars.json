@@ -3,8 +3,8 @@
     "name": "Guy5",
     "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Guy5/image.png",
     "voiceId": "en-US-GuyNeural",
-"silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Guy5/silent_video.mp4",
-    "voiceSpeed": 1
+    "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Guy5/silent_video.mp4"
+  },
   "JoshM1": {
     "name": "JoshM1",
     "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/JoshM1/image.png",
