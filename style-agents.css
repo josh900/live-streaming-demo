@@ -1,3 +1,7 @@
+[2024-08-13 10:41:49] [DEBUG] Applying change type: append
+[2024-08-13 10:41:49] [DEBUG] Context before: ''
+[2024-08-13 10:41:49] [DEBUG] Context after: ''
+[2024-08-13 10:41:49] [DEBUG] Appending content to the end of the file
 .peerConnectionState-new {
   color: cornflowerblue;
 }
@@ -417,4 +421,30 @@ body {
 @media (max-width: 480px) {
   #video-wrapper {
   }
+}
+
+#push-to-talk-toggle,
+#push-to-talk-button {
+  margin-left: 10px;
+}
+
+#push-to-talk-button {
+  display: block;
+  margin-top: 10px;
+  padding: 15px 30px;
+  font-size: 18px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+#push-to-talk-button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+#push-to-talk-button:active:not(:disabled) {
+  background-color: #45a049;
 }
