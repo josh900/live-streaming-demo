@@ -55,9 +55,6 @@ const INITIAL_RECONNECT_DELAY = 2000; // 1 second
 const MAX_RECONNECT_DELAY = 90000; // 30 seconds
 let autoSpeakInProgress = false;
 
-
-let isPushToTalkMode = false;
-let isPushToTalkActive = false;
 const ConnectionState = {
   DISCONNECTED: 'disconnected',
   CONNECTING: 'connecting',
@@ -1989,14 +1986,6 @@ export function toggleSimpleMode() {
   const videoWrapper = document.getElementById('video-wrapper');
   const simpleModeButton = document.getElementById('simple-mode-button');
   const header = document.querySelector('.header');
-
-  const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
-  const pushToTalkButton = document.getElementById('push-to-talk-button');
-  
-  pushToTalkToggle.addEventListener('click', togglePushToTalk);
-  pushToTalkButton.addEventListener('mousedown', startPushToTalk);
-  pushToTalkButton.addEventListener('mouseup', endPushToTalk);
-  pushToTalkButton.addEventListener('mouseleave', endPushToTalk);
   const autoSpeakToggle = document.getElementById('auto-speak-toggle');
   const startButton = document.getElementById('start-button');
 
@@ -2087,29 +2076,18 @@ function startSendingAudioData() {
 }
 
 function handleTranscription(data) {
-  if (!isRecording || (isPushToTalkMode && !isPushToTalkActive)) return;
+  if (!isRecording) return;
 
   const transcript = data.channel.alternatives[0].transcript;
-  if (data.is_final || isPushToTalkMode) {
+  if (data.is_final) {
     logger.debug('Final transcript:', transcript);
     if (transcript.trim()) {
       currentUtterance += transcript + ' ';
       updateTranscript(currentUtterance.trim(), true);
-      if (!isPushToTalkMode) {
-        chatHistory.push({
-          role: 'user',
-          content: currentUtterance.trim(),
-        });
-        sendChatToGroq();
-        currentUtterance = '';
-        interimMessageAdded = false;
-      }
-    }
-  } else {
-    logger.debug('Interim transcript:', transcript);
-    updateTranscript(currentUtterance + transcript, false);
-  }
-}
+      chatHistory.push({
+        role: 'user',
+        content: currentUtterance.trim(),
+      });
       sendChatToGroq();
     }
     currentUtterance = '';
@@ -2120,11 +2098,8 @@ function handleTranscription(data) {
   }
 }
 
-async function startRecording(silent = false) {
+async function startRecording() {
   if (isRecording) {
-    if (!silent) {
-      logger.warn('Recording is already in progress. Stopping current recording.');
-    }
     logger.warn('Recording is already in progress. Stopping current recording.');
     await stopRecording();
     return;
@@ -2154,17 +2129,18 @@ async function startRecording(silent = false) {
     source.connect(audioWorkletNode);
     logger.debug('Media stream source connected to audio worklet node');
 
-const deepgramOptions = {
-    model: 'nova-2',
-    language: 'en-US',
-    smart_format: true,
-    interim_results: true,
-    utterance_end_ms: isPushToTalkMode ? null : 2500,
-    punctuate: true,
-    vad_events: !isPushToTalkMode,
-    encoding: 'linear16',
-    sample_rate: audioContext.sampleRate,
-  };
+    const deepgramOptions = {
+      model: 'nova-2',
+      language: 'en-US',
+      smart_format: true,
+      interim_results: true,
+      utterance_end_ms: 2500,
+      punctuate: true,
+      // endpointing: 300,
+      vad_events: true,
+      encoding: 'linear16',
+      sample_rate: audioContext.sampleRate,
+    };
 
     logger.debug('Creating Deepgram connection with options:', deepgramOptions);
 
@@ -2270,8 +2246,6 @@ async function stopRecording() {
 
     isRecording = false;
     autoSpeakInProgress = false;
-
-      isPushToTalkActive = false;
     const startButton = document.getElementById('start-button');
     startButton.textContent = 'Speak';
 
@@ -2369,13 +2343,6 @@ async function sendChatToGroq() {
 
     logger.debug('Assistant reply:', assistantReply);
 
-
-
-    // After the avatar's response
-    if (isPushToTalkMode) {
-      const pushToTalkButton = document.getElementById('push-to-talk-button');
-      pushToTalkButton.disabled = false;
-    }
     // Start streaming the entire response
     await startStreaming(assistantReply);
   } catch (error) {
@@ -2391,53 +2358,6 @@ function toggleAutoSpeak() {
   const toggleButton = document.getElementById('auto-speak-toggle');
   const startButton = document.getElementById('start-button');
   toggleButton.textContent = `Auto-Speak: ${autoSpeakMode ? 'On' : 'Off'}`;
-
-
-function togglePushToTalk() {
-  isPushToTalkMode = !isPushToTalkMode;
-  const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
-  const pushToTalkButton = document.getElementById('push-to-talk-button');
-  pushToTalkToggle.textContent = `Push to Talk: ${isPushToTalkMode ? 'On' : 'Off'}`;
-  pushToTalkButton.disabled = !isPushToTalkMode;
-  
-  if (isPushToTalkMode) {
-    if (!isRecording) {
-      startRecording(true);
-    }
-  } else {
-    if (isRecording && !autoSpeakMode) {
-      stopRecording();
-    }
-  }
-}
-
-function startPushToTalk() {
-  if (!isPushToTalkMode || !isRecording) return;
-  isPushToTalkActive = true;
-  currentUtterance = '';
-  interimMessageAdded = false;
-  if (deepgramConnection) {
-    deepgramConnection.send(JSON.stringify({ type: 'start_utterance' }));
-  }
-}
-
-function endPushToTalk() {
-  if (!isPushToTalkMode || !isRecording) return;
-  isPushToTalkActive = false;
-  if (deepgramConnection) {
-    deepgramConnection.send(JSON.stringify({ type: 'end_utterance' }));
-  }
-  if (currentUtterance.trim()) {
-    updateTranscript(currentUtterance.trim(), true);
-    chatHistory.push({
-      role: 'user',
-      content: currentUtterance.trim(),
-    });
-    sendChatToGroq();
-  }
-  currentUtterance = '';
-  interimMessageAdded = false;
-}
   if (autoSpeakMode) {
     startButton.textContent = 'Stop';
     if (!isRecording) {
