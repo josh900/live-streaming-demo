@@ -418,3 +418,17 @@ body {
   #video-wrapper {
   }
 }
+
+#voice-speed-control {
+  display: flex;
+  align-items: center;
+  margin-top: 10px;
+}
+
+#voice-speed-slider {
+  margin: 0 10px;
+}
+
+#voice-speed-value {
+  min-width: 30px;
+}
