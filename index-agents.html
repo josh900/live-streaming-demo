@@ -95,11 +95,6 @@
 
         <div id="speak-controls">
           <button id="start-button" type="button">Speak</button>
-<div id="voice-speed-control">
-  <label for="voice-speed-slider">Voice Speed:</label>
-  <input type="range" id="voice-speed-slider" min="0.5" max="2" step="0.1" value="1">
-  <span id="voice-speed-value">1x</span>
-</div>
           <button id="auto-speak-toggle" type="button">Auto-Speak: On</button>
         </div>
         <div id="text-input-controls">
@@ -158,11 +153,6 @@
           audioProcessor.connect(audioContext.destination);
         })
         .catch((err) => console.error('Error loading AudioWorklet:', err));
-document.getElementById('voice-speed-slider').addEventListener('input', (event) => {
-  const speed = event.target.value;
-  document.getElementById('voice-speed-value').textContent = `${speed}x`;
-  updateVoiceSpeed(speed);
-});
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/@deepgram/sdk"></script>
