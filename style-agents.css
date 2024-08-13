@@ -444,29 +444,3 @@ body {
 #push-to-talk-button:active:not(:disabled) {
   background-color: #45a049;
 }
-
-#push-to-talk-toggle,
-#push-to-talk-button {
-  margin-left: 10px;
-}
-
-#push-to-talk-button {
-  display: block;
-  margin-top: 10px;
-  padding: 15px 30px;
-  font-size: 18px;
-  background-color: #4CAF50;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-}
-
-#push-to-talk-button:disabled {
-  background-color: #cccccc;
-  cursor: not-allowed;
-}
-
-#push-to-talk-button:active:not(:disabled) {
-  background-color: #45a049;
-}
