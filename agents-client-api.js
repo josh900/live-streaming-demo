@@ -1,6 +1,204 @@
+[2024-08-13 10:06:57] [DEBUG] Applying change type: insert
+[2024-08-13 10:06:57] [DEBUG] Context before: 'isAvatarSpeaking = false;'
+[2024-08-13 10:06:57] [DEBUG] Context after: 'smoothTransition(false);'
+[2024-08-13 10:06:57] [DEBUG] Content to insert/replace:
+[2024-08-13 10:06:57] [DEBUG]   
+[2024-08-13 10:06:57] [DEBUG]   
+[2024-08-13 10:06:57] [DEBUG]          // Re-enable Push to Talk mode if it was active before
+[2024-08-13 10:06:57] [DEBUG]          if (isPushToTalkMode) {
+[2024-08-13 10:06:57] [DEBUG]            document.getElementById('push-to-talk-button').disabled = false;
+[2024-08-13 10:06:57] [DEBUG]          }
+[2024-08-13 10:06:57] [DEBUG] Inserting at line 1707
+[2024-08-13 10:06:57] [DEBUG] Applying change type: replace
+[2024-08-13 10:06:57] [DEBUG] Context before: 'function toggleAutoSpeak() {'
+[2024-08-13 10:06:57] [DEBUG] Context after: '}'
+[2024-08-13 10:06:57] [DEBUG] Content to insert/replace:
+[2024-08-13 10:06:57] [DEBUG]   function toggleAutoSpeak() {
+[2024-08-13 10:06:57] [DEBUG]     autoSpeakMode = !autoSpeakMode;
+[2024-08-13 10:06:57] [DEBUG]     const toggleButton = document.getElementById('auto-speak-toggle');
+[2024-08-13 10:06:57] [DEBUG]     const startButton = document.getElementById('start-button');
+[2024-08-13 10:06:57] [DEBUG]     toggleButton.textContent = `Auto-Speak: ${autoSpeakMode ? 'On' : 'Off'}`;
+[2024-08-13 10:06:57] [DEBUG]     if (autoSpeakMode) {
+[2024-08-13 10:06:57] [DEBUG]       startButton.textContent = 'Stop';
+[2024-08-13 10:06:57] [DEBUG]       if (!isRecording) {
+[2024-08-13 10:06:57] [DEBUG]         startRecording();
+[2024-08-13 10:06:57] [DEBUG]       }
+[2024-08-13 10:06:57] [DEBUG]       // Disable Push to Talk mode
+[2024-08-13 10:06:57] [DEBUG]       isPushToTalkMode = false;
+[2024-08-13 10:06:57] [DEBUG]       document.getElementById('push-to-talk-toggle').textContent = 'Push to Talk: Off';
+[2024-08-13 10:06:57] [DEBUG]       document.getElementById('push-to-talk-button').disabled = true;
+[2024-08-13 10:06:57] [DEBUG]     } else {
+[2024-08-13 10:06:57] [DEBUG]       startButton.textContent = isRecording ? 'Stop' : 'Speak';
+[2024-08-13 10:06:57] [DEBUG]       if (isRecording) {
+[2024-08-13 10:06:57] [DEBUG]         stopRecording();
+[2024-08-13 10:06:57] [DEBUG]       }
+[2024-08-13 10:06:57] [DEBUG]     }
+[2024-08-13 10:06:57] [DEBUG]   }
+[2024-08-13 10:06:57] [DEBUG] Replacing content between lines 2536 and 19
+[2024-08-13 10:06:57] [DEBUG] Applying change type: replace
+[2024-08-13 10:06:57] [DEBUG] Context before: 'function handleUtteranceEnd(data) {'
+[2024-08-13 10:06:57] [DEBUG] Context after: '  if (!isRecording) return;'
+[2024-08-13 10:06:57] [DEBUG] Content to insert/replace:
+[2024-08-13 10:06:57] [DEBUG]   function handleUtteranceEnd(data) {
+[2024-08-13 10:06:57] [DEBUG]     if (!isRecording || isPushToTalkActive) return;
+[2024-08-13 10:06:57] [DEBUG] Replacing content between lines 2384 and 2243
+[2024-08-13 10:06:57] [DEBUG] Applying change type: replace
+[2024-08-13 10:06:57] [DEBUG] Context before: 'isRecording = false;'
+[2024-08-13 10:06:57] [DEBUG] Context after: 'logger.debug('Recording and transcription stopped');'
+[2024-08-13 10:06:57] [DEBUG] Content to insert/replace:
+[2024-08-13 10:06:57] [DEBUG]   isRecording = false;
+[2024-08-13 10:06:57] [DEBUG]       autoSpeakInProgress = false;
+[2024-08-13 10:06:57] [DEBUG]       const startButton = document.getElementById('start-button');
+[2024-08-13 10:06:57] [DEBUG]       startButton.textContent = isPushToTalk ? 'Push to Talk' : 'Speak';
+[2024-08-13 10:06:57] [DEBUG]   
+[2024-08-13 10:06:57] [DEBUG]       if (!isPushToTalk) {
+[2024-08-13 10:06:57] [DEBUG]         sendChatToGroq();
+[2024-08-13 10:06:57] [DEBUG]       }
+[2024-08-13 10:06:57] [DEBUG]   
+[2024-08-13 10:06:57] [DEBUG]       logger.debug('Recording and transcription stopped');
+[2024-08-13 10:06:57] [DEBUG] Replacing content between lines 2399 and 2404
+[2024-08-13 10:06:57] [DEBUG] Applying change type: replace
+[2024-08-13 10:06:57] [DEBUG] Context before: 'async function stopRecording() {'
+[2024-08-13 10:06:57] [DEBUG] Context after: '  if (isRecording) {'
+[2024-08-13 10:06:57] [DEBUG] Content to insert/replace:
+[2024-08-13 10:06:57] [DEBUG]   async function stopRecording(isPushToTalk = false) {
+[2024-08-13 10:06:57] [DEBUG]     if (isRecording) {
+[2024-08-13 10:06:57] [DEBUG] Replacing content between lines 2378 and 2379
+[2024-08-13 10:06:56] [DEBUG] Applying change type: replace
+[2024-08-13 10:06:56] [DEBUG] Context before: 'isRecording = true;'
+[2024-08-13 10:06:56] [DEBUG] Context after: 'const startButton = document.getElementById('start-button');'
+[2024-08-13 10:06:56] [DEBUG] Content to insert/replace:
+[2024-08-13 10:06:56] [DEBUG]   isRecording = true;
+[2024-08-13 10:06:56] [DEBUG]       if (autoSpeakMode && !isPushToTalk) {
+[2024-08-13 10:06:56] [DEBUG]         autoSpeakInProgress = true;
+[2024-08-13 10:06:56] [DEBUG]       }
+[2024-08-13 10:06:56] [DEBUG]       const startButton = document.getElementById('start-button');
+[2024-08-13 10:06:56] [DEBUG]       startButton.textContent = isPushToTalk ? 'Push to Talk Active' : 'Stop';
+[2024-08-13 10:06:56] [DEBUG] Replacing content between lines 2305 and 2121
+[2024-08-13 10:06:56] [DEBUG] Applying change type: replace
+[2024-08-13 10:06:56] [DEBUG] Context before: 'const deepgramOptions = {'
+[2024-08-13 10:06:56] [DEBUG] Context after: '    sample_rate: audioContext.sampleRate,'
+[2024-08-13 10:06:56] [DEBUG] Content to insert/replace:
+[2024-08-13 10:06:56] [DEBUG]   const deepgramOptions = {
+[2024-08-13 10:06:56] [DEBUG]         model: 'nova-2',
+[2024-08-13 10:06:56] [DEBUG]         language: 'en-US',
+[2024-08-13 10:06:56] [DEBUG]         smart_format: true,
+[2024-08-13 10:06:56] [DEBUG]         interim_results: !isPushToTalk,
+[2024-08-13 10:06:56] [DEBUG]         utterance_end_ms: isPushToTalk ? 0 : 2500,
+[2024-08-13 10:06:56] [DEBUG]         punctuate: true,
+[2024-08-13 10:06:56] [DEBUG]         vad_events: !isPushToTalk,
+[2024-08-13 10:06:56] [DEBUG]         encoding: 'linear16',
+[2024-08-13 10:06:56] [DEBUG]         sample_rate: audioContext.sampleRate,
+[2024-08-13 10:06:56] [DEBUG] Replacing content between lines 2246 and 2256
+[2024-08-13 10:06:56] [DEBUG] Applying change type: replace
+[2024-08-13 10:06:56] [DEBUG] Context before: 'async function startRecording() {'
+[2024-08-13 10:06:56] [DEBUG] Context after: '  logger.debug('Starting recording process...');'
+[2024-08-13 10:06:56] [DEBUG] Content to insert/replace:
+[2024-08-13 10:06:56] [DEBUG]   async function startRecording(isPushToTalk = false) {
+[2024-08-13 10:06:56] [DEBUG]     if (isRecording && !isPushToTalk) {
+[2024-08-13 10:06:56] [DEBUG]       logger.warn('Recording is already in progress. Stopping current recording.');
+[2024-08-13 10:06:56] [DEBUG]       await stopRecording();
+[2024-08-13 10:06:56] [DEBUG]       return;
+[2024-08-13 10:06:56] [DEBUG]     }
+[2024-08-13 10:06:56] [DEBUG] Replacing content between lines 2206 and 2213
+[2024-08-13 10:06:56] [DEBUG] Applying change type: insert
+[2024-08-13 10:06:56] [DEBUG] Context before: 'async function startPushToTalk() {'
+[2024-08-13 10:06:56] [DEBUG] Context after: '}'
+[2024-08-13 10:06:56] [DEBUG] Content to insert/replace:
+[2024-08-13 10:06:56] [DEBUG]   
+[2024-08-13 10:06:56] [DEBUG]   
+[2024-08-13 10:06:56] [DEBUG]   async function stopPushToTalk() {
+[2024-08-13 10:06:56] [DEBUG]     if (!isPushToTalkMode || !isPushToTalkActive) return;
+[2024-08-13 10:06:56] [DEBUG]     isPushToTalkActive = false;
+[2024-08-13 10:06:56] [DEBUG]     await stopRecording(true);
+[2024-08-13 10:06:56] [DEBUG]     sendChatToGroq();
+[2024-08-13 10:06:56] [DEBUG]   }
+[2024-08-13 10:06:56] [DEBUG] Inserting at line 3
+[2024-08-13 10:06:56] [DEBUG] Applying change type: insert
+[2024-08-13 10:06:56] [DEBUG] Context before: 'function togglePushToTalk() {'
+
+
+async function stopPushToTalk() {
+  if (!isPushToTalkMode || !isPushToTalkActive) return;
+  isPushToTalkActive = false;
+  await stopRecording(true);
+  sendChatToGroq();
+}
+[2024-08-13 10:06:56] [DEBUG] Context after: '}'
+[2024-08-13 10:06:56] [DEBUG] Content to insert/replace:
+[2024-08-13 10:06:56] [DEBUG]   
+[2024-08-13 10:06:56] [DEBUG]   
+[2024-08-13 10:06:56] [DEBUG]   async function startPushToTalk() {
+[2024-08-13 10:06:56] [DEBUG]     if (!isPushToTalkMode || isPushToTalkActive) return;
+[2024-08-13 10:06:56] [DEBUG]     isPushToTalkActive = true;
+[2024-08-13 10:06:56] [DEBUG]     await startRecording(true);
+[2024-08-13 10:06:56] [DEBUG]   }
+[2024-08-13 10:06:56] [DEBUG] Inserting at line 3
+[2024-08-13 10:06:56] [DEBUG] Applying change type: insert
+[2024-08-13 10:06:56] [DEBUG] Context before: 'function toggleAutoSpeak() {'
+
+
+async function startPushToTalk() {
+  if (!isPushToTalkMode || isPushToTalkActive) return;
+  isPushToTalkActive = true;
+  await startRecording(true);
+}
+[2024-08-13 10:06:56] [DEBUG] Context after: '}'
+[2024-08-13 10:06:56] [DEBUG] Content to insert/replace:
+[2024-08-13 10:06:56] [DEBUG]   
+[2024-08-13 10:06:56] [DEBUG]   
+[2024-08-13 10:06:56] [DEBUG]   function togglePushToTalk() {
+[2024-08-13 10:06:56] [DEBUG]     isPushToTalkMode = !isPushToTalkMode;
+[2024-08-13 10:06:56] [DEBUG]     const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
+[2024-08-13 10:06:56] [DEBUG]     const pushToTalkButton = document.getElementById('push-to-talk-button');
+[2024-08-13 10:06:56] [DEBUG]     pushToTalkToggle.textContent = `Push to Talk: ${isPushToTalkMode ? 'On' : 'Off'}`;
+[2024-08-13 10:06:56] [DEBUG]     pushToTalkButton.disabled = !isPushToTalkMode;
+[2024-08-13 10:06:56] [DEBUG]     
+[2024-08-13 10:06:56] [DEBUG]     if (isPushToTalkMode) {
+[2024-08-13 10:06:56] [DEBUG]       stopRecording();
+[2024-08-13 10:06:56] [DEBUG]       autoSpeakMode = false;
+[2024-08-13 10:06:56] [DEBUG]       document.getElementById('auto-speak-toggle').textContent = 'Auto-Speak: Off';
+[2024-08-13 10:06:56] [DEBUG]     }
+[2024-08-13 10:06:56] [DEBUG]   }
+[2024-08-13 10:06:56] [DEBUG] Inserting at line 24
+[2024-08-13 10:06:56] [DEBUG] Applying change type: insert
+[2024-08-13 10:06:56] [DEBUG] Context before: 'const autoSpeakToggle = document.getElementById('auto-speak-toggle');'
+[2024-08-13 10:06:56] [DEBUG] Context after: 'autoSpeakToggle.addEventListener('click', toggleAutoSpeak);'
+[2024-08-13 10:06:56] [DEBUG] Content to insert/replace:
+[2024-08-13 10:06:56] [DEBUG]   
+[2024-08-13 10:06:56] [DEBUG]     const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
+[2024-08-13 10:06:56] [DEBUG]     const pushToTalkButton = document.getElementById('push-to-talk-button');
+[2024-08-13 10:06:56] [DEBUG]     pushToTalkToggle.addEventListener('click', togglePushToTalk);
+[2024-08-13 10:06:56] [DEBUG]     pushToTalkButton.addEventListener('mousedown', startPushToTalk);
+[2024-08-13 10:06:56] [DEBUG]     pushToTalkButton.addEventListener('mouseup', stopPushToTalk);
+[2024-08-13 10:06:56] [DEBUG]     pushToTalkButton.addEventListener('mouseleave', stopPushToTalk);
+[2024-08-13 10:06:56] [DEBUG] Inserting at line 1064
+[2024-08-13 10:06:55] [DEBUG] Applying change type: insert
+[2024-08-13 10:06:55] [DEBUG] Context before: 'let autoSpeakInProgress = false;'
+[2024-08-13 10:06:55] [DEBUG] Context after: ''
+[2024-08-13 10:06:55] [DEBUG] Content to insert/replace:
+[2024-08-13 10:06:55] [DEBUG]   
+[2024-08-13 10:06:55] [DEBUG]   let isPushToTalkMode = false;
+[2024-08-13 10:06:55] [DEBUG]   let isPushToTalkActive = false;
+[2024-08-13 10:06:55] [DEBUG] Inserting at line 57
 'use strict';
 import DID_API from './api.js';
 import logger from './logger.js';
+
+
+function togglePushToTalk() {
+  isPushToTalkMode = !isPushToTalkMode;
+  const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
+  const pushToTalkButton = document.getElementById('push-to-talk-button');
+  pushToTalkToggle.textContent = `Push to Talk: ${isPushToTalkMode ? 'On' : 'Off'}`;
+  pushToTalkButton.disabled = !isPushToTalkMode;
+  
+  if (isPushToTalkMode) {
+    stopRecording();
+    autoSpeakMode = false;
+    document.getElementById('auto-speak-toggle').textContent = 'Auto-Speak: Off';
+  }
+}
 const { createClient, LiveTranscriptionEvents } = deepgram;
 
 const deepgramClient = createClient(DID_API.deepgramKey);
@@ -54,6 +252,9 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 const INITIAL_RECONNECT_DELAY = 2000; // 1 second
 const MAX_RECONNECT_DELAY = 90000; // 30 seconds
 let autoSpeakInProgress = false;
+
+let isPushToTalkMode = false;
+let isPushToTalkActive = false;
 
 const ConnectionState = {
   DISCONNECTED: 'disconnected',
@@ -1050,6 +1251,13 @@ async function initialize() {
     if (event.key === 'Enter') handleTextInput(textInput.value);
   });
   replaceContextButton.addEventListener('click', () => updateContext('replace'));
+
+  const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
+  const pushToTalkButton = document.getElementById('push-to-talk-button');
+  pushToTalkToggle.addEventListener('click', togglePushToTalk);
+  pushToTalkButton.addEventListener('mousedown', startPushToTalk);
+  pushToTalkButton.addEventListener('mouseup', stopPushToTalk);
+  pushToTalkButton.addEventListener('mouseleave', stopPushToTalk);
   autoSpeakToggle.addEventListener('click', toggleAutoSpeak);
   editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatar));
 
@@ -1507,6 +1715,12 @@ function onVideoStatusChange(videoIsPlaying, stream) {
   if (status === 'streaming') {
     setStreamVideoElement(stream);
   } else {
+
+
+       // Re-enable Push to Talk mode if it was active before
+       if (isPushToTalkMode) {
+         document.getElementById('push-to-talk-button').disabled = false;
+       }
     smoothTransition(false);
   }
 
@@ -2098,14 +2312,12 @@ function handleTranscription(data) {
   }
 }
 
-async function startRecording() {
-  if (isRecording) {
+async function startRecording(isPushToTalk = false) {
+  if (isRecording && !isPushToTalk) {
     logger.warn('Recording is already in progress. Stopping current recording.');
     await stopRecording();
     return;
   }
-
-  logger.debug('Starting recording process...');
 
   currentUtterance = '';
   interimMessageAdded = false;
@@ -2129,15 +2341,14 @@ async function startRecording() {
     source.connect(audioWorkletNode);
     logger.debug('Media stream source connected to audio worklet node');
 
-    const deepgramOptions = {
+const deepgramOptions = {
       model: 'nova-2',
       language: 'en-US',
       smart_format: true,
-      interim_results: true,
-      utterance_end_ms: 2500,
+      interim_results: !isPushToTalk,
+      utterance_end_ms: isPushToTalk ? 0 : 2500,
       punctuate: true,
-      // endpointing: 300,
-      vad_events: true,
+      vad_events: !isPushToTalk,
       encoding: 'linear16',
       sample_rate: audioContext.sampleRate,
     };
@@ -2175,6 +2386,12 @@ async function startRecording() {
     });
 
     isRecording = true;
+isRecording = true;
+    if (autoSpeakMode && !isPushToTalk) {
+      autoSpeakInProgress = true;
+    }
+    const startButton = document.getElementById('start-button');
+    startButton.textContent = isPushToTalk ? 'Push to Talk Active' : 'Stop';
     if (autoSpeakMode) {
       autoSpeakInProgress = true;
     }
@@ -2215,6 +2432,8 @@ function handleDeepgramError(err) {
 }
 
 function handleUtteranceEnd(data) {
+function handleUtteranceEnd(data) {
+  if (!isRecording || isPushToTalkActive) return;
   if (!isRecording) return;
 
   logger.debug('Utterance end detected:', data);
@@ -2230,7 +2449,7 @@ function handleUtteranceEnd(data) {
   }
 }
 
-async function stopRecording() {
+async function stopRecording(isPushToTalk = false) {
   if (isRecording) {
     logger.info('Stopping recording...');
 
@@ -2244,10 +2463,14 @@ async function stopRecording() {
       logger.debug('Deepgram connection finished');
     }
 
-    isRecording = false;
+isRecording = false;
     autoSpeakInProgress = false;
     const startButton = document.getElementById('start-button');
-    startButton.textContent = 'Speak';
+    startButton.textContent = isPushToTalk ? 'Push to Talk' : 'Speak';
+
+    if (!isPushToTalk) {
+      sendChatToGroq();
+    }
 
     logger.debug('Recording and transcription stopped');
   }
@@ -2354,6 +2577,27 @@ async function sendChatToGroq() {
 }
 
 function toggleAutoSpeak() {
+function toggleAutoSpeak() {
+  autoSpeakMode = !autoSpeakMode;
+  const toggleButton = document.getElementById('auto-speak-toggle');
+  const startButton = document.getElementById('start-button');
+  toggleButton.textContent = `Auto-Speak: ${autoSpeakMode ? 'On' : 'Off'}`;
+  if (autoSpeakMode) {
+    startButton.textContent = 'Stop';
+    if (!isRecording) {
+      startRecording();
+    }
+    // Disable Push to Talk mode
+    isPushToTalkMode = false;
+    document.getElementById('push-to-talk-toggle').textContent = 'Push to Talk: Off';
+    document.getElementById('push-to-talk-button').disabled = true;
+  } else {
+    startButton.textContent = isRecording ? 'Stop' : 'Speak';
+    if (isRecording) {
+      stopRecording();
+    }
+  }
+}
   autoSpeakMode = !autoSpeakMode;
   const toggleButton = document.getElementById('auto-speak-toggle');
   const startButton = document.getElementById('start-button');
