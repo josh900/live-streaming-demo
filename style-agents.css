@@ -116,8 +116,8 @@ h4 {
   border-radius: 5px;
 }
 
-#push-to-talk-toggle,
-#push-to-talk-button {
+
+#push-to-talk-toggle, #push-to-talk-button {
   padding: 10px 20px;
   font-size: 16px;
   margin-left: 10px;
