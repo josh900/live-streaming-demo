@@ -67,15 +67,7 @@ app.post('/avatar', upload.single('image'), async (req, res) => {
     console.error('Error creating/updating avatar:', error);
     res.write('data: {"status": "error", "message": "Failed to create/update avatar"}\n\n');
     res.end();
-app.get('/contexts', async (req, res) => {
-  try {
-    const contexts = await getContexts();
-    res.json(contexts);
-  } catch (error) {
-    console.error('Error getting contexts:', error);
-    res.status(500).json({ error: 'Failed to get contexts' });
   }
-});
 });
 
 app.get('/avatars', async (req, res) => {
