@@ -162,19 +162,7 @@
           const audioProcessor = new AudioWorkletNode(audioContext, 'audio-processor');
           // Connect the audio processor to the audio context destination
           audioProcessor.connect(audioContext.destination);
-    <script type="module">
-      import {
-        initialize,
-        handleAvatarChange,
-        openAvatarModal,
-        closeAvatarModal,
-        saveAvatar,
-        handleContextChange,
-        openContextModal,
-        closeContextModal,
-        saveContext,
-        handleTextInput,
-        toggleAutoSpeak,
+        })
         .catch((err) => console.error('Error loading AudioWorklet:', err));
     </script>
 
