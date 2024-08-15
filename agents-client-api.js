@@ -1042,7 +1042,7 @@ async function loadContexts() {
   }
   populateContextSelect();
 }
-    logger.error('Error loading contexts:');
+    logger.error('Error loading contexts:', error);
     // Create a default context if loading fails
     contexts = {
       default: {
