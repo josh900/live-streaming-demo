@@ -56,6 +56,8 @@ const MAX_RECONNECT_DELAY = 90000; // 30 seconds
 let autoSpeakInProgress = false;
 let contexts = {};
 let currentContext = '';
+window.closeContextModal = closeContextModal;
+
 
 const ConnectionState = {
   DISCONNECTED: 'disconnected',
