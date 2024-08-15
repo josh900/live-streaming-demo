@@ -1028,22 +1028,12 @@ async function loadContexts() {
     logger.debug('Contexts loaded:', contexts);
   } catch (error) {
     logger.error('Error loading contexts:', error);
-    // Create a default context if loading fails
-    contexts = {
-      default: {
-        name: 'Default',
-        content: 'You are a helpful, harmless, and honest grocery store assistant. Please answer the users questions briefly, be concise.'
-      }
-    };
+    showErrorMessage('Failed to load contexts. Please try again.');
   }
-  populateContextSelect();
 }
-
 
 function populateContextSelect() {
   const contextSelect = document.getElementById('context-select');
-  if (!contextSelect) return;
-
   contextSelect.innerHTML = '';
 
   const createNewOption = document.createElement('option');
@@ -1065,12 +1055,11 @@ function populateContextSelect() {
   }
 }
 
-
 function updateContextInput() {
   const contextInput = document.getElementById('context-input');
-  if (contextInput && contexts[currentContext]) {
+  if (contexts[currentContext]) {
     contextInput.value = contexts[currentContext].content;
-  } else if (contextInput) {
+  } else {
     contextInput.value = '';
   }
 }
@@ -1181,25 +1170,20 @@ async function initialize() {
   await loadContexts();
   populateContextSelect();
 
-
   const contextInput = document.getElementById('context-input');
-  if (contextInput) {
-    contextInput.value = context.trim();
-    contextInput.addEventListener('input', () => {
-      if (!contextInput.value.includes('Original Context:')) {
-        context = contextInput.value.trim();
-      }
-    });
-  }
-  const contextSelect = document.getElementById('context-select');
-     if (contextSelect) {
-       contextSelect.addEventListener('change', handleContextChange);
-     }
+  contextInput.value = context.trim();
+  contextInput.addEventListener('input', () => {
+    if (!contextInput.value.includes('Original Context:')) {
+      context = contextInput.value.trim();
+    }
+  });
 
- const editContextButton = document.getElementById('edit-context-button');
-     if (editContextButton) {
-       editContextButton.addEventListener('click', () => openContextModal(currentContext));
-     }
+  const contextSelect = document.getElementById('context-select');
+  contextSelect.addEventListener('change', handleContextChange);
+
+  const editContextButton = document.getElementById('edit-context-button');
+  editContextButton.addEventListener('click', () => openContextModal(currentContext));
+
 
   const sendTextButton = document.getElementById('send-text-button');
   const textInput = document.getElementById('text-input');
@@ -2687,9 +2671,7 @@ export {
   closeAvatarModal,
   saveAvatar,
   updateContext,
-  updateContextInput,
   handleTextInput,
-  closeContextModal,
   toggleAutoSpeak,
   initializePersistentStream,
   destroyPersistentStream,
