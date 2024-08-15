@@ -989,34 +989,6 @@ async function fetchStreamOffer(streamId) {
     },
   });
   const data = await response.json();
-  return data.offer;
-}
-
-async function fetchIceServers() {
-  const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/ice_servers`, {
-    method: 'GET',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-    },
-  });
-  const data = await response.json();
-  return data.ice_servers;
-}
-
-async function sendSDPAnswer(streamId, sessionId, answer) {
-  await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      answer,
-      session_id: sessionId,
-    }),
-  });
-}
-
 async function loadContexts() {
   try {
     const response = await fetch('/contexts');
@@ -1031,26 +1003,28 @@ async function loadContexts() {
     contexts = {
       default: {
         name: 'Default',
-        content:
-          'You are a helpful, harmless, and honest grocery store assistant. Please answer the users questions briefly, be concise.',
+        content: 'You are a helpful, harmless, and honest grocery store assistant. Please answer the users questions briefly, be concise.',
       },
     };
   }
   populateContextSelect();
 }
-
-function populateContextSelect() {
-  const contextSelect = document.getElementById('context-select');
-  if (!contextSelect) return;
-
-  contextSelect.innerHTML = '';
-
-  const createNewOption = document.createElement('option');
-  createNewOption.value = 'create-new';
-  createNewOption.textContent = 'Create New Context';
-  contextSelect.appendChild(createNewOption);
-
-  for (const [key, value] of Object.entries(contexts)) {
+    logger.error('Error loading contexts:', error);
+    // Create a default context if loading fails
+    contexts = {
+      default: {
+        name: 'Default',
+        content:
+          'You are a helpful, harmless, and honest grocery store assistant. Please answer the users questions briefly, be concise.',
+      },
+    };
+export async function handleContextChange() {
+  currentContext = document.getElementById('context-select').value;
+  if (currentContext === 'create-new') {
+    openContextModal();
+    return;
+  }
+  updateContextInput();
     const option = document.createElement('option');
     option.value = key;
     option.textContent = value.name;
@@ -1061,7 +1035,12 @@ function populateContextSelect() {
     currentContext = Object.keys(contexts)[0];
     contextSelect.value = currentContext;
     updateContextInput();
-  }
+  modal.style.display = 'block';
+}
+
+export function closeContextModal() {
+  const modal = document.getElementById('context-modal');
+  modal.style.display = 'none';
 }
 
 function updateContextInput() {
