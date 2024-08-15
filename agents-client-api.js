@@ -1031,13 +1031,13 @@ async function loadContexts() {
     contexts = {
       default: {
         name: 'Default',
-        content: 'You are a helpful, harmless, and honest grocery store assistant. Please answer the users questions briefly, be concise.',
+        content:
+          'You are a helpful, harmless, and honest grocery store assistant. Please answer the users questions briefly, be concise.',
       },
     };
   }
   populateContextSelect();
 }
-
 
 function populateContextSelect() {
   const contextSelect = document.getElementById('context-select');
@@ -1073,7 +1073,7 @@ function updateContextInput() {
   }
 }
 
-export async function handleContextChange() {
+async function handleContextChange() {
   currentContext = document.getElementById('context-select').value;
   if (currentContext === 'create-new') {
     openContextModal();
@@ -1082,7 +1082,7 @@ export async function handleContextChange() {
   updateContextInput();
 }
 
-export function openContextModal(contextName = null) {
+function openContextModal(contextName = null) {
   const modal = document.getElementById('context-modal');
   const nameInput = document.getElementById('context-name');
   const contentInput = document.getElementById('context-content');
@@ -1101,7 +1101,7 @@ export function openContextModal(contextName = null) {
   modal.style.display = 'block';
 }
 
-export function closeContextModal() {
+function closeContextModal() {
   const modal = document.getElementById('context-modal');
   modal.style.display = 'none';
 }
@@ -2694,6 +2694,7 @@ export {
   updateContext,
   updateContextInput,
   handleTextInput,
+  closeContextModal,
   toggleAutoSpeak,
   initializePersistentStream,
   destroyPersistentStream,
