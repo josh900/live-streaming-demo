@@ -1129,6 +1129,11 @@ export function openContextModal(contextName = null) {
   modal.style.display = 'block';
 }
 
+export function closeContextModal() {
+  const modal = document.getElementById('context-modal');
+  modal.style.display = 'none';
+}
+
 async function saveContext() {
   const name = document.getElementById('context-name').value;
   const content = document.getElementById('context-content').value;
