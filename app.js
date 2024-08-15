@@ -80,6 +80,39 @@ app.get('/avatars', async (req, res) => {
   }
 });
 
+app.get('/contexts', async (req, res) => {
+  try {
+    const contexts = await getContexts();
+    res.json(contexts);
+  } catch (error) {
+    console.error('Error getting contexts:', error);
+    res.status(500).json({ error: 'Failed to get contexts' });
+  }
+});
+
+app.post('/context', async (req, res) => {
+  try {
+    const { name, content } = req.body;
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    });
+    res.write('data: {"status": "processing"}\n\n');
+
+    const context = await createOrUpdateContext(name, content);
+
+    res.write('data: {"status": "completed", "context": ' + JSON.stringify(context) + '}\n\n');
+    res.end();
+  } catch (error) {
+    console.error('Error creating/updating context:', error);
+    res.write('data: {"status": "error", "message": "Failed to create/update context"}\n\n');
+    res.end();
+  }
+});
+
+
+
 const server = http.createServer(app);
 
 const wss = new WebSocketServer({ server });

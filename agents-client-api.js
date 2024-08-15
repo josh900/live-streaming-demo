@@ -54,6 +54,10 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 const INITIAL_RECONNECT_DELAY = 2000; // 1 second
 const MAX_RECONNECT_DELAY = 90000; // 30 seconds
 let autoSpeakInProgress = false;
+let contexts = {};
+let currentContext = '';
+window.closeContextModal = closeContextModal;
+
 
 const ConnectionState = {
   DISCONNECTED: 'disconnected',
@@ -1015,6 +1019,141 @@ async function sendSDPAnswer(streamId, sessionId, answer) {
   });
 }
 
+
+async function loadContexts() {
+  try {
+    const response = await fetch('/contexts');
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    contexts = await response.json();
+    logger.debug('Contexts loaded:', contexts);
+  } catch (error) {
+    logger.error('Error loading contexts:', error);
+    showErrorMessage('Failed to load contexts. Please try again.');
+  }
+}
+
+function populateContextSelect() {
+  const contextSelect = document.getElementById('context-select');
+  contextSelect.innerHTML = '';
+
+  const createNewOption = document.createElement('option');
+  createNewOption.value = 'create-new';
+  createNewOption.textContent = 'Create New Context';
+  contextSelect.appendChild(createNewOption);
+
+  for (const [key, value] of Object.entries(contexts)) {
+    const option = document.createElement('option');
+    option.value = key;
+    option.textContent = value.name;
+    contextSelect.appendChild(option);
+  }
+
+  if (Object.keys(contexts).length > 0) {
+    currentContext = Object.keys(contexts)[0];
+    contextSelect.value = currentContext;
+    updateContextInput();
+  }
+}
+
+function updateContextInput() {
+  const contextInput = document.getElementById('context-input');
+  if (contexts[currentContext]) {
+    contextInput.value = contexts[currentContext].content;
+  } else {
+    contextInput.value = '';
+  }
+}
+
+async function handleContextChange() {
+  currentContext = document.getElementById('context-select').value;
+  if (currentContext === 'create-new') {
+    openContextModal();
+    return;
+  }
+  updateContextInput();
+}
+
+function openContextModal(contextName = null) {
+  const modal = document.getElementById('context-modal');
+  const nameInput = document.getElementById('context-name');
+  const contentInput = document.getElementById('context-content');
+  const saveButton = document.getElementById('save-context-button');
+
+  if (contextName && contexts[contextName]) {
+    nameInput.value = contexts[contextName].name;
+    contentInput.value = contexts[contextName].content;
+    saveButton.textContent = 'Update Context';
+  } else {
+    nameInput.value = '';
+    contentInput.value = '';
+    saveButton.textContent = 'Create Context';
+  }
+
+  modal.style.display = 'block';
+}
+
+function closeContextModal() {
+  const modal = document.getElementById('context-modal');
+  modal.style.display = 'none';
+}
+
+async function saveContext() {
+  const name = document.getElementById('context-name').value;
+  const content = document.getElementById('context-content').value;
+
+  if (!name || !content) {
+    showErrorMessage('Please fill in both the context name and content.');
+    return;
+  }
+
+  showToast('Saving context...', 0);
+
+  try {
+    const response = await fetch('/context', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name, content }),
+    });
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value);
+      const events = chunk.split('\n\n');
+
+      for (const event of events) {
+        if (event.startsWith('data: ')) {
+          const data = JSON.parse(event.slice(6));
+          if (data.status === 'processing') {
+            showToast('Processing context...', 0);
+          } else if (data.status === 'completed') {
+            contexts[name] = data.context;
+            populateContextSelect();
+            closeContextModal();
+            showToast('Context created successfully!', 3000);
+          } else if (data.status === 'error') {
+            showErrorMessage(data.message);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error saving context:', error);
+    showErrorMessage('Failed to save context. Please try again.');
+  }
+}
+
+
+
+
 async function initialize() {
   setLogLevel('DEBUG');
   connectionState = ConnectionState.DISCONNECTED;
@@ -1030,6 +1169,8 @@ async function initialize() {
 
   await loadAvatars();
   populateAvatarSelect();
+  await loadContexts();
+  populateContextSelect();
 
   const contextInput = document.getElementById('context-input');
   contextInput.value = context.trim();
@@ -1038,6 +1179,13 @@ async function initialize() {
       context = contextInput.value.trim();
     }
   });
+
+  const contextSelect = document.getElementById('context-select');
+  contextSelect.addEventListener('change', handleContextChange);
+
+  const editContextButton = document.getElementById('edit-context-button');
+  editContextButton.addEventListener('click', () => openContextModal(currentContext));
+
 
   const sendTextButton = document.getElementById('send-text-button');
   const textInput = document.getElementById('text-input');
@@ -2298,6 +2446,17 @@ async function sendChatToGroq() {
     assistantSpan.innerHTML = '<u>Assistant:</u> ';
     msgHistory.appendChild(assistantSpan);
     msgHistory.appendChild(document.createElement('br'));
+
+    const requestBody = {
+      messages: [
+        {
+          role: 'system',
+          content: contexts[currentContext].content,
+        },
+        ...chatHistory,
+      ],
+      model: 'llama3-8b-8192',
+    };
 
     while (!done) {
       const { value, done: readerDone } = await reader.read();

@@ -35,7 +35,7 @@
 }
 
 .signalingState-stable {
-  color: green;
+  color: green
 }
 .signalingState-have-local-offer,
 .signalingState-have-remote-offer,
@@ -383,6 +383,92 @@ body {
 #preload-video-element {
   visibility: hidden;
   background: transparent;
+}
+
+#context-select {
+  padding: 10px;
+  margin-right: 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+#edit-context-button {
+  padding: 10px 20px;
+  font-size: 16px;
+  margin-bottom: 10px;
+}
+
+#context-input {
+  width: 100%;
+  height: 100px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  resize: vertical;
+  background-color: #f0f0f0;
+}
+
+#context-modal .modal-content {
+  display: flex;
+  flex-direction: column;
+}
+
+#context-modal input,
+#context-modal textarea {
+  margin-bottom: 10px;
+  padding: 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+}
+
+#context-modal button {
+  margin-top: 10px;
+}
+
+#context-select {
+  padding: 10px;
+  margin-right: 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+#edit-context-button {
+  padding: 10px 20px;
+  font-size: 16px;
+  margin-bottom: 10px;
+}
+
+#context-input {
+  width: 100%;
+  height: 100px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  resize: vertical;
+  background-color: #f0f0f0;
+}
+
+#context-modal .modal-content {
+  display: flex;
+  flex-direction: column;
+}
+
+#context-modal input,
+#context-modal textarea {
+  margin-bottom: 10px;
+  padding: 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+}
+
+#context-modal button {
+  margin-top: 10px;
 }
 
 @media (max-width: 1024px) {

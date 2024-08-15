@@ -6,6 +6,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { Readable } from 'stream';
 import sharp from 'sharp';
+import fs from 'fs/promises';
+import path from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -180,6 +182,31 @@ async function saveAvatarDetails(name, avatar) {
   avatars[name] = avatar;
 
   await fs.writeFile(avatarsFile, JSON.stringify(avatars, null, 2));
+}
+
+export async function getContexts() {
+  try {
+    const data = await fs.readFile(path.join(__dirname, 'contexts.json'), 'utf8');
+    return JSON.parse(data);
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      return {};
+    }
+    console.error('Error reading contexts file:', err);
+    return {};
+  }
+}
+
+export async function createOrUpdateContext(name, content) {
+  try {
+    let contexts = await getContexts();
+    contexts[name] = { name, content };
+    await fs.writeFile(path.join(__dirname, 'contexts.json'), JSON.stringify(contexts, null, 2));
+    return contexts[name];
+  } catch (err) {
+    console.error('Error saving context:', err);
+    throw err;
+  }
 }
 
 export async function getAvatars() {
