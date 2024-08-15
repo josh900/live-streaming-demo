@@ -2411,16 +2411,7 @@ async function sendChatToGroq() {
   try {
     const startTime = Date.now();
     const currentContext = document.getElementById('context-input').value.trim();
-    const requestBody = {
-      messages: [
-        {
-          role: 'system',
-          content: currentContext || context,
-        },
-        ...chatHistory,
-      ],
-      model: 'llama3-8b-8192',
-    };
+
     logger.debug('Request body:', JSON.stringify(requestBody));
 
     const response = await fetch('/chat', {
