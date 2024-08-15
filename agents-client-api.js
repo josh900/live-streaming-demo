@@ -2669,7 +2669,7 @@ destroyButton.onclick = async () => {
 
     logger.debug('Stream destroyed successfully');
   } catch (error) {
-    logger.error('Error destroying stream:');
+    logger.error('Error destroying stream:', error);
   } finally {
     stopAllStreams();
     closePC();
