@@ -156,14 +156,11 @@
       const blob = new Blob([workletCode], { type: 'application/javascript' });
       const workletUrl = URL.createObjectURL(blob);
 
-      audioContext.audioWorklet
-        .addModule(workletUrl)
-        .then(() => {
-          const audioProcessor = new AudioWorkletNode(audioContext, 'audio-processor');
-          // Connect the audio processor to the audio context destination
-          audioProcessor.connect(audioContext.destination);
-        })
-        
+      audioContext.audioWorklet.addModule(workletUrl).then(() => {
+        const audioProcessor = new AudioWorkletNode(audioContext, 'audio-processor');
+        // Connect the audio processor to the audio context destination
+        audioProcessor.connect(audioContext.destination);
+      });
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/@deepgram/sdk"></script>

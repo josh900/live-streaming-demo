@@ -1017,11 +1017,6 @@ async function sendSDPAnswer(streamId, sessionId, answer) {
   });
 }
 
-
-
-
-
-
 async function loadContexts() {
   try {
     const response = await fetch('/contexts');
@@ -1036,21 +1031,22 @@ async function loadContexts() {
     contexts = {
       default: {
         name: 'Default',
-        content: 'You are a helpful, harmless, and honest grocery store assistant. Please answer the users questions briefly, be concise.',
+        content:
+          'You are a helpful, harmless, and honest grocery store assistant. Please answer the users questions briefly, be concise.',
       },
     };
   }
   populateContextSelect();
 }
-    logger.error('Error loading contexts:');
-    // Create a default context if loading fails
-    contexts = {
-      default: {
-        name: 'Default',
-        content:
-          'You are a helpful, harmless, and honest grocery store assistant. Please answer the users questions briefly, be concise.',
-      },
-    };
+logger.error('Error loading contexts:');
+// Create a default context if loading fails
+contexts = {
+  default: {
+    name: 'Default',
+    content:
+      'You are a helpful, harmless, and honest grocery store assistant. Please answer the users questions briefly, be concise.',
+  },
+};
 export async function handleContextChange() {
   currentContext = document.getElementById('context-select').value;
   if (currentContext === 'create-new') {
@@ -1058,16 +1054,16 @@ export async function handleContextChange() {
     return;
   }
   updateContextInput();
-    const option = document.createElement('option');
-    option.value = key;
-    option.textContent = value.name;
-    contextSelect.appendChild(option);
-  }
+  const option = document.createElement('option');
+  option.value = key;
+  option.textContent = value.name;
+  contextSelect.appendChild(option);
+}
 
-  if (Object.keys(contexts).length > 0) {
-    currentContext = Object.keys(contexts)[0];
-    contextSelect.value = currentContext;
-    updateContextInput();
+if (Object.keys(contexts).length > 0) {
+  currentContext = Object.keys(contexts)[0];
+  contextSelect.value = currentContext;
+  updateContextInput();
   modal.style.display = 'block';
 }
 
@@ -1076,12 +1072,10 @@ export function closeContextModal() {
   modal.style.display = 'none';
 }
 
-
 const contextSelect = document.getElementById('context-select');
 if (contextSelect) {
   contextSelect.addEventListener('change', handleContextChange);
 }
-
 
 function populateContextSelect() {
   const contextSelect = document.getElementById('context-select');
