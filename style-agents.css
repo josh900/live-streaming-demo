@@ -35,7 +35,7 @@
 }
 
 .signalingState-stable {
-  color: green;
+  color: green
 }
 .signalingState-have-local-offer,
 .signalingState-have-remote-offer,
