@@ -62,21 +62,6 @@ app.post('/avatar', upload.single('image'), async (req, res) => {
     const avatar = await createOrUpdateAvatar(name, req.file, voiceId || 'en-US-GuyNeural');
 
     res.write('data: {"status": "completed", "avatar": ' + JSON.stringify(avatar) + '}\n\n');
-app.get('/contexts', async (req, res) => {
-  try {
-    const contexts = await getContexts();
-    if (Object.keys(contexts).length === 0) {
-      // If no contexts are found, return a default context
-      contexts.default = {
-        name: 'Default',
-        content: 'You are a helpful, harmless, and honest assistant.',
-      };
-    }
-    res.json(contexts);
-  } catch (error) {
-    console.error('Error getting contexts:', error);
-    res.status(500).json({ error: 'Failed to get contexts' });
-  }
   } catch (error) {
     console.error('Error creating/updating avatar:', error);
     res.write('data: {"status": "error", "message": "Failed to create/update avatar"}\n\n');
@@ -97,6 +82,13 @@ app.get('/avatars', async (req, res) => {
 app.get('/contexts', async (req, res) => {
   try {
     const contexts = await getContexts();
+    if (Object.keys(contexts).length === 0) {
+      // If no contexts are found, return a default context
+      contexts.default = {
+        name: 'Default',
+        content: 'You are a helpful, harmless, and honest assistant.',
+      };
+    }
     res.json(contexts);
   } catch (error) {
     console.error('Error getting contexts:', error);
