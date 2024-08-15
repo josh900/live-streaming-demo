@@ -6,7 +6,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { Readable } from 'stream';
 import sharp from 'sharp';
-import fs from 'fs/promises';
 import path from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
