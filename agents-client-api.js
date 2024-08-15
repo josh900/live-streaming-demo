@@ -1031,7 +1031,7 @@ async function loadContexts() {
     contexts = await response.json();
     logger.debug('Contexts loaded:', contexts);
   } catch (error) {
-    logger.error('Error loading contexts:', error);
+    logger.error('Error loading contexts:');
     // Create a default context if loading fails
     contexts = {
       default: {
@@ -2714,6 +2714,7 @@ export {
   openAvatarModal,
   closeAvatarModal,
   saveAvatar,
+  saveContext,
   updateContext,
   updateContextInput,
   handleTextInput,
