@@ -79,8 +79,6 @@
         </div>
       </div>
 
-
-      
       <div id="right-column">
         <div id="context-wrapper">
           <h4>Context:</h4>
@@ -88,8 +86,6 @@
           <button id="edit-context-button" type="button">Edit Context</button>
           <textarea id="context-input" rows="4" cols="50" readonly></textarea>
         </div>
-        
-        
 
         <div class="chat">
           <h4>Chat History</h4>
@@ -124,7 +120,7 @@
     <div id="context-modal" class="modal">
       <div class="modal-content">
         <h2>Create/Edit Context</h2>
-        <input type="text" id="context-name" placeholder="Context Name">
+        <input type="text" id="context-name" placeholder="Context Name" />
         <textarea id="context-content" rows="4" cols="50" placeholder="Context Content"></textarea>
         <button id="save-context-button">Save Context</button>
         <button onclick="closeContextModal()">Cancel</button>
@@ -186,11 +182,9 @@
         toggleAutoSpeak,
       } from './agents-client-api.js';
 
-        // Make closeContextModal available globally
+      // Make closeContextModal available globally
 
       window.closeContextModal = closeContextModal;
-
-    
 
       // Make closeAvatarModal available globally
       window.closeAvatarModal = closeAvatarModal;

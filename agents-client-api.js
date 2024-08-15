@@ -1017,7 +1017,6 @@ async function sendSDPAnswer(streamId, sessionId, answer) {
   });
 }
 
-
 async function loadContexts() {
   try {
     const response = await fetch('/contexts');
@@ -1032,13 +1031,13 @@ async function loadContexts() {
     contexts = {
       default: {
         name: 'Default',
-        content: 'You are a helpful, harmless, and honest grocery store assistant. Please answer the users questions briefly, be concise.'
-      }
+        content:
+          'You are a helpful, harmless, and honest grocery store assistant. Please answer the users questions briefly, be concise.',
+      },
     };
   }
   populateContextSelect();
 }
-
 
 function populateContextSelect() {
   const contextSelect = document.getElementById('context-select');
@@ -1064,7 +1063,6 @@ function populateContextSelect() {
     updateContextInput();
   }
 }
-
 
 function updateContextInput() {
   const contextInput = document.getElementById('context-input');
@@ -1160,9 +1158,6 @@ async function saveContext() {
   }
 }
 
-
-
-
 async function initialize() {
   setLogLevel('DEBUG');
   connectionState = ConnectionState.DISCONNECTED;
@@ -1181,7 +1176,6 @@ async function initialize() {
   await loadContexts();
   populateContextSelect();
 
-
   const contextInput = document.getElementById('context-input');
   if (contextInput) {
     contextInput.value = context.trim();
@@ -1196,36 +1190,36 @@ async function initialize() {
     contextSelect.addEventListener('change', handleContextChange);
   }
 
- const editContextButton = document.getElementById('edit-context-button');
-     if (editContextButton) {
-       editContextButton.addEventListener('click', () => openContextModal(currentContext));
-     }
+  const editContextButton = document.getElementById('edit-context-button');
+  if (editContextButton) {
+    editContextButton.addEventListener('click', () => openContextModal(currentContext));
+  }
 
-     const sendTextButton = document.getElementById('send-text-button');
-     const textInput = document.getElementById('text-input');
-     const replaceContextButton = document.getElementById('replace-context-button');
-     const autoSpeakToggle = document.getElementById('auto-speak-toggle');
-     const editAvatarButton = document.getElementById('edit-avatar-button');
+  const sendTextButton = document.getElementById('send-text-button');
+  const textInput = document.getElementById('text-input');
+  const replaceContextButton = document.getElementById('replace-context-button');
+  const autoSpeakToggle = document.getElementById('auto-speak-toggle');
+  const editAvatarButton = document.getElementById('edit-avatar-button');
 
-     if (sendTextButton && textInput) {
-      sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
-      textInput.addEventListener('keypress', (event) => {
-        if (event.key === 'Enter') handleTextInput(textInput.value);
-      });
-    }
- 
-    if (replaceContextButton) {
-      replaceContextButton.addEventListener('click', () => updateContext('replace'));
-    }
-    
-    if (autoSpeakToggle) {
-      autoSpeakToggle.addEventListener('click', toggleAutoSpeak);
-    }
-    
-    if (editAvatarButton) {
-      editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatar));
-    }
-    
+  if (sendTextButton && textInput) {
+    sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
+    textInput.addEventListener('keypress', (event) => {
+      if (event.key === 'Enter') handleTextInput(textInput.value);
+    });
+  }
+
+  if (replaceContextButton) {
+    replaceContextButton.addEventListener('click', () => updateContext('replace'));
+  }
+
+  if (autoSpeakToggle) {
+    autoSpeakToggle.addEventListener('click', toggleAutoSpeak);
+  }
+
+  if (editAvatarButton) {
+    editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatar));
+  }
+
   initializeWebSocket();
   playIdleVideo();
 

@@ -111,8 +111,6 @@ app.post('/context', async (req, res) => {
   }
 });
 
-
-
 const server = http.createServer(app);
 
 const wss = new WebSocketServer({ server });
