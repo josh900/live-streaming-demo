@@ -1192,29 +1192,40 @@ async function initialize() {
     });
   }
   const contextSelect = document.getElementById('context-select');
-     if (contextSelect) {
-       contextSelect.addEventListener('change', handleContextChange);
-     }
+  if (contextSelect) {
+    contextSelect.addEventListener('change', handleContextChange);
+  }
 
  const editContextButton = document.getElementById('edit-context-button');
      if (editContextButton) {
        editContextButton.addEventListener('click', () => openContextModal(currentContext));
      }
 
-  const sendTextButton = document.getElementById('send-text-button');
-  const textInput = document.getElementById('text-input');
-  const replaceContextButton = document.getElementById('replace-context-button');
-  const autoSpeakToggle = document.getElementById('auto-speak-toggle');
-  const editAvatarButton = document.getElementById('edit-avatar-button');
+     const sendTextButton = document.getElementById('send-text-button');
+     const textInput = document.getElementById('text-input');
+     const replaceContextButton = document.getElementById('replace-context-button');
+     const autoSpeakToggle = document.getElementById('auto-speak-toggle');
+     const editAvatarButton = document.getElementById('edit-avatar-button');
 
-  sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
-  textInput.addEventListener('keypress', (event) => {
-    if (event.key === 'Enter') handleTextInput(textInput.value);
-  });
-  replaceContextButton.addEventListener('click', () => updateContext('replace'));
-  autoSpeakToggle.addEventListener('click', toggleAutoSpeak);
-  editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatar));
-
+     if (sendTextButton && textInput) {
+      sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
+      textInput.addEventListener('keypress', (event) => {
+        if (event.key === 'Enter') handleTextInput(textInput.value);
+      });
+    }
+ 
+    if (replaceContextButton) {
+      replaceContextButton.addEventListener('click', () => updateContext('replace'));
+    }
+    
+    if (autoSpeakToggle) {
+      autoSpeakToggle.addEventListener('click', toggleAutoSpeak);
+    }
+    
+    if (editAvatarButton) {
+      editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatar));
+    }
+    
   initializeWebSocket();
   playIdleVideo();
 
