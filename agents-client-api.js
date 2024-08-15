@@ -1076,6 +1076,13 @@ export function closeContextModal() {
   modal.style.display = 'none';
 }
 
+
+const contextSelect = document.getElementById('context-select');
+if (contextSelect) {
+  contextSelect.addEventListener('change', handleContextChange);
+}
+
+
 function populateContextSelect() {
   const contextSelect = document.getElementById('context-select');
   if (!contextSelect) return;
@@ -1207,10 +1214,6 @@ async function initialize() {
         context = contextInput.value.trim();
       }
     });
-  }
-  const contextSelect = document.getElementById('context-select');
-  if (contextSelect) {
-    contextSelect.addEventListener('change', handleContextChange);
   }
 
   const editContextButton = document.getElementById('edit-context-button');
