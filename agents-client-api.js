@@ -989,39 +989,6 @@ async function fetchStreamOffer(streamId) {
     },
   });
   const data = await response.json();
-  return data.offer;
-}
-
-async function fetchIceServers() {
-  const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/ice_servers`, {
-    method: 'GET',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-    },
-  });
-  const data = await response.json();
-  return data.ice_servers;
-}
-
-async function sendSDPAnswer(streamId, sessionId, answer) {
-  await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${DID_API.key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      answer,
-      session_id: sessionId,
-    }),
-  });
-}
-
-
-
-
-
-
 async function loadContexts() {
   try {
     const response = await fetch('/contexts');
@@ -1108,6 +1075,15 @@ function updateContextInput() {
   } else if (contextInput) {
     contextInput.value = '';
   }
+}
+
+export async function handleContextChange() {
+  currentContext = document.getElementById('context-select').value;
+  if (currentContext === 'create-new') {
+    openContextModal();
+    return;
+  }
+  updateContextInput();
 }
 
 export function openContextModal(contextName = null) {
