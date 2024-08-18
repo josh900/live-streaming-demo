@@ -1,84 +1,84 @@
 'use strict';
-import DID_API from './api.js'; 
-import logger from './logger.js'; 
-const { createClient, LiveTranscriptionEvents } = deepgram; 
+import DID_API from './api.js';
+import logger from './logger.js';
+const { createClient, LiveTranscriptionEvents } = deepgram;
 
-const deepgramClient = createClient(DID_API.deepgramKey); 
+const deepgramClient = createClient(DID_API.deepgramKey);
 
-const RTCPeerConnection = ( 
+const RTCPeerConnection = (
   window.RTCPeerConnection ||
   window.webkitRTCPeerConnection ||
   window.mozRTCPeerConnection
 ).bind(window);
 
-let peerConnection; 
-let pcDataChannel; 
-let streamId; 
-let sessionId; 
-let sessionClientAnswer; 
-let statsIntervalId; 
-let videoIsPlaying; 
-let lastBytesReceived; 
-let chatHistory = []; 
-let inactivityTimeout; 
-let keepAliveInterval; 
-let socket; 
-let isInitializing = false; 
-let audioContext; 
-let streamVideoElement; 
-let idleVideoElement; 
-let deepgramConnection; 
-let isRecording = false; 
-let audioWorkletNode; 
-let currentUtterance = ''; 
-let interimMessageAdded = false; 
-let autoSpeakMode = true; 
-let transitionCanvas; 
-let transitionCtx; 
-let isDebugMode = false; 
-let isTransitioning = false; 
-let lastVideoStatus = null; 
-let isCurrentlyStreaming = false; 
-let reconnectAttempts = 10; 
-let persistentStreamId = null; 
-let persistentSessionId = null; 
-let isPersistentStreamActive = false; 
-const API_RATE_LIMIT = 40; // Maximum number of calls per minute 
-const API_CALL_INTERVAL = 30000 / API_RATE_LIMIT; // Minimum time between API calls in milliseconds 
-let lastApiCallTime = 0; 
-const maxRetryCount = 10; 
-const maxDelaySec = 100; 
-const RECONNECTION_INTERVAL = 100000; // 25 seconds for testing, adjust as needed 
-let isAvatarSpeaking = false; 
-const MAX_RECONNECT_ATTEMPTS = 10; 
-const INITIAL_RECONNECT_DELAY = 2000; // 1 second 
-const MAX_RECONNECT_DELAY = 90000; // 30 seconds 
-let autoSpeakInProgress = false; 
+let peerConnection;
+let pcDataChannel;
+let streamId;
+let sessionId;
+let sessionClientAnswer;
+let statsIntervalId;
+let videoIsPlaying;
+let lastBytesReceived;
+let chatHistory = [];
+let inactivityTimeout;
+let keepAliveInterval;
+let socket;
+let isInitializing = false;
+let audioContext;
+let streamVideoElement;
+let idleVideoElement;
+let deepgramConnection;
+let isRecording = false;
+let audioWorkletNode;
+let currentUtterance = '';
+let interimMessageAdded = false;
+let autoSpeakMode = true;
+let transitionCanvas;
+let transitionCtx;
+let isDebugMode = false;
+let isTransitioning = false;
+let lastVideoStatus = null;
+let isCurrentlyStreaming = false;
+let reconnectAttempts = 10;
+let persistentStreamId = null;
+let persistentSessionId = null;
+let isPersistentStreamActive = false;
+const API_RATE_LIMIT = 40; // Maximum number of calls per minute
+const API_CALL_INTERVAL = 30000 / API_RATE_LIMIT; // Minimum time between API calls in milliseconds
+let lastApiCallTime = 0;
+const maxRetryCount = 10;
+const maxDelaySec = 100;
+const RECONNECTION_INTERVAL = 100000; // 25 seconds for testing, adjust as needed
+let isAvatarSpeaking = false;
+const MAX_RECONNECT_ATTEMPTS = 10;
+const INITIAL_RECONNECT_DELAY = 2000; // 1 second
+const MAX_RECONNECT_DELAY = 90000; // 30 seconds
+let autoSpeakInProgress = false;
 
-const ConnectionState = { 
+const ConnectionState = {
   DISCONNECTED: 'disconnected',
   CONNECTING: 'connecting',
   CONNECTED: 'connected',
   RECONNECTING: 'reconnecting',
 };
 
-let lastConnectionTime = Date.now(); 
+let lastConnectionTime = Date.now();
 
-let connectionState = ConnectionState.DISCONNECTED; 
+let connectionState = ConnectionState.DISCONNECTED;
 
-export function setLogLevel(level) { 
+export function setLogLevel(level) {
   logger.setLogLevel(level);
   isDebugMode = level === 'DEBUG';
   logger.debug(`Log level set to ${level}. Debug mode is ${isDebugMode ? 'enabled' : 'disabled'}.`);
 }
 
-let avatars = {}; 
-let currentAvatar = ''; 
+let avatars = {};
+let currentAvatar = '';
 
-const avatarSelect = document.getElementById('avatar-select'); 
+const avatarSelect = document.getElementById('avatar-select');
 avatarSelect.addEventListener('change', handleAvatarChange);
 
-let context = ` 
+let context = `
 
 grocery store info:
 ---
@@ -426,20 +426,16 @@ Please provide your response to the users last message in SSML syntax.
 `;
 
 async function prepareForStreaming() {
-
   if (!streamId || !sessionId) {
     throw new Error('Stream ID or Session ID is missing. Cannot prepare for streaming.');
   }
 
-
-  const streamVideoElement = document.getElementById('stream-video-element'); 
-  const idleVideoElement = document.getElementById('idle-video-element'); 
-
+  const streamVideoElement = document.getElementById('stream-video-element');
+  const idleVideoElement = document.getElementById('idle-video-element');
 
   if (!streamVideoElement || !idleVideoElement) {
     throw new Error('Video elements not found');
   }
-
 
   // Reset video elements
   streamVideoElement.srcObject = null;
@@ -452,11 +448,10 @@ async function prepareForStreaming() {
   logger.debug('Prepared for streaming');
 }
 
-
 function initializeTransitionCanvas() {
-  const videoWrapper = document.querySelector('#video-wrapper'); 
-  const rect = videoWrapper.getBoundingClientRect(); 
-  const size = Math.min(rect.width, rect.height, 550); 
+  const videoWrapper = document.querySelector('#video-wrapper');
+  const rect = videoWrapper.getBoundingClientRect();
+  const size = Math.min(rect.width, rect.height, 550);
 
   transitionCanvas = document.createElement('canvas');
   transitionCanvas.width = size;
@@ -479,54 +474,44 @@ function initializeTransitionCanvas() {
   videoWrapper.appendChild(transitionCanvas);
 
   window.addEventListener('resize', () => {
-    const videoWrapper = document.querySelector('#video-wrapper'); 
-    const rect = videoWrapper.getBoundingClientRect(); 
-    const size = Math.min(rect.width, rect.height, 550); 
+    const videoWrapper = document.querySelector('#video-wrapper');
+    const rect = videoWrapper.getBoundingClientRect();
+    const size = Math.min(rect.width, rect.height, 550);
 
     transitionCanvas.width = size;
     transitionCanvas.height = size;
   });
 }
 
-
-
 function smoothTransition(toStreaming, duration = 250) {
-  const idleVideoElement = document.getElementById('idle-video-element'); 
-  const streamVideoElement = document.getElementById('stream-video-element'); 
-
+  const idleVideoElement = document.getElementById('idle-video-element');
+  const streamVideoElement = document.getElementById('stream-video-element');
 
   if (!idleVideoElement || !streamVideoElement) {
     logger.warn('Video elements not found for transition');
     return;
   }
 
-
-
   if (isTransitioning) {
     logger.debug('Transition already in progress, skipping');
     return;
   }
 
-
   // Don't transition if we're already in the desired state
-
   if ((toStreaming && isCurrentlyStreaming) || (!toStreaming && !isCurrentlyStreaming)) {
     logger.debug('Already in desired state, skipping transition');
     return;
   }
 
-
   isTransitioning = true;
   logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
 
-  let startTime = null; 
-
+  let startTime = null;
 
   function animate(currentTime) {
-
     if (!startTime) startTime = currentTime;
-    const elapsed = currentTime - startTime; 
-    const progress = Math.min(elapsed / duration, 1); 
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
 
     transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
 
@@ -550,12 +535,10 @@ function smoothTransition(toStreaming, duration = 250) {
       transitionCanvas.height,
     );
 
-
     if (progress < 1) {
       requestAnimationFrame(animate);
     } else {
       // Ensure final state is set correctly
-
       if (toStreaming) {
         streamVideoElement.style.display = 'block';
         idleVideoElement.style.display = 'none';
@@ -563,15 +546,12 @@ function smoothTransition(toStreaming, duration = 250) {
         streamVideoElement.style.display = 'none';
         idleVideoElement.style.display = 'block';
       }
-
       isTransitioning = false;
       isCurrentlyStreaming = toStreaming;
       transitionCanvas.style.display = 'none';
       logger.debug('Smooth transition completed');
     }
-
   }
-
 
   // Show the transition canvas
   transitionCanvas.style.display = 'block';
@@ -580,22 +560,16 @@ function smoothTransition(toStreaming, duration = 250) {
   requestAnimationFrame(animate);
 }
 
-
-
 function getVideoElements() {
-  const idle = document.getElementById('idle-video-element'); 
-  const stream = document.getElementById('stream-video-element'); 
-
+  const idle = document.getElementById('idle-video-element');
+  const stream = document.getElementById('stream-video-element');
 
   if (!idle || !stream) {
     logger.warn('Video elements not found in the DOM');
   }
 
-
   return { idle, stream };
 }
-
-
 
 function getStatusLabels() {
   return {
@@ -607,8 +581,6 @@ function getStatusLabels() {
   };
 }
 
-
-
 function initializeWebSocket() {
   socket = new WebSocket(`wss://${window.location.host}`);
 
@@ -617,9 +589,8 @@ function initializeWebSocket() {
   };
 
   socket.onmessage = (event) => {
-    const data = JSON.parse(event.data); 
+    const data = JSON.parse(event.data);
     logger.debug('Received WebSocket message:', data);
-
 
     switch (data.type) {
       case 'transcription':
@@ -631,7 +602,6 @@ function initializeWebSocket() {
       default:
         logger.warn('Unknown WebSocket message type:', data.type);
     }
-
   };
 
   socket.onerror = (error) => {
@@ -644,47 +614,34 @@ function initializeWebSocket() {
   };
 }
 
-
-
 function updateTranscript(text, isFinal) {
-  const msgHistory = document.getElementById('msgHistory'); 
-  let interimSpan = msgHistory.querySelector('span[data-interim]'); 
-
+  const msgHistory = document.getElementById('msgHistory');
+  let interimSpan = msgHistory.querySelector('span[data-interim]');
 
   if (isFinal) {
-
     if (interimSpan) {
       interimSpan.remove();
     }
-
     msgHistory.innerHTML += `<span><u>User:</u> ${text}</span><br>`;
     logger.debug('Final transcript added to chat history:', text);
     interimMessageAdded = false;
   } else {
-
     if (text.trim()) {
-
       if (!interimMessageAdded) {
         msgHistory.innerHTML += `<span data-interim style='opacity:0.5'><u>User (interim):</u> ${text}</span><br>`;
         interimMessageAdded = true;
       } else if (interimSpan) {
         interimSpan.innerHTML = `<u>User (interim):</u> ${text}`;
       }
-
     }
-
   }
-
   msgHistory.scrollTop = msgHistory.scrollHeight;
 }
 
-
-
 function handleTextInput(text) {
-
   if (text.trim() === '') return;
 
-  const textInput = document.getElementById('text-input'); 
+  const textInput = document.getElementById('text-input');
   textInput.value = '';
 
   updateTranscript(text, true);
@@ -697,21 +654,16 @@ function handleTextInput(text) {
   sendChatToGroq();
 }
 
-
-
 function updateAssistantReply(text) {
-
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
 }
-
 
 async function initializePersistentStream() {
   logger.info('Initializing persistent stream...');
   connectionState = ConnectionState.CONNECTING;
 
-
   try {
-    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, { 
+    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -744,13 +696,12 @@ async function initializePersistentStream() {
       }),
     });
 
-    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json(); 
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
 
     persistentStreamId = newStreamId;
     persistentSessionId = newSessionId;
 
     logger.info('Persistent stream created:', { persistentStreamId, persistentSessionId });
-
 
     try {
       sessionClientAnswer = await createPeerConnection(offer, iceServers);
@@ -761,10 +712,9 @@ async function initializePersistentStream() {
       throw e;
     }
 
-
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/sdp`, { 
+    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/sdp`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -776,11 +726,9 @@ async function initializePersistentStream() {
       }),
     });
 
-
     if (!sdpResponse.ok) {
       throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
     }
-
     isPersistentStreamActive = true;
     startKeepAlive();
     lastConnectionTime = Date.now(); // Update the last connection time
@@ -794,60 +742,44 @@ async function initializePersistentStream() {
     connectionState = ConnectionState.DISCONNECTED;
     throw error;
   }
-
 }
 
-
-
 function shouldReconnect() {
-  const timeSinceLastConnection = Date.now() - lastConnectionTime; 
+  const timeSinceLastConnection = Date.now() - lastConnectionTime;
   return timeSinceLastConnection > RECONNECTION_INTERVAL * 0.9;
 }
 
-
-
 function scheduleReconnect() {
-
   if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
     logger.error('Max reconnection attempts reached. Please refresh the page.');
     showErrorMessage('Failed to reconnect after multiple attempts. Please refresh the page.');
     return;
   }
 
-
-  const delay = Math.min(INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY); 
+  const delay = Math.min(INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
   logger.debug(`Scheduling reconnection attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
   setTimeout(backgroundReconnect, delay);
   reconnectAttempts++;
 }
 
-
-
 function startKeepAlive() {
-
   if (keepAliveInterval) {
     clearInterval(keepAliveInterval);
   }
 
-
   keepAliveInterval = setInterval(() => {
-
     if (isPersistentStreamActive && peerConnection && peerConnection.connectionState === 'connected' && pcDataChannel) {
-
       try {
-        const keepAliveMessage = JSON.stringify({ type: 'KeepAlive' }); 
-
+        const keepAliveMessage = JSON.stringify({ type: 'KeepAlive' });
         if (pcDataChannel.readyState === 'open') {
           pcDataChannel.send(keepAliveMessage);
           logger.debug('Keepalive message sent successfully');
         } else {
           logger.warn('Data channel is not open. Current state:', pcDataChannel.readyState);
         }
-
       } catch (error) {
         logger.warn('Error sending keepalive message:', error);
       }
-
     } else {
       logger.debug(
         'Conditions not met for sending keepalive. isPersistentStreamActive:',
@@ -858,15 +790,11 @@ function startKeepAlive() {
         pcDataChannel ? 'exists' : 'null',
       );
     }
-
   }, 30000); // Send keepalive every 30 seconds
 }
 
-
 async function destroyPersistentStream() {
-
   if (persistentStreamId) {
-
     try {
       await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
         method: 'DELETE',
@@ -886,18 +814,13 @@ async function destroyPersistentStream() {
       persistentStreamId = null;
       persistentSessionId = null;
       isPersistentStreamActive = false;
-
       if (keepAliveInterval) {
         clearInterval(keepAliveInterval);
       }
-
       connectionState = ConnectionState.DISCONNECTED;
     }
-
   }
-
 }
-
 
 async function reinitializePersistentStream() {
   logger.info('Reinitializing persistent stream...');
@@ -905,13 +828,11 @@ async function reinitializePersistentStream() {
   await initializePersistentStream();
 }
 
-
 async function createNewPersistentStream() {
   logger.debug('Creating new persistent stream...');
 
-
   try {
-    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, { 
+    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -944,15 +865,15 @@ async function createNewPersistentStream() {
       }),
     });
 
-    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json(); 
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
 
     logger.debug('New stream created:', { newStreamId, newSessionId });
 
-    const newSessionClientAnswer = await createPeerConnection(offer, iceServers); 
+    const newSessionClientAnswer = await createPeerConnection(offer, iceServers);
 
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${newStreamId}/sdp`, { 
+    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${newStreamId}/sdp`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -964,31 +885,25 @@ async function createNewPersistentStream() {
       }),
     });
 
-
     if (!sdpResponse.ok) {
       throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
     }
-
 
     return { streamId: newStreamId, sessionId: newSessionId };
   } catch (error) {
     logger.error('Error creating new persistent stream:', error);
     return null;
   }
-
 }
 
 async function backgroundReconnect() {
-
   if (connectionState === ConnectionState.RECONNECTING) {
     logger.debug('Background reconnection already in progress. Skipping.');
     return;
   }
 
-
   connectionState = ConnectionState.RECONNECTING;
   logger.debug('Starting background reconnection process...');
-
 
   try {
     await destroyPersistentStream();
@@ -1003,40 +918,32 @@ async function backgroundReconnect() {
     connectionState = ConnectionState.DISCONNECTED;
     scheduleReconnect();
   }
-
 }
-
 
 function waitForIdleState() {
   return new Promise((resolve) => {
-    const checkIdleState = () => { 
-
+    const checkIdleState = () => {
       if (!isAvatarSpeaking) {
         resolve();
       } else {
         setTimeout(checkIdleState, 500); // Check every 500ms
       }
-
     };
     checkIdleState();
   });
 }
 
-
 async function switchToNewStream(newStreamData) {
   logger.debug('Switching to new stream...');
-
 
   try {
     connectionState = ConnectionState.RECONNECTING;
 
     // Quickly switch the video source to the new stream
-
     if (streamVideoElement) {
       // Instead of directly setting src, we need to update the WebRTC connection
       await updateWebRTCConnection(newStreamData);
     }
-
 
     // Update global variables
     persistentStreamId = newStreamData.streamId;
@@ -1052,18 +959,16 @@ async function switchToNewStream(newStreamData) {
     connectionState = ConnectionState.DISCONNECTED;
     throw error;
   }
-
 }
 
 async function updateWebRTCConnection(newStreamData) {
   logger.debug('Updating WebRTC connection...');
 
-
   try {
-    const offer = await fetchStreamOffer(newStreamData.streamId); 
-    const iceServers = await fetchIceServers(); 
+    const offer = await fetchStreamOffer(newStreamData.streamId);
+    const iceServers = await fetchIceServers();
 
-    const newSessionClientAnswer = await createPeerConnection(offer, iceServers); 
+    const newSessionClientAnswer = await createPeerConnection(offer, iceServers);
 
     await sendSDPAnswer(newStreamData.streamId, newStreamData.sessionId, newSessionClientAnswer);
 
@@ -1072,28 +977,27 @@ async function updateWebRTCConnection(newStreamData) {
     logger.error('Error updating WebRTC connection:', error);
     throw error;
   }
-
 }
 
 async function fetchStreamOffer(streamId) {
-  const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/offer`, { 
+  const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/offer`, {
     method: 'GET',
     headers: {
       Authorization: `Basic ${DID_API.key}`,
     },
   });
-  const data = await response.json(); 
+  const data = await response.json();
   return data.offer;
 }
 
 async function fetchIceServers() {
-  const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/ice_servers`, { 
+  const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/ice_servers`, {
     method: 'GET',
     headers: {
       Authorization: `Basic ${DID_API.key}`,
     },
   });
-  const data = await response.json(); 
+  const data = await response.json();
   return data.ice_servers;
 }
 
@@ -1115,13 +1019,11 @@ async function initialize() {
   setLogLevel('DEBUG');
   connectionState = ConnectionState.DISCONNECTED;
 
-  const { idle, stream } = getVideoElements(); 
+  const { idle, stream } = getVideoElements();
   idleVideoElement = idle;
   streamVideoElement = stream;
 
-
   if (idleVideoElement) idleVideoElement.setAttribute('playsinline', '');
-
   if (streamVideoElement) streamVideoElement.setAttribute('playsinline', '');
 
   initializeTransitionCanvas();
@@ -1129,25 +1031,22 @@ async function initialize() {
   await loadAvatars();
   populateAvatarSelect();
 
-  const contextInput = document.getElementById('context-input'); 
+  const contextInput = document.getElementById('context-input');
   contextInput.value = context.trim();
   contextInput.addEventListener('input', () => {
-
     if (!contextInput.value.includes('Original Context:')) {
       context = contextInput.value.trim();
     }
-
   });
 
-  const sendTextButton = document.getElementById('send-text-button'); 
-  const textInput = document.getElementById('text-input'); 
-  const replaceContextButton = document.getElementById('replace-context-button'); 
-  const autoSpeakToggle = document.getElementById('auto-speak-toggle'); 
-  const editAvatarButton = document.getElementById('edit-avatar-button'); 
+  const sendTextButton = document.getElementById('send-text-button');
+  const textInput = document.getElementById('text-input');
+  const replaceContextButton = document.getElementById('replace-context-button');
+  const autoSpeakToggle = document.getElementById('auto-speak-toggle');
+  const editAvatarButton = document.getElementById('edit-avatar-button');
 
   sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
   textInput.addEventListener('keypress', (event) => {
-
     if (event.key === 'Enter') handleTextInput(textInput.value);
   });
   replaceContextButton.addEventListener('click', () => updateContext('replace'));
@@ -1158,7 +1057,6 @@ async function initialize() {
   playIdleVideo();
 
   showLoadingSymbol();
-
   try {
     await initializePersistentStream();
     startConnectionHealthCheck();
@@ -1170,77 +1068,58 @@ async function initialize() {
     connectionState = ConnectionState.DISCONNECTED;
   }
 
-
   // Set up reconnection mechanism
   window.addEventListener('online', async () => {
-
     if (connectionState === ConnectionState.DISCONNECTED) {
       logger.info('Network connection restored. Attempting to reconnect...');
-
       try {
         await backgroundReconnect();
       } catch (error) {
         logger.error('Failed to reconnect after network restoration:', error);
       }
-
     }
-
   });
 
   // Handle visibility change
-
   document.addEventListener('visibilitychange', () => {
-
     if (!document.hidden && connectionState === ConnectionState.DISCONNECTED) {
       logger.info('Page became visible. Checking connection...');
-
       if (navigator.onLine) {
         backgroundReconnect();
       }
-
     }
-
   });
 
   logger.info('Initialization complete');
 }
 
-
 async function handleAvatarChange() {
   currentAvatar = avatarSelect.value;
-
   if (currentAvatar === 'create-new') {
     openAvatarModal();
     return;
   }
 
-
-  const idleVideoElement = document.getElementById('idle-video-element'); 
-
+  const idleVideoElement = document.getElementById('idle-video-element');
   if (idleVideoElement) {
     idleVideoElement.src = avatars[currentAvatar].silentVideoUrl;
-
     try {
       await idleVideoElement.load();
       logger.debug(`Idle video loaded for ${currentAvatar}`);
     } catch (error) {
       logger.error(`Error loading idle video for ${currentAvatar}:`, error);
     }
-
   }
 
-
-  const streamVideoElement = document.getElementById('stream-video-element'); 
-
+  const streamVideoElement = document.getElementById('stream-video-element');
   if (streamVideoElement) {
     streamVideoElement.srcObject = null;
   }
 
-
   await stopRecording();
   currentUtterance = '';
   interimMessageAdded = false;
-  const msgHistory = document.getElementById('msgHistory'); 
+  const msgHistory = document.getElementById('msgHistory');
   msgHistory.innerHTML = '';
   chatHistory = [];
 
@@ -1248,62 +1127,48 @@ async function handleAvatarChange() {
   await initializePersistentStream();
 }
 
-
 async function loadAvatars() {
-
   try {
-    const response = await fetch('/avatars'); 
-
+    const response = await fetch('/avatars');
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-
     avatars = await response.json();
     logger.debug('Avatars loaded:', avatars);
   } catch (error) {
     logger.error('Error loading avatars:', error);
     showErrorMessage('Failed to load avatars. Please try again.');
   }
-
 }
 
-
-
 function populateAvatarSelect() {
-  const avatarSelect = document.getElementById('avatar-select'); 
+  const avatarSelect = document.getElementById('avatar-select');
   avatarSelect.innerHTML = '';
 
-  const createNewOption = document.createElement('option'); 
+  const createNewOption = document.createElement('option');
   createNewOption.value = 'create-new';
   createNewOption.textContent = 'Create New Avatar';
   avatarSelect.appendChild(createNewOption);
 
-
   for (const [key, value] of Object.entries(avatars)) {
-    const option = document.createElement('option'); 
+    const option = document.createElement('option');
     option.value = key;
     option.textContent = value.name;
     avatarSelect.appendChild(option);
   }
 
-
-
   if (Object.keys(avatars).length > 0) {
     currentAvatar = Object.keys(avatars)[0];
     avatarSelect.value = currentAvatar;
   }
-
 }
 
-
-
 function openAvatarModal(avatarName = null) {
-  const modal = document.getElementById('avatar-modal'); 
-  const nameInput = document.getElementById('avatar-name'); 
-  const voiceInput = document.getElementById('avatar-voice'); 
-  const imagePreview = document.getElementById('avatar-image-preview'); 
-  const saveButton = document.getElementById('save-avatar-button'); 
-
+  const modal = document.getElementById('avatar-modal');
+  const nameInput = document.getElementById('avatar-name');
+  const voiceInput = document.getElementById('avatar-voice');
+  const imagePreview = document.getElementById('avatar-image-preview');
+  const saveButton = document.getElementById('save-avatar-button');
 
   if (avatarName && avatars[avatarName]) {
     nameInput.value = avatars[avatarName].name;
@@ -1317,69 +1182,52 @@ function openAvatarModal(avatarName = null) {
     saveButton.textContent = 'Create Avatar';
   }
 
-
   modal.style.display = 'block';
 }
 
-
-
 function closeAvatarModal() {
-  const modal = document.getElementById('avatar-modal'); 
+  const modal = document.getElementById('avatar-modal');
   modal.style.display = 'none';
 }
 
-
 async function saveAvatar() {
-  const name = document.getElementById('avatar-name').value; 
-  const voiceId = document.getElementById('avatar-voice').value || 'en-US-GuyNeural'; 
-  const imageFile = document.getElementById('avatar-image').files[0]; 
-
+  const name = document.getElementById('avatar-name').value;
+  const voiceId = document.getElementById('avatar-voice').value || 'en-US-GuyNeural';
+  const imageFile = document.getElementById('avatar-image').files[0];
 
   if (!name) {
     showErrorMessage('Please fill in the avatar name.');
     return;
   }
 
-
-  const formData = new FormData(); 
-
+  const formData = new FormData();
   formData.append('name', name);
-
   formData.append('voiceId', voiceId);
-
   if (imageFile) {
-
     formData.append('image', imageFile);
   }
 
-
   showToast('Saving avatar...', 0);
 
-
   try {
-    const response = await fetch('/avatar', { 
+    const response = await fetch('/avatar', {
       method: 'POST',
       body: formData,
     });
 
-    const reader = response.body.getReader(); 
-    const decoder = new TextDecoder(); 
-
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
 
     while (true) {
-      const { done, value } = await reader.read(); 
-
+      const { done, value } = await reader.read();
       if (done) break;
 
-      const chunk = decoder.decode(value); 
-      const events = chunk.split('\n\n'); 
-
+      const chunk = decoder.decode(value);
+      const events = chunk.split('\n\n');
 
       for (const event of events) {
-
         if (event.startsWith('data: ')) {
-          const data = JSON.parse(event.slice(6)); 
-
+          const data = JSON.parse(event.slice(6));
           if (data.status === 'processing') {
             showToast('Processing avatar...', 0);
           } else if (data.status === 'completed') {
@@ -1390,36 +1238,26 @@ async function saveAvatar() {
           } else if (data.status === 'error') {
             showErrorMessage(data.message);
           }
-
         }
-
       }
-
     }
-
   } catch (error) {
     console.error('Error saving avatar:', error);
     showErrorMessage('Failed to save avatar. Please try again.');
   }
-
 }
 
-
-
 function updateContext(action) {
-  const contextInput = document.getElementById('context-input'); 
-  const newContext = contextInput.value.trim(); 
-
+  const contextInput = document.getElementById('context-input');
+  const newContext = contextInput.value.trim();
 
   if (newContext) {
-    const originalContext = context; 
-
+    const originalContext = context;
     if (action === 'append') {
       context += '\n' + newContext;
     } else if (action === 'replace') {
       context = newContext;
     }
-
     logger.debug('Context updated:', context);
     showToast('Context saved successfully');
 
@@ -1427,13 +1265,10 @@ function updateContext(action) {
   } else {
     showToast('Please enter some text before updating the context');
   }
-
 }
 
-
-
 function displayBothContexts(original, updated) {
-  const contextInput = document.getElementById('context-input'); 
+  const contextInput = document.getElementById('context-input');
   contextInput.value = `Original Context:\n${original}\n\nNew Context:\n${updated}`;
 
   setTimeout(() => {
@@ -1441,10 +1276,8 @@ function displayBothContexts(original, updated) {
   }, 3000);
 }
 
-
-
 function showToast(message) {
-  const toast = document.createElement('div'); 
+  const toast = document.createElement('div');
   toast.textContent = message;
   toast.style.position = 'fixed';
   toast.style.bottom = '20px';
@@ -1456,32 +1289,25 @@ function showToast(message) {
   toast.style.borderRadius = '5px';
   toast.style.zIndex = '1000';
 
-
   document.body.appendChild(toast);
 
   setTimeout(() => {
     toast.style.opacity = '0';
     toast.style.transition = 'opacity 0.5s ease-out';
     setTimeout(() => {
-
       document.body.removeChild(toast);
     }, 500);
   }, 3000);
 }
 
-
-
 if (document.readyState === 'loading') {
-
   document.addEventListener('DOMContentLoaded', initialize);
 } else {
   initialize();
 }
 
-
-
 function showLoadingSymbol() {
-  const loadingSymbol = document.createElement('div'); 
+  const loadingSymbol = document.createElement('div');
   loadingSymbol.id = 'loading-symbol';
   loadingSymbol.innerHTML = 'Connecting...';
   loadingSymbol.style.position = 'absolute';
@@ -1493,47 +1319,34 @@ function showLoadingSymbol() {
   loadingSymbol.style.padding = '10px';
   loadingSymbol.style.borderRadius = '5px';
   loadingSymbol.style.zIndex = '9999';
-
   document.body.appendChild(loadingSymbol);
 }
 
-
-
 function hideLoadingSymbol() {
-  const loadingSymbol = document.getElementById('loading-symbol'); 
-
+  const loadingSymbol = document.getElementById('loading-symbol');
   if (loadingSymbol) {
-
     document.body.removeChild(loadingSymbol);
   }
-
 }
 
-
-
 function showErrorMessage(message) {
-  const errorMessage = document.createElement('div'); 
+  const errorMessage = document.createElement('div');
   errorMessage.innerHTML = message;
   errorMessage.style.color = 'red';
   errorMessage.style.marginBottom = '10px';
-
   document.body.appendChild(errorMessage);
 
-  const destroyButton = document.getElementById('destroy-button'); 
-  const connectButton = document.getElementById('connect-button'); 
+  const destroyButton = document.getElementById('destroy-button');
+  const connectButton = document.getElementById('connect-button');
   connectButton.onclick = initializePersistentStream;
-
 
   if (destroyButton) destroyButton.style.display = 'inline-block';
   destroyButton.onclick = destroyPersistentStream;
 
-
   if (connectButton) connectButton.style.display = 'inline-block';
 }
 
-
 async function createPeerConnection(offer, iceServers) {
-
   if (!peerConnection) {
     peerConnection = new RTCPeerConnection({ iceServers });
     pcDataChannel = peerConnection.createDataChannel('JanusDataChannel');
@@ -1556,11 +1369,10 @@ async function createPeerConnection(offer, iceServers) {
     pcDataChannel.onmessage = onStreamEvent;
   }
 
-
   await peerConnection.setRemoteDescription(offer);
   logger.debug('Set remote SDP');
 
-  const sessionClientAnswer = await peerConnection.createAnswer(); 
+  const sessionClientAnswer = await peerConnection.createAnswer();
   logger.debug('Created local SDP');
 
   await peerConnection.setLocalDescription(sessionClientAnswer);
@@ -1569,25 +1381,18 @@ async function createPeerConnection(offer, iceServers) {
   return sessionClientAnswer;
 }
 
-
-
 function onIceGatheringStateChange() {
-  const { iceGathering: iceGatheringStatusLabel } = getStatusLabels(); 
-
+  const { iceGathering: iceGatheringStatusLabel } = getStatusLabels();
   if (iceGatheringStatusLabel) {
     iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
     iceGatheringStatusLabel.className = 'iceGatheringState-' + peerConnection.iceGatheringState;
   }
-
   logger.debug('ICE gathering state changed:', peerConnection.iceGatheringState);
 }
 
-
-
 function onIceCandidate(event) {
-
   if (event.candidate && persistentStreamId && persistentSessionId) {
-    const { candidate, sdpMid, sdpMLineIndex } = event.candidate; 
+    const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
     logger.debug('New ICE candidate:', candidate);
 
     fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/ice`, {
@@ -1606,34 +1411,25 @@ function onIceCandidate(event) {
       logger.error('Error sending ICE candidate:', error);
     });
   }
-
 }
 
-
-
 function onIceConnectionStateChange() {
-  const { ice: iceStatusLabel } = getStatusLabels(); 
-
+  const { ice: iceStatusLabel } = getStatusLabels();
   if (iceStatusLabel) {
     iceStatusLabel.innerText = peerConnection.iceConnectionState;
     iceStatusLabel.className = 'iceConnectionState-' + peerConnection.iceConnectionState;
   }
-
   logger.debug('ICE connection state changed:', peerConnection.iceConnectionState);
-
 
   if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'closed') {
     stopAllStreams();
     closePC();
     showErrorMessage('Connection lost. Please try again.');
   }
-
 }
-
 
 async function attemptReconnect() {
   logger.debug('Attempting to reconnect...');
-
   try {
     await reinitializeConnection();
     logger.debug('Reconnection successful');
@@ -1642,21 +1438,15 @@ async function attemptReconnect() {
     logger.error('Reconnection attempt failed:', error);
     scheduleReconnect();
   }
-
 }
 
-
-
 function onConnectionStateChange() {
-  const { peer: peerStatusLabel } = getStatusLabels(); 
-
+  const { peer: peerStatusLabel } = getStatusLabels();
   if (peerStatusLabel) {
     peerStatusLabel.innerText = peerConnection.connectionState;
     peerStatusLabel.className = 'peerConnectionState-' + peerConnection.connectionState;
   }
-
   logger.debug('Peer connection state changed:', peerConnection.connectionState);
-
 
   if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
     logger.warn('Peer connection failed or disconnected. Attempting to reconnect...');
@@ -1667,72 +1457,52 @@ function onConnectionStateChange() {
     connectionState = ConnectionState.CONNECTED;
     reconnectAttempts = 0;
   }
-
 }
-
-
 
 function startConnectionHealthCheck() {
   setInterval(() => {
-
     if (peerConnection) {
-
       if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
         logger.warn('Connection health check detected disconnected state. Attempting to reconnect...');
         connectionState = ConnectionState.DISCONNECTED;
         backgroundReconnect();
       } else if (peerConnection.connectionState === 'connected') {
-        const timeSinceLastConnection = Date.now() - lastConnectionTime; 
-
+        const timeSinceLastConnection = Date.now() - lastConnectionTime;
         if (timeSinceLastConnection > RECONNECTION_INTERVAL * 0.9) {
           logger.info('Approaching reconnection threshold. Initiating background reconnect.');
           backgroundReconnect();
         }
-
       }
-
     }
-
   }, 30000); // Check every 30 seconds
 }
 
-
-
 function onSignalingStateChange() {
-  const { signaling: signalingStatusLabel } = getStatusLabels(); 
-
+  const { signaling: signalingStatusLabel } = getStatusLabels();
   if (signalingStatusLabel) {
     signalingStatusLabel.innerText = peerConnection.signalingState;
     signalingStatusLabel.className = 'signalingState-' + peerConnection.signalingState;
   }
-
   logger.debug('Signaling state changed:', peerConnection.signalingState);
 }
 
-
-
 function onVideoStatusChange(videoIsPlaying, stream) {
-  let status = videoIsPlaying ? 'streaming' : 'empty'; 
-
+  let status = videoIsPlaying ? 'streaming' : 'empty';
 
   if (status === lastVideoStatus) {
     logger.debug('Video status unchanged:', status);
     return;
   }
 
-
   logger.debug('Video status changing from', lastVideoStatus, 'to', status);
 
-  const streamVideoElement = document.getElementById('stream-video-element'); 
-  const idleVideoElement = document.getElementById('idle-video-element'); 
-
+  const streamVideoElement = document.getElementById('stream-video-element');
+  const idleVideoElement = document.getElementById('idle-video-element');
 
   if (!streamVideoElement || !idleVideoElement) {
     logger.error('Video elements not found');
     return;
   }
-
-
 
   if (status === 'streaming') {
     setStreamVideoElement(stream);
@@ -1740,40 +1510,31 @@ function onVideoStatusChange(videoIsPlaying, stream) {
     smoothTransition(false);
   }
 
-
   lastVideoStatus = status;
 
-  const streamingStatusLabel = document.getElementById('streaming-status-label'); 
-
+  const streamingStatusLabel = document.getElementById('streaming-status-label');
   if (streamingStatusLabel) {
     streamingStatusLabel.innerText = status;
     streamingStatusLabel.className = 'streamingState-' + status;
   }
 
-
   logger.debug('Video status changed:', status);
 }
 
-
-
 function setStreamVideoElement(stream) {
-  const streamVideoElement = document.getElementById('stream-video-element'); 
-
+  const streamVideoElement = document.getElementById('stream-video-element');
   if (!streamVideoElement) {
     logger.error('Stream video element not found');
     return;
   }
 
-
   logger.debug('Setting stream video element');
-
   if (stream instanceof MediaStream) {
     streamVideoElement.srcObject = stream;
   } else {
     logger.warn('Invalid stream provided to setStreamVideoElement');
     return;
   }
-
 
   streamVideoElement.onloadedmetadata = () => {
     logger.debug('Stream video metadata loaded');
@@ -1795,14 +1556,10 @@ function setStreamVideoElement(stream) {
   };
 }
 
-
-
 function onStreamEvent(message) {
-
   if (pcDataChannel.readyState === 'open') {
-    let status; 
-    const [event, _] = message.data.split(':'); 
-
+    let status;
+    const [event, _] = message.data.split(':');
 
     switch (event) {
       case 'stream/started':
@@ -1822,65 +1579,48 @@ function onStreamEvent(message) {
         break;
     }
 
-
     // Set stream ready after a short delay, adjusting for potential timing differences between data and stream channels
-
     if (status === 'ready') {
       setTimeout(() => {
         console.log('stream/ready');
         isStreamReady = true;
-        const streamEventLabel = document.getElementById('stream-event-label'); 
-
+        const streamEventLabel = document.getElementById('stream-event-label');
         if (streamEventLabel) {
           streamEventLabel.innerText = 'ready';
           streamEventLabel.className = 'streamEvent-ready';
         }
-
       }, 1000);
     } else {
       console.log(event);
-      const streamEventLabel = document.getElementById('stream-event-label'); 
-
+      const streamEventLabel = document.getElementById('stream-event-label');
       if (streamEventLabel) {
         streamEventLabel.innerText = status === 'dont-care' ? event : status;
         streamEventLabel.className = 'streamEvent-' + status;
       }
-
     }
-
   }
-
 }
-
-
 
 function onTrack(event) {
   logger.debug('onTrack event:', event);
-
   if (!event.track) {
     logger.warn('No track in onTrack event');
     return;
   }
 
-
-
   if (statsIntervalId) {
     clearInterval(statsIntervalId);
   }
 
-
   statsIntervalId = setInterval(async () => {
-
     if (peerConnection && peerConnection.connectionState === 'connected') {
-
       try {
-        const stats = await peerConnection.getStats(event.track); 
-        let videoStatsFound = false; 
+        const stats = await peerConnection.getStats(event.track);
+        let videoStatsFound = false;
         stats.forEach((report) => {
-
           if (report.type === 'inbound-rtp' && report.kind === 'video') {
             videoStatsFound = true;
-            const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived; 
+            const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
 
             // logger.debug('Video stats:', {
             //  bytesReceived: report.bytesReceived,
@@ -1889,66 +1629,48 @@ function onTrack(event) {
             //  videoStatusChanged
             // });
 
-
             if (videoStatusChanged) {
               videoIsPlaying = report.bytesReceived > lastBytesReceived;
               logger.debug('Video status changed:', videoIsPlaying);
               onVideoStatusChange(videoIsPlaying, event.streams[0]);
             }
-
             lastBytesReceived = report.bytesReceived;
           }
-
         });
-
         if (!videoStatsFound) {
           logger.debug('No video stats found yet.');
         }
-
       } catch (error) {
         logger.error('Error getting stats:', error);
       }
-
     } else {
       logger.debug('Peer connection not ready for stats.');
     }
-
   }, 250); // Check every 500ms
 
-
   if (event.streams && event.streams.length > 0) {
-    const stream = event.streams[0]; 
-
+    const stream = event.streams[0];
     if (stream.getVideoTracks().length > 0) {
       logger.debug('Setting stream video element with track:', event.track.id);
       setStreamVideoElement(stream);
     } else {
       logger.warn('Stream does not contain any video tracks');
     }
-
   } else {
     logger.warn('No streams found in onTrack event');
   }
 
-
-
   if (isDebugMode) {
     // downloadStreamVideo(event.streams[0]);
   }
-
 }
 
-
-
 function playIdleVideo() {
-  const { idle: idleVideoElement } = getVideoElements(); 
-
+  const { idle: idleVideoElement } = getVideoElements();
   if (!idleVideoElement) {
     logger.error('Idle video element not found');
     return;
   }
-
-
 
   if (!currentAvatar || !avatars[currentAvatar]) {
     logger.warn(`No avatar selected or avatar ${currentAvatar} not found. Using default idle video.`);
@@ -1956,7 +1678,6 @@ function playIdleVideo() {
   } else {
     idleVideoElement.src = avatars[currentAvatar].silentVideoUrl;
   }
-
 
   idleVideoElement.loop = true;
 
@@ -1971,22 +1692,15 @@ function playIdleVideo() {
   idleVideoElement.play().catch((e) => logger.error('Error playing idle video:', e));
 }
 
-
-
 function stopAllStreams() {
-
   if (streamVideoElement && streamVideoElement.srcObject) {
     logger.debug('Stopping video streams');
     streamVideoElement.srcObject.getTracks().forEach((track) => track.stop());
     streamVideoElement.srcObject = null;
   }
-
 }
 
-
-
 function closePC(pc = peerConnection) {
-
   if (!pc) return;
   logger.debug('Stopping peer connection');
   pc.close();
@@ -1997,93 +1711,70 @@ function closePC(pc = peerConnection) {
   pc.removeEventListener('signalingstatechange', onSignalingStateChange, true);
   pc.removeEventListener('track', onTrack, true);
   clearInterval(statsIntervalId);
-  const labels = getStatusLabels(); 
-
+  const labels = getStatusLabels();
   if (labels.iceGathering) labels.iceGathering.innerText = '';
-
   if (labels.signaling) labels.signaling.innerText = '';
-
   if (labels.ice) labels.ice.innerText = '';
-
   if (labels.peer) labels.peer.innerText = '';
   logger.debug('Stopped peer connection');
-
   if (pc === peerConnection) {
     peerConnection = null;
   }
-
 }
 
-
 async function fetchWithRetries(url, options, retries = 0, delayMs = 1000) {
-
   try {
-    const now = Date.now(); 
-    const timeSinceLastCall = now - lastApiCallTime; 
-
+    const now = Date.now();
+    const timeSinceLastCall = now - lastApiCallTime;
 
     if (timeSinceLastCall < API_CALL_INTERVAL) {
       await new Promise((resolve) => setTimeout(resolve, API_CALL_INTERVAL - timeSinceLastCall));
     }
 
-
     lastApiCallTime = Date.now();
 
-    const response = await fetch(url, options); 
-
+    const response = await fetch(url, options);
     if (!response.ok) {
-
       if (response.status === 429) {
         // If rate limited, wait for a longer time before retrying
-        const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10); 
+        const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
         logger.warn(`Rate limited. Retrying after ${retryAfter} seconds.`);
         await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
         return fetchWithRetries(url, options, retries, delayMs);
       }
-
       throw new Error(`HTTP error ${response.status}: ${await response.text()}`);
     }
-
     return response;
   } catch (err) {
-
     if (retries < maxRetryCount) {
-      const delay = Math.min(Math.pow(2, retries) * delayMs + Math.random() * 1000, maxDelaySec * 1000); 
+      const delay = Math.min(Math.pow(2, retries) * delayMs + Math.random() * 1000, maxDelaySec * 1000);
       logger.warn(`Request failed, retrying ${retries + 1}/${maxRetryCount} in ${delay}ms. Error: ${err.message}`);
       await new Promise((resolve) => setTimeout(resolve, delay));
       return fetchWithRetries(url, options, retries + 1, delayMs);
     } else {
       throw err;
     }
-
   }
-
 }
 
-
 async function initializeConnection() {
-
   if (isInitializing) {
     logger.warn('Connection initialization already in progress. Skipping initialize.');
     return;
   }
 
-
   isInitializing = true;
   logger.info('Initializing connection...');
-
 
   try {
     stopAllStreams();
     closePC();
 
-
     if (!currentAvatar || !avatars[currentAvatar]) {
       throw new Error('No avatar selected or avatar not found');
     }
 
-
-    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, { 
+    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -2116,18 +1807,15 @@ async function initializeConnection() {
       }),
     });
 
-    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json(); 
-
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
 
     if (!newStreamId || !newSessionId) {
       throw new Error('Failed to get valid stream ID or session ID from API');
     }
 
-
     streamId = newStreamId;
     sessionId = newSessionId;
     logger.info('Stream created:', { streamId, sessionId });
-
 
     try {
       sessionClientAnswer = await createPeerConnection(offer, iceServers);
@@ -2138,10 +1826,9 @@ async function initializeConnection() {
       throw e;
     }
 
-
     await new Promise((resolve) => setTimeout(resolve, 6000));
 
-    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, { 
+    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -2153,11 +1840,9 @@ async function initializeConnection() {
       }),
     });
 
-
     if (!sdpResponse.ok) {
       throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
     }
-
 
     logger.info('Connection initialized successfully');
   } catch (error) {
@@ -2166,59 +1851,46 @@ async function initializeConnection() {
   } finally {
     isInitializing = false;
   }
-
 }
 
-
 async function startStreaming(assistantReply) {
-
   try {
     logger.debug('Starting streaming with reply:', assistantReply);
-
     if (!persistentStreamId || !persistentSessionId) {
       logger.error('Persistent stream not initialized. Cannot start streaming.');
       await initializePersistentStream();
     }
-
-
 
     if (!currentAvatar || !avatars[currentAvatar]) {
       logger.error('No avatar selected or avatar not found. Cannot start streaming.');
       return;
     }
 
-
-    const streamVideoElement = document.getElementById('stream-video-element'); 
-    const idleVideoElement = document.getElementById('idle-video-element'); 
-
+    const streamVideoElement = document.getElementById('stream-video-element');
+    const idleVideoElement = document.getElementById('idle-video-element');
 
     if (!streamVideoElement || !idleVideoElement) {
       logger.error('Video elements not found');
       return;
     }
 
-
     // Remove outer <speak> tags if present
-    let ssmlContent = assistantReply.trim(); 
-
+    let ssmlContent = assistantReply.trim();
     if (ssmlContent.startsWith('<speak>') && ssmlContent.endsWith('</speak>')) {
       ssmlContent = ssmlContent.slice(7, -8).trim();
     }
 
-
     // Split the SSML content into chunks, respecting SSML tags
-    const chunks = ssmlContent.match(/(?:<[^>]+>|[^<]+)+/g) || []; 
+    const chunks = ssmlContent.match(/(?:<[^>]+>|[^<]+)+/g) || [];
 
     logger.debug('Chunks', chunks);
 
-
     for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i].trim(); 
-
+      const chunk = chunks[i].trim();
       if (chunk.length === 0) continue;
 
       isAvatarSpeaking = true;
-      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, { 
+      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
         method: 'POST',
         headers: {
           Authorization: `Basic ${DID_API.key}`,
@@ -2261,19 +1933,15 @@ async function startStreaming(assistantReply) {
         }),
       });
 
-
       if (!playResponse.ok) {
         throw new Error(`HTTP error! status: ${playResponse.status}`);
       }
 
-
-      const playResponseData = await playResponse.json(); 
+      const playResponseData = await playResponse.json();
       logger.debug('Streaming response:', playResponseData);
-
 
       if (playResponseData.status === 'started') {
         logger.debug('Stream chunk started successfully');
-
 
         if (playResponseData.result_url) {
           // Wait for the video to be ready before transitioning
@@ -2291,50 +1959,39 @@ async function startStreaming(assistantReply) {
         } else {
           logger.debug('No result_url in playResponseData. Waiting for next chunk.');
         }
-
       } else {
         logger.warn('Unexpected response status:', playResponseData.status);
       }
-
     }
-
 
     isAvatarSpeaking = false;
     smoothTransition(false);
 
     // Check if we need to reconnect
-
     if (shouldReconnect()) {
       logger.info('Approaching reconnection threshold. Initiating background reconnect.');
       await backgroundReconnect();
     }
-
   } catch (error) {
     logger.error('Error during streaming:', error);
-
     if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
       logger.warn('Stream not found or invalid session. Attempting to reinitialize persistent stream.');
       await reinitializePersistentStream();
     }
-
   }
-
 }
 
-
-export function toggleSimpleMode() { 
-  const content = document.getElementById('content'); 
-  const videoWrapper = document.getElementById('video-wrapper'); 
-  const simpleModeButton = document.getElementById('simple-mode-button'); 
-  const header = document.querySelector('.header'); 
-  const autoSpeakToggle = document.getElementById('auto-speak-toggle'); 
-  const startButton = document.getElementById('start-button'); 
-
+export function toggleSimpleMode() {
+  const content = document.getElementById('content');
+  const videoWrapper = document.getElementById('video-wrapper');
+  const simpleModeButton = document.getElementById('simple-mode-button');
+  const header = document.querySelector('.header');
+  const autoSpeakToggle = document.getElementById('auto-speak-toggle');
+  const startButton = document.getElementById('start-button');
 
   if (content.style.display !== 'none') {
     // Entering simple mode
     content.style.display = 'none';
-
     document.body.appendChild(videoWrapper);
     videoWrapper.style.position = 'fixed';
     videoWrapper.style.top = '50%';
@@ -2347,22 +2004,18 @@ export function toggleSimpleMode() {
     header.style.zIndex = '1000';
 
     // Turn on auto-speak if it's not already on
-
     if (autoSpeakToggle.textContent.includes('Off')) {
       autoSpeakToggle.click();
     }
 
-
     // Start recording if it's not already recording
-
     if (startButton.textContent === 'Speak') {
       startButton.click();
     }
-
   } else {
     // Exiting simple mode
     content.style.display = 'flex';
-    const leftColumn = document.getElementById('left-column'); 
+    const leftColumn = document.getElementById('left-column');
     leftColumn.appendChild(videoWrapper);
     videoWrapper.style.position = 'relative';
     videoWrapper.style.top = 'auto';
@@ -2374,80 +2027,60 @@ export function toggleSimpleMode() {
     header.style.width = 'auto';
 
     // Turn off auto-speak
-
     if (autoSpeakToggle.textContent.includes('On')) {
       autoSpeakToggle.click();
     }
 
-
     // Stop recording
-
     if (startButton.textContent === 'Stop') {
       startButton.click();
     }
-
   }
-
 }
-
-
 
 function startSendingAudioData() {
   logger.debug('Starting to send audio data...');
 
-  let packetCount = 0; 
-  let totalBytesSent = 0; 
+  let packetCount = 0;
+  let totalBytesSent = 0;
 
   audioWorkletNode.port.onmessage = (event) => {
-    const audioData = event.data; 
-
+    const audioData = event.data;
 
     if (!(audioData instanceof ArrayBuffer)) {
       logger.warn('Received non-ArrayBuffer data from AudioWorklet:', typeof audioData);
       return;
     }
 
-
-
     if (deepgramConnection && deepgramConnection.getReadyState() === WebSocket.OPEN) {
-
       try {
         deepgramConnection.send(audioData);
         packetCount++;
         totalBytesSent += audioData.byteLength;
 
-
         if (packetCount % 100 === 0) {
           logger.debug(`Sent ${packetCount} audio packets to Deepgram. Total bytes: ${totalBytesSent}`);
         }
-
       } catch (error) {
         logger.error('Error sending audio data to Deepgram:', error);
       }
-
     } else {
       logger.warn(
         'Deepgram connection not open, cannot send audio data. ReadyState:',
         deepgramConnection ? deepgramConnection.getReadyState() : 'undefined',
       );
     }
-
   };
 
   logger.debug('Audio data sending setup complete');
 }
 
-
-
 function handleTranscription(data) {
-
   if (!isRecording) return;
 
-  const transcript = data.channel.alternatives[0].transcript; 
-
+  const transcript = data.channel.alternatives[0].transcript;
   if (data.is_final) {
     logger.debug('Final transcript:', transcript);
-
     if (transcript.trim()) {
       currentUtterance += transcript + ' ';
       updateTranscript(currentUtterance.trim(), true);
@@ -2457,34 +2090,28 @@ function handleTranscription(data) {
       });
       sendChatToGroq();
     }
-
     currentUtterance = '';
     interimMessageAdded = false;
   } else {
     logger.debug('Interim transcript:', transcript);
     updateTranscript(currentUtterance + transcript, false);
   }
-
 }
 
-
 async function startRecording() {
-
   if (isRecording) {
     logger.warn('Recording is already in progress. Stopping current recording.');
     await stopRecording();
     return;
   }
 
-
   logger.debug('Starting recording process...');
 
   currentUtterance = '';
   interimMessageAdded = false;
 
-
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); 
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     logger.info('Microphone stream obtained');
 
     audioContext = new AudioContext();
@@ -2493,7 +2120,7 @@ async function startRecording() {
     await audioContext.audioWorklet.addModule('audio-processor.js');
     logger.debug('Audio worklet module added successfully');
 
-    const source = audioContext.createMediaStreamSource(stream); 
+    const source = audioContext.createMediaStreamSource(stream);
     logger.debug('Media stream source created');
 
     audioWorkletNode = new AudioWorkletNode(audioContext, 'audio-processor');
@@ -2502,7 +2129,7 @@ async function startRecording() {
     source.connect(audioWorkletNode);
     logger.debug('Media stream source connected to audio worklet node');
 
-    const deepgramOptions = { 
+    const deepgramOptions = {
       model: 'nova-2',
       language: 'en-US',
       smart_format: true,
@@ -2548,64 +2175,49 @@ async function startRecording() {
     });
 
     isRecording = true;
-
     if (autoSpeakMode) {
       autoSpeakInProgress = true;
     }
-
-    const startButton = document.getElementById('start-button'); 
+    const startButton = document.getElementById('start-button');
     startButton.textContent = 'Stop';
 
     logger.debug('Recording and transcription started successfully');
   } catch (error) {
     logger.error('Error starting recording:', error);
     isRecording = false;
-    const startButton = document.getElementById('start-button'); 
+    const startButton = document.getElementById('start-button');
     startButton.textContent = 'Speak';
     showErrorMessage('Failed to start recording. Please try again.');
     throw error;
   }
-
 }
-
-
 
 function handleDeepgramError(err) {
   logger.error('Deepgram error:', err);
   isRecording = false;
-  const startButton = document.getElementById('start-button'); 
+  const startButton = document.getElementById('start-button');
   startButton.textContent = 'Speak';
 
   // Attempt to close the connection and clean up
-
   if (deepgramConnection) {
-
     try {
       deepgramConnection.finish();
     } catch (closeError) {
       logger.warn('Error while closing Deepgram connection:', closeError);
     }
-
   }
-
-
 
   if (audioContext) {
     audioContext.close().catch((closeError) => {
       logger.warn('Error while closing AudioContext:', closeError);
     });
   }
-
 }
 
-
-
 function handleUtteranceEnd(data) {
-
   if (!isRecording) return;
 
   logger.debug('Utterance end detected:', data);
-
   if (currentUtterance.trim()) {
     updateTranscript(currentUtterance.trim(), true);
     chatHistory.push({
@@ -2616,54 +2228,42 @@ function handleUtteranceEnd(data) {
     currentUtterance = '';
     interimMessageAdded = false;
   }
-
 }
 
-
 async function stopRecording() {
-
   if (isRecording) {
     logger.info('Stopping recording...');
-
 
     if (audioContext) {
       await audioContext.close();
       logger.debug('AudioContext closed');
     }
 
-
-
     if (deepgramConnection) {
       deepgramConnection.finish();
       logger.debug('Deepgram connection finished');
     }
 
-
     isRecording = false;
     autoSpeakInProgress = false;
-    const startButton = document.getElementById('start-button'); 
+    const startButton = document.getElementById('start-button');
     startButton.textContent = 'Speak';
 
     logger.debug('Recording and transcription stopped');
   }
-
 }
 
-
 async function sendChatToGroq() {
-
   if (chatHistory.length === 0 || chatHistory[chatHistory.length - 1].content.trim() === '') {
     logger.debug('No new content to send to Groq. Skipping request.');
     return;
   }
 
-
   logger.debug('Sending chat to Groq...');
-
   try {
-    const startTime = Date.now(); 
-    const currentContext = document.getElementById('context-input').value.trim(); 
-    const requestBody = { 
+    const startTime = Date.now();
+    const currentContext = document.getElementById('context-input').value.trim();
+    const requestBody = {
       messages: [
         {
           role: 'system',
@@ -2675,7 +2275,7 @@ async function sendChatToGroq() {
     };
     logger.debug('Request body:', JSON.stringify(requestBody));
 
-    const response = await fetch('/chat', { 
+    const response = await fetch('/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -2685,71 +2285,55 @@ async function sendChatToGroq() {
 
     logger.debug('Groq response status:', response.status);
 
-
     if (!response.ok) {
       throw new Error(`HTTP error ${response.status}`);
     }
 
+    const reader = response.body.getReader();
+    let assistantReply = '';
+    let done = false;
 
-    const reader = response.body.getReader(); 
-    let assistantReply = ''; 
-    let done = false; 
-
-    const msgHistory = document.getElementById('msgHistory'); 
-    const assistantSpan = document.createElement('span'); 
+    const msgHistory = document.getElementById('msgHistory');
+    const assistantSpan = document.createElement('span');
     assistantSpan.innerHTML = '<u>Assistant:</u> ';
     msgHistory.appendChild(assistantSpan);
     msgHistory.appendChild(document.createElement('br'));
 
-
     while (!done) {
-      const { value, done: readerDone } = await reader.read(); 
-
+      const { value, done: readerDone } = await reader.read();
       done = readerDone;
 
-
       if (value) {
-        const chunk = new TextDecoder().decode(value); 
+        const chunk = new TextDecoder().decode(value);
         logger.debug('Received chunk:', chunk);
-        const lines = chunk.split('\n'); 
-
+        const lines = chunk.split('\n');
 
         for (const line of lines) {
-
           if (line.startsWith('data:')) {
-            const data = line.substring(5).trim(); 
-
+            const data = line.substring(5).trim();
             if (data === '[DONE]') {
-
               done = true;
               break;
             }
 
-
-
             try {
-              const parsed = JSON.parse(data); 
-              const content = parsed.choices[0]?.delta?.content || ''; 
+              const parsed = JSON.parse(data);
+              const content = parsed.choices[0]?.delta?.content || '';
               assistantReply += content;
               assistantSpan.innerHTML += content;
               logger.debug('Parsed content:', content);
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
-
           }
-
         }
-
 
         msgHistory.scrollTop = msgHistory.scrollHeight;
       }
-
     }
 
-
-    const endTime = Date.now(); 
-    const processingTime = endTime - startTime; 
+    const endTime = Date.now();
+    const processingTime = endTime - startTime;
     logger.debug(`Groq processing completed in ${processingTime}ms`);
 
     chatHistory.push({
@@ -2763,51 +2347,38 @@ async function sendChatToGroq() {
     await startStreaming(assistantReply);
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
-    const msgHistory = document.getElementById('msgHistory'); 
+    const msgHistory = document.getElementById('msgHistory');
     msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
     msgHistory.scrollTop = msgHistory.scrollHeight;
   }
-
 }
-
-
 
 function toggleAutoSpeak() {
   autoSpeakMode = !autoSpeakMode;
-  const toggleButton = document.getElementById('auto-speak-toggle'); 
-  const startButton = document.getElementById('start-button'); 
+  const toggleButton = document.getElementById('auto-speak-toggle');
+  const startButton = document.getElementById('start-button');
   toggleButton.textContent = `Auto-Speak: ${autoSpeakMode ? 'On' : 'Off'}`;
-
   if (autoSpeakMode) {
     startButton.textContent = 'Stop';
-
     if (!isRecording) {
       startRecording();
     }
-
   } else {
     startButton.textContent = isRecording ? 'Stop' : 'Speak';
-
     if (isRecording) {
       stopRecording();
     }
-
   }
-
 }
 
-
 async function reinitializeConnection() {
-
   if (connectionState === ConnectionState.RECONNECTING) {
     logger.warn('Connection reinitialization already in progress. Skipping reinitialize.');
     return;
   }
 
-
   connectionState = ConnectionState.RECONNECTING;
   logger.debug('Reinitializing connection...');
-
 
   try {
     await destroyPersistentStream();
@@ -2829,16 +2400,14 @@ async function reinitializeConnection() {
     currentUtterance = '';
     interimMessageAdded = false;
 
-    const msgHistory = document.getElementById('msgHistory'); 
+    const msgHistory = document.getElementById('msgHistory');
     msgHistory.innerHTML = '';
     chatHistory = [];
 
     // Reset video elements
-    const streamVideoElement = document.getElementById('stream-video-element'); 
-    const idleVideoElement = document.getElementById('idle-video-element'); 
-
+    const streamVideoElement = document.getElementById('stream-video-element');
+    const idleVideoElement = document.getElementById('idle-video-element');
     if (streamVideoElement) streamVideoElement.srcObject = null;
-
     if (idleVideoElement) idleVideoElement.style.display = 'block';
 
     // Add a delay before initializing to avoid rapid successive calls
@@ -2846,11 +2415,9 @@ async function reinitializeConnection() {
 
     await initializePersistentStream();
 
-
     if (!persistentStreamId || !persistentSessionId) {
       throw new Error('Persistent Stream ID or Session ID is missing after initialization');
     }
-
 
     await prepareForStreaming();
 
@@ -2863,33 +2430,24 @@ async function reinitializeConnection() {
     showErrorMessage('Failed to reconnect. Please refresh the page.');
     connectionState = ConnectionState.DISCONNECTED;
   }
-
 }
-
 
 async function cleanupOldStream() {
   logger.debug('Cleaning up old stream...');
 
-
   try {
-
     if (peerConnection) {
       peerConnection.close();
     }
-
-
 
     if (pcDataChannel) {
       pcDataChannel.close();
     }
 
-
     // Stop all tracks in the streamVideoElement
-
     if (streamVideoElement && streamVideoElement.srcObject) {
       streamVideoElement.srcObject.getTracks().forEach((track) => track.stop());
     }
-
 
     // Clear any ongoing intervals or timeouts
     clearInterval(statsIntervalId);
@@ -2900,16 +2458,13 @@ async function cleanupOldStream() {
   } catch (error) {
     logger.error('Error cleaning up old stream:', error);
   }
-
 }
 
-
-const connectButton = document.getElementById('connect-button'); 
+const connectButton = document.getElementById('connect-button');
 connectButton.onclick = initializeConnection;
 
-const destroyButton = document.getElementById('destroy-button'); 
+const destroyButton = document.getElementById('destroy-button');
 destroyButton.onclick = async () => {
-
   try {
     await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
       method: 'DELETE',
@@ -2927,49 +2482,41 @@ destroyButton.onclick = async () => {
     stopAllStreams();
     closePC();
   }
-
 };
 
-const startButton = document.getElementById('start-button'); 
+const startButton = document.getElementById('start-button');
 
 startButton.onclick = async () => {
   logger.info('Start button clicked. Current state:', isRecording ? 'Recording' : 'Not recording');
-
   if (!isRecording) {
-
     try {
       await startRecording();
     } catch (error) {
       logger.error('Failed to start recording:', error);
       showErrorMessage('Failed to start recording. Please try again.');
     }
-
   } else {
     await stopRecording();
   }
-
 };
 
-const saveAvatarButton = document.getElementById('save-avatar-button'); 
+const saveAvatarButton = document.getElementById('save-avatar-button');
 saveAvatarButton.onclick = saveAvatar;
 
-const avatarImageInput = document.getElementById('avatar-image'); 
+const avatarImageInput = document.getElementById('avatar-image');
 avatarImageInput.onchange = (event) => {
-  const file = event.target.files[0]; 
-
+  const file = event.target.files[0];
   if (file) {
-    const reader = new FileReader(); 
+    const reader = new FileReader();
     reader.onload = (e) => {
-
       document.getElementById('avatar-image-preview').src = e.target.result;
     };
     reader.readAsDataURL(file);
   }
-
 };
 
 // Export functions and variables that need to be accessed from other modules
-export { 
+export {
   initialize,
   handleAvatarChange,
   openAvatarModal,
