@@ -1,12 +1,22 @@
 <!doctype html>
+<!-- @block:html-html-1-8291fd67 -->
 <html lang="en">
+<!-- @block:head-head-2-7347c068 -->
   <head>
+<!-- @block:meta-meta-3-1cfa9f1e -->
     <meta charset="UTF-8" />
+<!-- @block:meta-meta-4-5402ba45 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<!-- @block:title-title-5-fde6c327 -->
     <title>Avatar Demo</title>
+<!-- @block:title-title-5-fde6c327-end -->
+<!-- @block:link-link-6-a9b45cf0 -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
+<!-- @block:link-link-7-1bd2f23b -->
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<!-- @block:link-link-8-dcc931f4 -->
     <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@300;400;700&display=swap" rel="stylesheet" />
+<!-- @block:link-link-9-5b2b867f -->
     <link rel="stylesheet" href="style-agents.css" />
     <link
       rel="icon"
@@ -14,6 +24,7 @@
       sizes="192x192"
       href="https://cdn.prod.website-files.com/6316d11d553f411d6f1fa732/6343f55adbb1a12a532f2769_skoop-favicon.png"
     />
+<!-- @block:style-style-16-76eb94ce -->
     <style>
       body,
       html {
@@ -43,79 +54,163 @@
         padding: 20px;
       }
     </style>
+<!-- @block:style-style-16-76eb94ce-end -->
   </head>
+<!-- @block:body-body-46-aa700e2d -->
   <body>
+<!-- @block:div-div-47-f3e7f91e -->
     <div class="header">
       <img
         src="https://cdn.prod.website-files.com/6316d11d553f411d6f1fa732/633ac440413e418b480baaf8_skoop-logo-p-500.png"
         alt="SKOOP logo"
       />
+<!-- @block:h1-h1-52-a7981975 -->
       <h1>Avatar Demo</h1>
+<!-- @block:h1-h1-52-a7981975-end -->
+<!-- @block:button-simple-mode-button-f8a93275 -->
       <button id="simple-mode-button">Simple Mode</button>
+<!-- @block:button-simple-mode-button-f8a93275-end -->
     </div>
+<!-- @block:div-div-47-f3e7f91e-end -->
+<!-- @block:div-content-218a452e -->
     <div id="content">
+<!-- @block:div-left-column-8b80aa05 -->
       <div id="left-column">
+<!-- @block:div-status-da1e7987 -->
         <div id="status">
+<!-- @block:h4-h4-58-56790037 -->
           <h4>WebRTC Connection Status</h4>
+<!-- @block:h4-h4-58-56790037-end -->
+<!-- @block:label-ice-gathering-status-label-8ddda819 -->
+<!-- @block:br-ice-gathering-status-label-4050f16f -->
           ICE gathering status: <label id="ice-gathering-status-label"></label><br />
+<!-- @block:label-ice-status-label-2609e74a -->
+<!-- @block:br-ice-status-label-ef168d5d -->
           ICE status: <label id="ice-status-label"></label><br />
+<!-- @block:label-peer-status-label-9a44c052 -->
+<!-- @block:br-peer-status-label-7d1cf82e -->
           Peer connection status: <label id="peer-status-label"></label><br />
+<!-- @block:label-signaling-status-label-f05fe613 -->
+<!-- @block:br-signaling-status-label-06a11ff9 -->
           Signaling status: <label id="signaling-status-label"></label><br />
+<!-- @block:label-streaming-status-label-5342dc8c -->
+<!-- @block:br-streaming-status-label-f3ace118 -->
           Streaming status: <label id="streaming-status-label"></label><br />
+<!-- @block:br-br-64-96c7e463 -->
           <br />
+<!-- @block:div-buttons-6ee2714b -->
           <div id="buttons">
+<!-- @block:select-avatar-select-ca8d99a6 -->
             <select id="avatar-select"></select>
+<!-- @block:select-avatar-select-ca8d99a6-end -->
+<!-- @block:button-connect-button-2c584818 -->
             <button id="connect-button" type="button">Connect</button>
+<!-- @block:button-connect-button-2c584818-end -->
+<!-- @block:button-destroy-button-99e40743 -->
             <button id="destroy-button" type="button">Destroy</button>
+<!-- @block:button-destroy-button-99e40743-end -->
+<!-- @block:button-edit-avatar-button-3ec035be -->
             <button id="edit-avatar-button" type="button">Edit Avatar</button>
+<!-- @block:button-edit-avatar-button-3ec035be-end -->
           </div>
+<!-- @block:div-buttons-6ee2714b-end -->
         </div>
 
+<!-- @block:div-video-wrapper-b7d66d5e -->
         <div id="video-wrapper">
+<!-- @block:video-idle-video-element-93b8994a -->
           <video id="idle-video-element" width="400" height="400" autoplay loop muted></video>
+<!-- @block:video-idle-video-element-93b8994a-end -->
+<!-- @block:video-stream-video-element-ec0abea8 -->
           <video id="stream-video-element" width="400" height="400" autoplay></video>
+<!-- @block:video-stream-video-element-ec0abea8-end -->
+<!-- @block:video-preload-video-element-3126cd0b -->
           <video id="preload-video-element" width="400" height="400" style="display: none"></video>
+<!-- @block:video-preload-video-element-3126cd0b-end -->
+<!-- @block:div-logo-wrapper-2a9dcb2d -->
           <div id="logo-wrapper"></div>
+<!-- @block:div-logo-wrapper-2a9dcb2d-end -->
         </div>
+<!-- @block:div-video-wrapper-b7d66d5e-end -->
       </div>
 
+<!-- @block:div-right-column-5eb721b8 -->
       <div id="right-column">
+<!-- @block:div-context-wrapper-5e6c12c8 -->
         <div id="context-wrapper">
+<!-- @block:h4-h4-83-bdfa3f9e -->
           <h4>Context:</h4>
+<!-- @block:h4-h4-83-bdfa3f9e-end -->
+<!-- @block:textarea-context-input-85a5bc7a -->
           <textarea id="context-input" rows="4" cols="50"></textarea>
+<!-- @block:textarea-context-input-85a5bc7a-end -->
+<!-- @block:div-div-85-4f587b23 -->
           <div>
+<!-- @block:button-replace-context-button-d80d98b0 -->
             <button id="replace-context-button" type="button">Replace</button>
+<!-- @block:button-replace-context-button-d80d98b0-end -->
           </div>
+<!-- @block:div-div-85-4f587b23-end -->
         </div>
+<!-- @block:div-context-wrapper-5e6c12c8-end -->
 
+<!-- @block:div-div-90-7f7cf4d1 -->
         <div class="chat">
+<!-- @block:h4-h4-91-2b25e393 -->
           <h4>Chat History</h4>
+<!-- @block:h4-h4-91-2b25e393-end -->
+<!-- @block:div-msgHistory-70c22339 -->
           <div id="msgHistory"></div>
+<!-- @block:div-msgHistory-70c22339-end -->
         </div>
+<!-- @block:div-div-90-7f7cf4d1-end -->
 
+<!-- @block:div-speak-controls-44b0317f -->
         <div id="speak-controls">
+<!-- @block:button-start-button-4429e939 -->
           <button id="start-button" type="button">Speak</button>
+<!-- @block:button-start-button-4429e939-end -->
+<!-- @block:button-auto-speak-toggle-56ada80d -->
           <button id="auto-speak-toggle" type="button">Auto-Speak: On</button>
+<!-- @block:button-auto-speak-toggle-56ada80d-end -->
         </div>
+<!-- @block:div-speak-controls-44b0317f-end -->
+<!-- @block:div-text-input-controls-092753d4 -->
         <div id="text-input-controls">
+<!-- @block:input-text-input-cf33c035 -->
           <input type="text" id="text-input" placeholder="Type your message here" />
+<!-- @block:button-send-text-button-11b400fc -->
           <button id="send-text-button" type="button">Send</button>
+<!-- @block:button-send-text-button-11b400fc-end -->
         </div>
       </div>
     </div>
 
+<!-- @block:div-avatar-modal-881c5f48 -->
     <div id="avatar-modal" class="modal">
+<!-- @block:div-div-107-2c642801 -->
       <div class="modal-content">
+<!-- @block:h2-h2-108-1a3f60a9 -->
         <h2>Create/Edit Avatar</h2>
+<!-- @block:h2-h2-108-1a3f60a9-end -->
+<!-- @block:input-avatar-name-48d7211b -->
         <input type="text" id="avatar-name" placeholder="Avatar Name" />
+<!-- @block:input-avatar-voice-ab3e6bec -->
         <input type="text" id="avatar-voice" placeholder="Voice ID" />
+<!-- @block:input-avatar-image-e0afbe94 -->
         <input type="file" id="avatar-image" accept="image/png" />
+<!-- @block:img-avatar-image-preview-91195432 -->
         <img id="avatar-image-preview" src="" alt="Avatar Preview" style="max-width: 200px; max-height: 200px" />
+<!-- @block:button-save-avatar-button-6a6b2fa9 -->
         <button id="save-avatar-button">Save Avatar</button>
+<!-- @block:button-save-avatar-button-6a6b2fa9-end -->
+<!-- @block:button-button-114-e5f21b92 -->
         <button onclick="closeAvatarModal()">Cancel</button>
+<!-- @block:button-button-114-e5f21b92-end -->
       </div>
     </div>
 
+<!-- @block:script-script-118-0ac85229 -->
     <script>
       // AudioWorklet implementation
       const audioContext = new (window.AudioContext || window.webkitAudioContext)(); 
@@ -145,8 +240,12 @@
         })
         .catch((err) => console.error('Error loading AudioWorklet:', err));
     </script>
+<!-- @block:script-script-118-0ac85229-end -->
 
+<!-- @block:script-script-148-1ae69b11 -->
     <script src="https://cdn.jsdelivr.net/npm/@deepgram/sdk"></script>
+<!-- @block:script-script-148-1ae69b11-end -->
+<!-- @block:script-script-149-73a20b00 -->
     <script type="module">
       import {         initialize,
         handleAvatarChange,
@@ -161,10 +260,15 @@
       // Make closeAvatarModal available globally
       window.closeAvatarModal = closeAvatarModal;
     </script>
+<!-- @block:script-script-149-73a20b00-end -->
+<!-- @block:script-script-163-143e3f4b -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dom-parser/0.1.5/dom-parser.min.js"></script>
+<!-- @block:script-script-163-143e3f4b-end -->
 
+<!-- @block:script-script-165-61a32dc4 -->
     <script type="module">
       import { toggleSimpleMode } from './agents-client-api.js';       document.getElementById('simple-mode-button').addEventListener('click', toggleSimpleMode);
     </script>
+<!-- @block:script-script-165-61a32dc4-end -->
   </body>
 </html>
