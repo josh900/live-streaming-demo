@@ -120,17 +120,18 @@
 
     <script>
       // AudioWorklet implementation
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)(); // @block:const-audioContext-6c2b2812 // @block:const-audioContext-89974de2
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)(); // @block:const-audioContext-6c2b2812
 
       // AudioWorklet processor code
-      const workletCode = ` // @block:const-workletCode-bb95afe4 // @block:const-workletCode-c07fdac4
+      const workletCode = ` // @block:const-workletCode-bb95afe4
             class AudioProcessor extends AudioWorkletProcessor {
                 process(inputs, outputs, parameters) {
-                    const input = inputs[0]; // @block:const-input-dd2c19a5 // @block:const-input-e6d09456
-                    const output = outputs[0]; // @block:const-output-61a14148 // @block:const-output-e6f1b09d
+                    const input = inputs[0]; // @block:const-input-dd2c19a5
+                    const output = outputs[0]; // @block:const-output-61a14148
+
                     for (let channel = 0; channel < input.length; channel++) {
-                        const inputChannel = input[channel]; // @block:const-inputChannel-dcd92f8e // @block:const-inputChannel-a4209b1c
-                        const outputChannel = output[channel]; // @block:const-outputChannel-26d19800 // @block:const-outputChannel-a99ca881
+                        const inputChannel = input[channel]; // @block:const-inputChannel-dcd92f8e
+                        const outputChannel = output[channel]; // @block:const-outputChannel-26d19800
                         for (let i = 0; i < inputChannel.length; i++) {
                             outputChannel[i] = inputChannel[i];
                         }
@@ -143,13 +144,13 @@
             registerProcessor('audio-processor', AudioProcessor);
         `;
 
-      const blob = new Blob([workletCode], { type: 'application/javascript' }); // @block:const-blob-d016becd // @block:const-blob-4094db83
-      const workletUrl = URL.createObjectURL(blob); // @block:const-workletUrl-f73b9b9c // @block:const-workletUrl-0117a717
+      const blob = new Blob([workletCode], { type: 'application/javascript' }); // @block:const-blob-d016becd
+      const workletUrl = URL.createObjectURL(blob); // @block:const-workletUrl-f73b9b9c
 
       audioContext.audioWorklet
         .addModule(workletUrl)
         .then(() => {
-          const audioProcessor = new AudioWorkletNode(audioContext, 'audio-processor'); // @block:const-audioProcessor-f3e2eff5 // @block:const-audioProcessor-78282e7e
+          const audioProcessor = new AudioWorkletNode(audioContext, 'audio-processor'); // @block:const-audioProcessor-f3e2eff5
           // Connect the audio processor to the audio context destination
           audioProcessor.connect(audioContext.destination);
         })
@@ -158,7 +159,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@deepgram/sdk"></script>
     <script type="module">
-      import { // @block:import-None-d9dfaa9b // @block:import-None-9330d43e
+      import { // @block:import-None-d9dfaa9b
         initialize,
         handleAvatarChange,
         openAvatarModal,
@@ -175,7 +176,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dom-parser/0.1.5/dom-parser.min.js"></script>
 
     <script type="module">
-      import { toggleSimpleMode } from './agents-client-api.js'; // @block:import-None-ad99be80 // @block:import-None-2ecffcdc
+      import { toggleSimpleMode } from './agents-client-api.js'; // @block:import-None-ad99be80
       document.getElementById('simple-mode-button').addEventListener('click', toggleSimpleMode);
     </script>
   </body>
