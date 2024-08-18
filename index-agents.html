@@ -118,21 +118,15 @@
 
     <script>
       // AudioWorklet implementation
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)(); 
-
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();  
       // AudioWorklet processor code
-      const workletCode = ` 
-
+      const workletCode = `  
             class AudioProcessor extends AudioWorkletProcessor {
                 process(inputs, outputs, parameters) {
-                    const input = inputs[0]; 
-                    const output = outputs[0]; 
-
+                    const input = inputs[0];                      const output = outputs[0];  
 
                     for (let channel = 0; channel < input.length; channel++) {
-                        const inputChannel = input[channel]; 
-                        const outputChannel = output[channel]; 
-
+                        const inputChannel = input[channel];                          const outputChannel = output[channel];  
                         for (let i = 0; i < inputChannel.length; i++) {
                             outputChannel[i] = inputChannel[i];
                         }
@@ -148,14 +142,11 @@
             registerProcessor('audio-processor', AudioProcessor);
         `;
 
-      const blob = new Blob([workletCode], { type: 'application/javascript' }); 
-      const workletUrl = URL.createObjectURL(blob); 
-
+      const blob = new Blob([workletCode], { type: 'application/javascript' });        const workletUrl = URL.createObjectURL(blob);  
       audioContext.audioWorklet
         .addModule(workletUrl)
         .then(() => {
-          const audioProcessor = new AudioWorkletNode(audioContext, 'audio-processor'); 
-          // Connect the audio processor to the audio context destination
+          const audioProcessor = new AudioWorkletNode(audioContext, 'audio-processor');            // Connect the audio processor to the audio context destination
           audioProcessor.connect(audioContext.destination);
         })
         .catch((err) => console.error('Error loading AudioWorklet:', err));
@@ -163,8 +154,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@deepgram/sdk"></script>
     <script type="module">
-      import { 
-        initialize,
+      import {          initialize,
         handleAvatarChange,
         openAvatarModal,
         closeAvatarModal,
@@ -180,8 +170,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dom-parser/0.1.5/dom-parser.min.js"></script>
 
     <script type="module">
-      import { toggleSimpleMode } from './agents-client-api.js'; 
-
+      import { toggleSimpleMode } from './agents-client-api.js';  
       document.getElementById('simple-mode-button').addEventListener('click', toggleSimpleMode);
     </script>
   </body>
