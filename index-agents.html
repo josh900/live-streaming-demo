@@ -1,21 +1,12 @@
 <!doctype html>
-
 <html lang="en">
-
   <head>
-
     <meta charset="UTF-8" />
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
     <title>Avatar Demo</title>
-
     <link rel="preconnect" href="https://fonts.googleapis.com" />
-
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-
     <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@300;400;700&display=swap" rel="stylesheet" />
-
     <link rel="stylesheet" href="style-agents.css" />
     <link
       rel="icon"
@@ -23,7 +14,6 @@
       sizes="192x192"
       href="https://cdn.prod.website-files.com/6316d11d553f411d6f1fa732/6343f55adbb1a12a532f2769_skoop-favicon.png"
     />
-
     <style>
       body,
       html {
@@ -53,125 +43,78 @@
         padding: 20px;
       }
     </style>
-
   </head>
-
   <body>
-
     <div class="header">
       <img
         src="https://cdn.prod.website-files.com/6316d11d553f411d6f1fa732/633ac440413e418b480baaf8_skoop-logo-p-500.png"
         alt="SKOOP logo"
       />
-
       <h1>Avatar Demo</h1>
-
       <button id="simple-mode-button">Simple Mode</button>
     </div>
-
     <div id="content">
-
       <div id="left-column">
-
         <div id="status">
-
           <h4>WebRTC Connection Status</h4>
           ICE gathering status: <label id="ice-gathering-status-label"></label><br />
           ICE status: <label id="ice-status-label"></label><br />
           Peer connection status: <label id="peer-status-label"></label><br />
           Signaling status: <label id="signaling-status-label"></label><br />
           Streaming status: <label id="streaming-status-label"></label><br />
-
           <br />
-
           <div id="buttons">
-
             <select id="avatar-select"></select>
-
             <button id="connect-button" type="button">Connect</button>
-
             <button id="destroy-button" type="button">Destroy</button>
-
             <button id="edit-avatar-button" type="button">Edit Avatar</button>
           </div>
         </div>
 
-
         <div id="video-wrapper">
-
           <video id="idle-video-element" width="400" height="400" autoplay loop muted></video>
-
           <video id="stream-video-element" width="400" height="400" autoplay></video>
-
           <video id="preload-video-element" width="400" height="400" style="display: none"></video>
-
           <div id="logo-wrapper"></div>
         </div>
-
       </div>
 
-
       <div id="right-column">
-
         <div id="context-wrapper">
-
           <h4>Context:</h4>
-
           <textarea id="context-input" rows="4" cols="50"></textarea>
-
           <div>
-
             <button id="replace-context-button" type="button">Replace</button>
           </div>
         </div>
 
-
         <div class="chat">
-
           <h4>Chat History</h4>
-
           <div id="msgHistory"></div>
         </div>
 
-
-
         <div id="speak-controls">
-
           <button id="start-button" type="button">Speak</button>
-
           <button id="auto-speak-toggle" type="button">Auto-Speak: On</button>
         </div>
-
         <div id="text-input-controls">
-
           <input type="text" id="text-input" placeholder="Type your message here" />
-
           <button id="send-text-button" type="button">Send</button>
         </div>
       </div>
     </div>
 
-
     <div id="avatar-modal" class="modal">
-
       <div class="modal-content">
-
         <h2>Create/Edit Avatar</h2>
-
         <input type="text" id="avatar-name" placeholder="Avatar Name" />
-
         <input type="text" id="avatar-voice" placeholder="Voice ID" />
-
         <input type="file" id="avatar-image" accept="image/png" />
-
         <img id="avatar-image-preview" src="" alt="Avatar Preview" style="max-width: 200px; max-height: 200px" />
-
         <button id="save-avatar-button">Save Avatar</button>
-
         <button onclick="closeAvatarModal()">Cancel</button>
       </div>
     </div>
-
 
     <script>
       // AudioWorklet implementation
@@ -212,10 +155,7 @@
         .catch((err) => console.error('Error loading AudioWorklet:', err));
     </script>
 
-
-
     <script src="https://cdn.jsdelivr.net/npm/@deepgram/sdk"></script>
-
     <script type="module">
       import {
         initialize,
@@ -231,15 +171,11 @@
       // Make closeAvatarModal available globally
       window.closeAvatarModal = closeAvatarModal;
     </script>
-
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dom-parser/0.1.5/dom-parser.min.js"></script>
-
 
     <script type="module">
       import { toggleSimpleMode } from './agents-client-api.js';
       document.getElementById('simple-mode-button').addEventListener('click', toggleSimpleMode);
     </script>
-
   </body>
 </html>
