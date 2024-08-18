@@ -51,7 +51,8 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 const INITIAL_RECONNECT_DELAY = 2000; // 1 second
 const MAX_RECONNECT_DELAY = 90000; // 30 seconds
 let autoSpeakInProgress = false;
-const ConnectionState = {
+let isPushToTalkMode = false;
+let isPushToTalkActive = false;const ConnectionState = {
   DISCONNECTED: 'disconnected',
   CONNECTING: 'connecting',
   CONNECTED: 'connected',
@@ -829,7 +830,18 @@ async function backgroundReconnect() {
 }
 function waitForIdleState() {
   return new Promise((resolve) => {
-    const checkIdleState = () => {
+function togglePushToTalk() {
+  isPushToTalkMode = !isPushToTalkMode;
+  const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
+  const pushToTalkButton = document.getElementById('push-to-talk-button');
+  pushToTalkToggle.textContent = `Push to Talk: ${isPushToTalkMode ? 'On' : 'Off'}`;
+  pushToTalkButton.disabled = !isPushToTalkMode;
+  if (isPushToTalkMode) {
+    setupPushToTalk();
+  } else {
+    cleanupPushToTalk();
+  }
+}    const checkIdleState = () => {
       if (!isAvatarSpeaking) {
         resolve();
       } else {
@@ -1823,6 +1835,30 @@ function startSendingAudioData() {
 }
 function handleTranscription(data) {
   if (!isRecording) return;
+  const transcript = data.channel.alternatives[0].transcript;
+  if (isPushToTalkMode) {
+    currentUtterance += transcript + ' ';
+    updateTranscript(currentUtterance.trim(), false);
+  } else {
+    if (data.is_final) {
+      logger.debug('Final transcript:', transcript);
+      if (transcript.trim()) {
+        currentUtterance += transcript + ' ';
+        updateTranscript(currentUtterance.trim(), true);
+        chatHistory.push({
+          role: 'user',
+          content: currentUtterance.trim(),
+        });
+        sendChatToGroq();
+      }
+      currentUtterance = '';
+      interimMessageAdded = false;
+    } else {
+      logger.debug('Interim transcript:', transcript);
+      updateTranscript(currentUtterance + transcript, false);
+    }
+  }
+}  if (!isRecording) return;
   const transcript = data.channel.alternatives[0].transcript;
   if (data.is_final) {
     logger.debug('Final transcript:', transcript);
