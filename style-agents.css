@@ -360,3 +360,11 @@ body {
   #video-wrapper {
   }
 }
+#push-to-talk-toggle,
+#push-to-talk-button {
+  margin-left: 10px;
+}
+#push-to-talk-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
