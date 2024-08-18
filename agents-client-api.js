@@ -1,84 +1,84 @@
 'use strict';
-import DID_API from './api.js'; // @block:import-None-62519b82
-import logger from './logger.js'; // @block:import-None-eb9c1a95
-const { createClient, LiveTranscriptionEvents } = deepgram; // @block:const-{-be9edef7
+import DID_API from './api.js';
+import logger from './logger.js';
+const { createClient, LiveTranscriptionEvents } = deepgram;
 
-const deepgramClient = createClient(DID_API.deepgramKey); // @block:const-deepgramClient-b7d7eeed
+const deepgramClient = createClient(DID_API.deepgramKey);
 
-const RTCPeerConnection = ( // @block:const-RTCPeerConnection-2b28aa0b
+const RTCPeerConnection = (
   window.RTCPeerConnection ||
   window.webkitRTCPeerConnection ||
   window.mozRTCPeerConnection
 ).bind(window);
 
-let peerConnection; // @block:let-None-bc85430e
-let pcDataChannel; // @block:let-None-44e2eb81
-let streamId; // @block:let-None-250fac44
-let sessionId; // @block:let-None-ae9ef4ea
-let sessionClientAnswer; // @block:let-None-6b01ad8b
-let statsIntervalId; // @block:let-None-c4fa2e57
-let videoIsPlaying; // @block:let-None-867d73b5
-let lastBytesReceived; // @block:let-None-c479d515
-let chatHistory = []; // @block:let-chatHistory-942e14de
-let inactivityTimeout; // @block:let-None-e9d5b602
-let keepAliveInterval; // @block:let-None-6d5cbaa7
-let socket; // @block:let-None-7ccdec2a
-let isInitializing = false; // @block:let-isInitializing-25807283
-let audioContext; // @block:let-None-3abf248c
-let streamVideoElement; // @block:let-None-0aa3bb13
-let idleVideoElement; // @block:let-None-b5cfeb75
-let deepgramConnection; // @block:let-None-a3ab535f
-let isRecording = false; // @block:let-isRecording-60e079e2
-let audioWorkletNode; // @block:let-None-5f992e80
-let currentUtterance = ''; // @block:let-currentUtterance-2e99cdbb
-let interimMessageAdded = false; // @block:let-interimMessageAdded-58fc1cea
-let autoSpeakMode = true; // @block:let-autoSpeakMode-76d75f72
-let transitionCanvas; // @block:let-None-981ca232
-let transitionCtx; // @block:let-None-0791f9d7
-let isDebugMode = false; // @block:let-isDebugMode-8ff76e03
-let isTransitioning = false; // @block:let-isTransitioning-27eb0c86
-let lastVideoStatus = null; // @block:let-lastVideoStatus-87055b1a
-let isCurrentlyStreaming = false; // @block:let-isCurrentlyStreaming-447cdfe1
-let reconnectAttempts = 10; // @block:let-reconnectAttempts-21faef26
-let persistentStreamId = null; // @block:let-persistentStreamId-0a7c8eef
-let persistentSessionId = null; // @block:let-persistentSessionId-0ee6f08f
-let isPersistentStreamActive = false; // @block:let-isPersistentStreamActive-e131c6d1
-const API_RATE_LIMIT = 40; // Maximum number of calls per minute // @block:const-API_RATE_LIMIT-64104c75
-const API_CALL_INTERVAL = 30000 / API_RATE_LIMIT; // Minimum time between API calls in milliseconds // @block:const-API_CALL_INTERVAL-4c4fd239
-let lastApiCallTime = 0; // @block:let-lastApiCallTime-c4a5b0d3
-const maxRetryCount = 10; // @block:const-maxRetryCount-7c87d510
-const maxDelaySec = 100; // @block:const-maxDelaySec-f32c91ba
-const RECONNECTION_INTERVAL = 100000; // 25 seconds for testing, adjust as needed // @block:const-RECONNECTION_INTERVAL-f3c672af
-let isAvatarSpeaking = false; // @block:let-isAvatarSpeaking-17945629
-const MAX_RECONNECT_ATTEMPTS = 10; // @block:const-MAX_RECONNECT_ATTEMPTS-2c73fdde
-const INITIAL_RECONNECT_DELAY = 2000; // 1 second // @block:const-INITIAL_RECONNECT_DELAY-cc55c437
-const MAX_RECONNECT_DELAY = 90000; // 30 seconds // @block:const-MAX_RECONNECT_DELAY-5b180d4f
-let autoSpeakInProgress = false; // @block:let-autoSpeakInProgress-e61e70fb
+let peerConnection;
+let pcDataChannel;
+let streamId;
+let sessionId;
+let sessionClientAnswer;
+let statsIntervalId;
+let videoIsPlaying;
+let lastBytesReceived;
+let chatHistory = [];
+let inactivityTimeout;
+let keepAliveInterval;
+let socket;
+let isInitializing = false;
+let audioContext;
+let streamVideoElement;
+let idleVideoElement;
+let deepgramConnection;
+let isRecording = false;
+let audioWorkletNode;
+let currentUtterance = '';
+let interimMessageAdded = false;
+let autoSpeakMode = true;
+let transitionCanvas;
+let transitionCtx;
+let isDebugMode = false;
+let isTransitioning = false;
+let lastVideoStatus = null;
+let isCurrentlyStreaming = false;
+let reconnectAttempts = 10;
+let persistentStreamId = null;
+let persistentSessionId = null;
+let isPersistentStreamActive = false;
+const API_RATE_LIMIT = 40; // Maximum number of calls per minute
+const API_CALL_INTERVAL = 30000 / API_RATE_LIMIT; // Minimum time between API calls in milliseconds
+let lastApiCallTime = 0;
+const maxRetryCount = 10;
+const maxDelaySec = 100;
+const RECONNECTION_INTERVAL = 100000; // 25 seconds for testing, adjust as needed
+let isAvatarSpeaking = false;
+const MAX_RECONNECT_ATTEMPTS = 10;
+const INITIAL_RECONNECT_DELAY = 2000; // 1 second
+const MAX_RECONNECT_DELAY = 90000; // 30 seconds
+let autoSpeakInProgress = false;
 
-const ConnectionState = { // @block:const-ConnectionState-abcfb1ca
+const ConnectionState = {
   DISCONNECTED: 'disconnected',
   CONNECTING: 'connecting',
   CONNECTED: 'connected',
   RECONNECTING: 'reconnecting',
 };
 
-let lastConnectionTime = Date.now(); // @block:let-lastConnectionTime-ba05ce83
+let lastConnectionTime = Date.now();
 
-let connectionState = ConnectionState.DISCONNECTED; // @block:let-connectionState-3e2238f5
+let connectionState = ConnectionState.DISCONNECTED;
 
-export function setLogLevel(level) { // @block:export-None-30890f38
+export function setLogLevel(level) {
   logger.setLogLevel(level);
   isDebugMode = level === 'DEBUG';
   logger.debug(`Log level set to ${level}. Debug mode is ${isDebugMode ? 'enabled' : 'disabled'}.`);
 }
 
-let avatars = {}; // @block:let-avatars-0d11aae6
-let currentAvatar = ''; // @block:let-currentAvatar-ebe13a6c
+let avatars = {};
+let currentAvatar = '';
 
-const avatarSelect = document.getElementById('avatar-select'); // @block:const-avatarSelect-8e8f43e3
+const avatarSelect = document.getElementById('avatar-select');
 avatarSelect.addEventListener('change', handleAvatarChange);
 
-let context = ` // @block:let-context-b76faa98
+let context = `
 
 grocery store info:
 ---
@@ -430,8 +430,8 @@ async function prepareForStreaming() {
     throw new Error('Stream ID or Session ID is missing. Cannot prepare for streaming.');
   }
 
-  const streamVideoElement = document.getElementById('stream-video-element'); // @block:const-streamVideoElement-8de25b27
-  const idleVideoElement = document.getElementById('idle-video-element'); // @block:const-idleVideoElement-a5e30dea
+  const streamVideoElement = document.getElementById('stream-video-element');
+  const idleVideoElement = document.getElementById('idle-video-element');
 
   if (!streamVideoElement || !idleVideoElement) {
     throw new Error('Video elements not found');
@@ -449,9 +449,9 @@ async function prepareForStreaming() {
 }
 
 function initializeTransitionCanvas() {
-  const videoWrapper = document.querySelector('#video-wrapper'); // @block:const-videoWrapper-7fa5d8b9
-  const rect = videoWrapper.getBoundingClientRect(); // @block:const-rect-4cedecbd
-  const size = Math.min(rect.width, rect.height, 550); // @block:const-size-3fa8b812
+  const videoWrapper = document.querySelector('#video-wrapper');
+  const rect = videoWrapper.getBoundingClientRect();
+  const size = Math.min(rect.width, rect.height, 550);
 
   transitionCanvas = document.createElement('canvas');
   transitionCanvas.width = size;
@@ -474,9 +474,9 @@ function initializeTransitionCanvas() {
   videoWrapper.appendChild(transitionCanvas);
 
   window.addEventListener('resize', () => {
-    const videoWrapper = document.querySelector('#video-wrapper'); // @block:const-videoWrapper-2033de8b
-    const rect = videoWrapper.getBoundingClientRect(); // @block:const-rect-8293e049
-    const size = Math.min(rect.width, rect.height, 550); // @block:const-size-a3b214c7
+    const videoWrapper = document.querySelector('#video-wrapper');
+    const rect = videoWrapper.getBoundingClientRect();
+    const size = Math.min(rect.width, rect.height, 550);
 
     transitionCanvas.width = size;
     transitionCanvas.height = size;
@@ -484,8 +484,8 @@ function initializeTransitionCanvas() {
 }
 
 function smoothTransition(toStreaming, duration = 250) {
-  const idleVideoElement = document.getElementById('idle-video-element'); // @block:const-idleVideoElement-96a1b02e
-  const streamVideoElement = document.getElementById('stream-video-element'); // @block:const-streamVideoElement-b26e16a7
+  const idleVideoElement = document.getElementById('idle-video-element');
+  const streamVideoElement = document.getElementById('stream-video-element');
 
   if (!idleVideoElement || !streamVideoElement) {
     logger.warn('Video elements not found for transition');
@@ -506,12 +506,12 @@ function smoothTransition(toStreaming, duration = 250) {
   isTransitioning = true;
   logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
 
-  let startTime = null; // @block:let-startTime-5aa6c1c3
+  let startTime = null;
 
   function animate(currentTime) {
     if (!startTime) startTime = currentTime;
-    const elapsed = currentTime - startTime; // @block:const-elapsed-d60923a9
-    const progress = Math.min(elapsed / duration, 1); // @block:const-progress-6e11d1a5
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
 
     transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
 
@@ -561,8 +561,8 @@ function smoothTransition(toStreaming, duration = 250) {
 }
 
 function getVideoElements() {
-  const idle = document.getElementById('idle-video-element'); // @block:const-idle-28fa3d1f
-  const stream = document.getElementById('stream-video-element'); // @block:const-stream-2aef9b94
+  const idle = document.getElementById('idle-video-element');
+  const stream = document.getElementById('stream-video-element');
 
   if (!idle || !stream) {
     logger.warn('Video elements not found in the DOM');
@@ -589,7 +589,7 @@ function initializeWebSocket() {
   };
 
   socket.onmessage = (event) => {
-    const data = JSON.parse(event.data); // @block:const-data-facf7b65
+    const data = JSON.parse(event.data);
     logger.debug('Received WebSocket message:', data);
 
     switch (data.type) {
@@ -615,8 +615,8 @@ function initializeWebSocket() {
 }
 
 function updateTranscript(text, isFinal) {
-  const msgHistory = document.getElementById('msgHistory'); // @block:const-msgHistory-dd30a7a1
-  let interimSpan = msgHistory.querySelector('span[data-interim]'); // @block:let-interimSpan-8765417d
+  const msgHistory = document.getElementById('msgHistory');
+  let interimSpan = msgHistory.querySelector('span[data-interim]');
 
   if (isFinal) {
     if (interimSpan) {
@@ -641,7 +641,7 @@ function updateTranscript(text, isFinal) {
 function handleTextInput(text) {
   if (text.trim() === '') return;
 
-  const textInput = document.getElementById('text-input'); // @block:const-textInput-f027c908
+  const textInput = document.getElementById('text-input');
   textInput.value = '';
 
   updateTranscript(text, true);
@@ -663,7 +663,7 @@ async function initializePersistentStream() {
   connectionState = ConnectionState.CONNECTING;
 
   try {
-    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, { // @block:const-sessionResponse-c47919f6
+    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -696,7 +696,7 @@ async function initializePersistentStream() {
       }),
     });
 
-    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json(); // @block:const-{-562bccb7
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
 
     persistentStreamId = newStreamId;
     persistentSessionId = newSessionId;
@@ -714,7 +714,7 @@ async function initializePersistentStream() {
 
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/sdp`, { // @block:const-sdpResponse-df1c5344
+    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/sdp`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -745,7 +745,7 @@ async function initializePersistentStream() {
 }
 
 function shouldReconnect() {
-  const timeSinceLastConnection = Date.now() - lastConnectionTime; // @block:const-timeSinceLastConnection-424250a6
+  const timeSinceLastConnection = Date.now() - lastConnectionTime;
   return timeSinceLastConnection > RECONNECTION_INTERVAL * 0.9;
 }
 
@@ -756,7 +756,7 @@ function scheduleReconnect() {
     return;
   }
 
-  const delay = Math.min(INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY); // @block:const-delay-54489e78
+  const delay = Math.min(INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
   logger.debug(`Scheduling reconnection attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
   setTimeout(backgroundReconnect, delay);
   reconnectAttempts++;
@@ -770,7 +770,7 @@ function startKeepAlive() {
   keepAliveInterval = setInterval(() => {
     if (isPersistentStreamActive && peerConnection && peerConnection.connectionState === 'connected' && pcDataChannel) {
       try {
-        const keepAliveMessage = JSON.stringify({ type: 'KeepAlive' }); // @block:const-keepAliveMessage-78a1c94e
+        const keepAliveMessage = JSON.stringify({ type: 'KeepAlive' });
         if (pcDataChannel.readyState === 'open') {
           pcDataChannel.send(keepAliveMessage);
           logger.debug('Keepalive message sent successfully');
@@ -832,7 +832,7 @@ async function createNewPersistentStream() {
   logger.debug('Creating new persistent stream...');
 
   try {
-    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, { // @block:const-sessionResponse-57d2017b
+    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -865,15 +865,15 @@ async function createNewPersistentStream() {
       }),
     });
 
-    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json(); // @block:const-{-fa370980
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
 
     logger.debug('New stream created:', { newStreamId, newSessionId });
 
-    const newSessionClientAnswer = await createPeerConnection(offer, iceServers); // @block:const-newSessionClientAnswer-2927321f
+    const newSessionClientAnswer = await createPeerConnection(offer, iceServers);
 
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${newStreamId}/sdp`, { // @block:const-sdpResponse-4a2c0385
+    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${newStreamId}/sdp`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -922,7 +922,7 @@ async function backgroundReconnect() {
 
 function waitForIdleState() {
   return new Promise((resolve) => {
-    const checkIdleState = () => { // @block:const-checkIdleState-35544643
+    const checkIdleState = () => {
       if (!isAvatarSpeaking) {
         resolve();
       } else {
@@ -965,10 +965,10 @@ async function updateWebRTCConnection(newStreamData) {
   logger.debug('Updating WebRTC connection...');
 
   try {
-    const offer = await fetchStreamOffer(newStreamData.streamId); // @block:const-offer-6e3e3313
-    const iceServers = await fetchIceServers(); // @block:const-iceServers-52fdf636
+    const offer = await fetchStreamOffer(newStreamData.streamId);
+    const iceServers = await fetchIceServers();
 
-    const newSessionClientAnswer = await createPeerConnection(offer, iceServers); // @block:const-newSessionClientAnswer-c5d07730
+    const newSessionClientAnswer = await createPeerConnection(offer, iceServers);
 
     await sendSDPAnswer(newStreamData.streamId, newStreamData.sessionId, newSessionClientAnswer);
 
@@ -980,24 +980,24 @@ async function updateWebRTCConnection(newStreamData) {
 }
 
 async function fetchStreamOffer(streamId) {
-  const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/offer`, { // @block:const-response-766afeb2
+  const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/offer`, {
     method: 'GET',
     headers: {
       Authorization: `Basic ${DID_API.key}`,
     },
   });
-  const data = await response.json(); // @block:const-data-045101d5
+  const data = await response.json();
   return data.offer;
 }
 
 async function fetchIceServers() {
-  const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/ice_servers`, { // @block:const-response-bb20ea12
+  const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/ice_servers`, {
     method: 'GET',
     headers: {
       Authorization: `Basic ${DID_API.key}`,
     },
   });
-  const data = await response.json(); // @block:const-data-26369b54
+  const data = await response.json();
   return data.ice_servers;
 }
 
@@ -1019,7 +1019,7 @@ async function initialize() {
   setLogLevel('DEBUG');
   connectionState = ConnectionState.DISCONNECTED;
 
-  const { idle, stream } = getVideoElements(); // @block:const-{-1c45462c
+  const { idle, stream } = getVideoElements();
   idleVideoElement = idle;
   streamVideoElement = stream;
 
@@ -1031,7 +1031,7 @@ async function initialize() {
   await loadAvatars();
   populateAvatarSelect();
 
-  const contextInput = document.getElementById('context-input'); // @block:const-contextInput-020d5199
+  const contextInput = document.getElementById('context-input');
   contextInput.value = context.trim();
   contextInput.addEventListener('input', () => {
     if (!contextInput.value.includes('Original Context:')) {
@@ -1039,11 +1039,11 @@ async function initialize() {
     }
   });
 
-  const sendTextButton = document.getElementById('send-text-button'); // @block:const-sendTextButton-66ef7712
-  const textInput = document.getElementById('text-input'); // @block:const-textInput-25c5673b
-  const replaceContextButton = document.getElementById('replace-context-button'); // @block:const-replaceContextButton-597b72ee
-  const autoSpeakToggle = document.getElementById('auto-speak-toggle'); // @block:const-autoSpeakToggle-2fba8248
-  const editAvatarButton = document.getElementById('edit-avatar-button'); // @block:const-editAvatarButton-b99e658d
+  const sendTextButton = document.getElementById('send-text-button');
+  const textInput = document.getElementById('text-input');
+  const replaceContextButton = document.getElementById('replace-context-button');
+  const autoSpeakToggle = document.getElementById('auto-speak-toggle');
+  const editAvatarButton = document.getElementById('edit-avatar-button');
 
   sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
   textInput.addEventListener('keypress', (event) => {
@@ -1100,7 +1100,7 @@ async function handleAvatarChange() {
     return;
   }
 
-  const idleVideoElement = document.getElementById('idle-video-element'); // @block:const-idleVideoElement-a4e3ba21
+  const idleVideoElement = document.getElementById('idle-video-element');
   if (idleVideoElement) {
     idleVideoElement.src = avatars[currentAvatar].silentVideoUrl;
     try {
@@ -1111,7 +1111,7 @@ async function handleAvatarChange() {
     }
   }
 
-  const streamVideoElement = document.getElementById('stream-video-element'); // @block:const-streamVideoElement-fcf2ba13
+  const streamVideoElement = document.getElementById('stream-video-element');
   if (streamVideoElement) {
     streamVideoElement.srcObject = null;
   }
@@ -1119,7 +1119,7 @@ async function handleAvatarChange() {
   await stopRecording();
   currentUtterance = '';
   interimMessageAdded = false;
-  const msgHistory = document.getElementById('msgHistory'); // @block:const-msgHistory-a1857ad0
+  const msgHistory = document.getElementById('msgHistory');
   msgHistory.innerHTML = '';
   chatHistory = [];
 
@@ -1129,7 +1129,7 @@ async function handleAvatarChange() {
 
 async function loadAvatars() {
   try {
-    const response = await fetch('/avatars'); // @block:const-response-ab2d4738
+    const response = await fetch('/avatars');
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -1142,16 +1142,16 @@ async function loadAvatars() {
 }
 
 function populateAvatarSelect() {
-  const avatarSelect = document.getElementById('avatar-select'); // @block:const-avatarSelect-ccc64125
+  const avatarSelect = document.getElementById('avatar-select');
   avatarSelect.innerHTML = '';
 
-  const createNewOption = document.createElement('option'); // @block:const-createNewOption-f5268817
+  const createNewOption = document.createElement('option');
   createNewOption.value = 'create-new';
   createNewOption.textContent = 'Create New Avatar';
   avatarSelect.appendChild(createNewOption);
 
   for (const [key, value] of Object.entries(avatars)) {
-    const option = document.createElement('option'); // @block:const-option-3ebe8266
+    const option = document.createElement('option');
     option.value = key;
     option.textContent = value.name;
     avatarSelect.appendChild(option);
@@ -1164,11 +1164,11 @@ function populateAvatarSelect() {
 }
 
 function openAvatarModal(avatarName = null) {
-  const modal = document.getElementById('avatar-modal'); // @block:const-modal-368d6bd0
-  const nameInput = document.getElementById('avatar-name'); // @block:const-nameInput-e3b50722
-  const voiceInput = document.getElementById('avatar-voice'); // @block:const-voiceInput-bfb7644d
-  const imagePreview = document.getElementById('avatar-image-preview'); // @block:const-imagePreview-6747b6ff
-  const saveButton = document.getElementById('save-avatar-button'); // @block:const-saveButton-909392ff
+  const modal = document.getElementById('avatar-modal');
+  const nameInput = document.getElementById('avatar-name');
+  const voiceInput = document.getElementById('avatar-voice');
+  const imagePreview = document.getElementById('avatar-image-preview');
+  const saveButton = document.getElementById('save-avatar-button');
 
   if (avatarName && avatars[avatarName]) {
     nameInput.value = avatars[avatarName].name;
@@ -1186,21 +1186,21 @@ function openAvatarModal(avatarName = null) {
 }
 
 function closeAvatarModal() {
-  const modal = document.getElementById('avatar-modal'); // @block:const-modal-fc423c3f
+  const modal = document.getElementById('avatar-modal');
   modal.style.display = 'none';
 }
 
 async function saveAvatar() {
-  const name = document.getElementById('avatar-name').value; // @block:const-name-984e465e
-  const voiceId = document.getElementById('avatar-voice').value || 'en-US-GuyNeural'; // @block:const-voiceId-e9f24b86
-  const imageFile = document.getElementById('avatar-image').files[0]; // @block:const-imageFile-d724ef1c
+  const name = document.getElementById('avatar-name').value;
+  const voiceId = document.getElementById('avatar-voice').value || 'en-US-GuyNeural';
+  const imageFile = document.getElementById('avatar-image').files[0];
 
   if (!name) {
     showErrorMessage('Please fill in the avatar name.');
     return;
   }
 
-  const formData = new FormData(); // @block:const-formData-20fb573e
+  const formData = new FormData();
   formData.append('name', name);
   formData.append('voiceId', voiceId);
   if (imageFile) {
@@ -1210,24 +1210,24 @@ async function saveAvatar() {
   showToast('Saving avatar...', 0);
 
   try {
-    const response = await fetch('/avatar', { // @block:const-response-1e51f07a
+    const response = await fetch('/avatar', {
       method: 'POST',
       body: formData,
     });
 
-    const reader = response.body.getReader(); // @block:const-reader-180e31ae
-    const decoder = new TextDecoder(); // @block:const-decoder-aac21b40
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
 
     while (true) {
-      const { done, value } = await reader.read(); // @block:const-{-d731524a
+      const { done, value } = await reader.read();
       if (done) break;
 
-      const chunk = decoder.decode(value); // @block:const-chunk-a7120601
-      const events = chunk.split('\n\n'); // @block:const-events-7b199d66
+      const chunk = decoder.decode(value);
+      const events = chunk.split('\n\n');
 
       for (const event of events) {
         if (event.startsWith('data: ')) {
-          const data = JSON.parse(event.slice(6)); // @block:const-data-f9134ae2
+          const data = JSON.parse(event.slice(6));
           if (data.status === 'processing') {
             showToast('Processing avatar...', 0);
           } else if (data.status === 'completed') {
@@ -1248,11 +1248,11 @@ async function saveAvatar() {
 }
 
 function updateContext(action) {
-  const contextInput = document.getElementById('context-input'); // @block:const-contextInput-b881d85d
-  const newContext = contextInput.value.trim(); // @block:const-newContext-ceb0864e
+  const contextInput = document.getElementById('context-input');
+  const newContext = contextInput.value.trim();
 
   if (newContext) {
-    const originalContext = context; // @block:const-originalContext-1275a4e8
+    const originalContext = context;
     if (action === 'append') {
       context += '\n' + newContext;
     } else if (action === 'replace') {
@@ -1268,7 +1268,7 @@ function updateContext(action) {
 }
 
 function displayBothContexts(original, updated) {
-  const contextInput = document.getElementById('context-input'); // @block:const-contextInput-f693fffe
+  const contextInput = document.getElementById('context-input');
   contextInput.value = `Original Context:\n${original}\n\nNew Context:\n${updated}`;
 
   setTimeout(() => {
@@ -1277,7 +1277,7 @@ function displayBothContexts(original, updated) {
 }
 
 function showToast(message) {
-  const toast = document.createElement('div'); // @block:const-toast-aa4d9fa3
+  const toast = document.createElement('div');
   toast.textContent = message;
   toast.style.position = 'fixed';
   toast.style.bottom = '20px';
@@ -1307,7 +1307,7 @@ if (document.readyState === 'loading') {
 }
 
 function showLoadingSymbol() {
-  const loadingSymbol = document.createElement('div'); // @block:const-loadingSymbol-047829ae
+  const loadingSymbol = document.createElement('div');
   loadingSymbol.id = 'loading-symbol';
   loadingSymbol.innerHTML = 'Connecting...';
   loadingSymbol.style.position = 'absolute';
@@ -1323,21 +1323,21 @@ function showLoadingSymbol() {
 }
 
 function hideLoadingSymbol() {
-  const loadingSymbol = document.getElementById('loading-symbol'); // @block:const-loadingSymbol-8769ad9b
+  const loadingSymbol = document.getElementById('loading-symbol');
   if (loadingSymbol) {
     document.body.removeChild(loadingSymbol);
   }
 }
 
 function showErrorMessage(message) {
-  const errorMessage = document.createElement('div'); // @block:const-errorMessage-63f074ba
+  const errorMessage = document.createElement('div');
   errorMessage.innerHTML = message;
   errorMessage.style.color = 'red';
   errorMessage.style.marginBottom = '10px';
   document.body.appendChild(errorMessage);
 
-  const destroyButton = document.getElementById('destroy-button'); // @block:const-destroyButton-c03b1088
-  const connectButton = document.getElementById('connect-button'); // @block:const-connectButton-47356d48
+  const destroyButton = document.getElementById('destroy-button');
+  const connectButton = document.getElementById('connect-button');
   connectButton.onclick = initializePersistentStream;
 
   if (destroyButton) destroyButton.style.display = 'inline-block';
@@ -1372,7 +1372,7 @@ async function createPeerConnection(offer, iceServers) {
   await peerConnection.setRemoteDescription(offer);
   logger.debug('Set remote SDP');
 
-  const sessionClientAnswer = await peerConnection.createAnswer(); // @block:const-sessionClientAnswer-9b777f14
+  const sessionClientAnswer = await peerConnection.createAnswer();
   logger.debug('Created local SDP');
 
   await peerConnection.setLocalDescription(sessionClientAnswer);
@@ -1382,7 +1382,7 @@ async function createPeerConnection(offer, iceServers) {
 }
 
 function onIceGatheringStateChange() {
-  const { iceGathering: iceGatheringStatusLabel } = getStatusLabels(); // @block:const-{-b35c1f47
+  const { iceGathering: iceGatheringStatusLabel } = getStatusLabels();
   if (iceGatheringStatusLabel) {
     iceGatheringStatusLabel.innerText = peerConnection.iceGatheringState;
     iceGatheringStatusLabel.className = 'iceGatheringState-' + peerConnection.iceGatheringState;
@@ -1392,7 +1392,7 @@ function onIceGatheringStateChange() {
 
 function onIceCandidate(event) {
   if (event.candidate && persistentStreamId && persistentSessionId) {
-    const { candidate, sdpMid, sdpMLineIndex } = event.candidate; // @block:const-{-3e606922
+    const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
     logger.debug('New ICE candidate:', candidate);
 
     fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/ice`, {
@@ -1414,7 +1414,7 @@ function onIceCandidate(event) {
 }
 
 function onIceConnectionStateChange() {
-  const { ice: iceStatusLabel } = getStatusLabels(); // @block:const-{-0207d622
+  const { ice: iceStatusLabel } = getStatusLabels();
   if (iceStatusLabel) {
     iceStatusLabel.innerText = peerConnection.iceConnectionState;
     iceStatusLabel.className = 'iceConnectionState-' + peerConnection.iceConnectionState;
@@ -1441,7 +1441,7 @@ async function attemptReconnect() {
 }
 
 function onConnectionStateChange() {
-  const { peer: peerStatusLabel } = getStatusLabels(); // @block:const-{-00f52b01
+  const { peer: peerStatusLabel } = getStatusLabels();
   if (peerStatusLabel) {
     peerStatusLabel.innerText = peerConnection.connectionState;
     peerStatusLabel.className = 'peerConnectionState-' + peerConnection.connectionState;
@@ -1467,7 +1467,7 @@ function startConnectionHealthCheck() {
         connectionState = ConnectionState.DISCONNECTED;
         backgroundReconnect();
       } else if (peerConnection.connectionState === 'connected') {
-        const timeSinceLastConnection = Date.now() - lastConnectionTime; // @block:const-timeSinceLastConnection-470dea7c
+        const timeSinceLastConnection = Date.now() - lastConnectionTime;
         if (timeSinceLastConnection > RECONNECTION_INTERVAL * 0.9) {
           logger.info('Approaching reconnection threshold. Initiating background reconnect.');
           backgroundReconnect();
@@ -1478,7 +1478,7 @@ function startConnectionHealthCheck() {
 }
 
 function onSignalingStateChange() {
-  const { signaling: signalingStatusLabel } = getStatusLabels(); // @block:const-{-fb1e9949
+  const { signaling: signalingStatusLabel } = getStatusLabels();
   if (signalingStatusLabel) {
     signalingStatusLabel.innerText = peerConnection.signalingState;
     signalingStatusLabel.className = 'signalingState-' + peerConnection.signalingState;
@@ -1487,7 +1487,7 @@ function onSignalingStateChange() {
 }
 
 function onVideoStatusChange(videoIsPlaying, stream) {
-  let status = videoIsPlaying ? 'streaming' : 'empty'; // @block:let-status-aa8eb6c1
+  let status = videoIsPlaying ? 'streaming' : 'empty';
 
   if (status === lastVideoStatus) {
     logger.debug('Video status unchanged:', status);
@@ -1496,8 +1496,8 @@ function onVideoStatusChange(videoIsPlaying, stream) {
 
   logger.debug('Video status changing from', lastVideoStatus, 'to', status);
 
-  const streamVideoElement = document.getElementById('stream-video-element'); // @block:const-streamVideoElement-6a9d1479
-  const idleVideoElement = document.getElementById('idle-video-element'); // @block:const-idleVideoElement-335c16b6
+  const streamVideoElement = document.getElementById('stream-video-element');
+  const idleVideoElement = document.getElementById('idle-video-element');
 
   if (!streamVideoElement || !idleVideoElement) {
     logger.error('Video elements not found');
@@ -1512,7 +1512,7 @@ function onVideoStatusChange(videoIsPlaying, stream) {
 
   lastVideoStatus = status;
 
-  const streamingStatusLabel = document.getElementById('streaming-status-label'); // @block:const-streamingStatusLabel-12c0679b
+  const streamingStatusLabel = document.getElementById('streaming-status-label');
   if (streamingStatusLabel) {
     streamingStatusLabel.innerText = status;
     streamingStatusLabel.className = 'streamingState-' + status;
@@ -1522,7 +1522,7 @@ function onVideoStatusChange(videoIsPlaying, stream) {
 }
 
 function setStreamVideoElement(stream) {
-  const streamVideoElement = document.getElementById('stream-video-element'); // @block:const-streamVideoElement-294adaba
+  const streamVideoElement = document.getElementById('stream-video-element');
   if (!streamVideoElement) {
     logger.error('Stream video element not found');
     return;
@@ -1558,8 +1558,8 @@ function setStreamVideoElement(stream) {
 
 function onStreamEvent(message) {
   if (pcDataChannel.readyState === 'open') {
-    let status; // @block:let-None-29eeb867
-    const [event, _] = message.data.split(':'); // @block:const-[event,-d400c595
+    let status;
+    const [event, _] = message.data.split(':');
 
     switch (event) {
       case 'stream/started':
@@ -1584,7 +1584,7 @@ function onStreamEvent(message) {
       setTimeout(() => {
         console.log('stream/ready');
         isStreamReady = true;
-        const streamEventLabel = document.getElementById('stream-event-label'); // @block:const-streamEventLabel-093cfda0
+        const streamEventLabel = document.getElementById('stream-event-label');
         if (streamEventLabel) {
           streamEventLabel.innerText = 'ready';
           streamEventLabel.className = 'streamEvent-ready';
@@ -1592,7 +1592,7 @@ function onStreamEvent(message) {
       }, 1000);
     } else {
       console.log(event);
-      const streamEventLabel = document.getElementById('stream-event-label'); // @block:const-streamEventLabel-0e4f95fb
+      const streamEventLabel = document.getElementById('stream-event-label');
       if (streamEventLabel) {
         streamEventLabel.innerText = status === 'dont-care' ? event : status;
         streamEventLabel.className = 'streamEvent-' + status;
@@ -1615,12 +1615,12 @@ function onTrack(event) {
   statsIntervalId = setInterval(async () => {
     if (peerConnection && peerConnection.connectionState === 'connected') {
       try {
-        const stats = await peerConnection.getStats(event.track); // @block:const-stats-4161478f
-        let videoStatsFound = false; // @block:let-videoStatsFound-0553e76e
+        const stats = await peerConnection.getStats(event.track);
+        let videoStatsFound = false;
         stats.forEach((report) => {
           if (report.type === 'inbound-rtp' && report.kind === 'video') {
             videoStatsFound = true;
-            const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived; // @block:const-videoStatusChanged-5340ee62
+            const videoStatusChanged = videoIsPlaying !== report.bytesReceived > lastBytesReceived;
 
             // logger.debug('Video stats:', {
             //  bytesReceived: report.bytesReceived,
@@ -1649,7 +1649,7 @@ function onTrack(event) {
   }, 250); // Check every 500ms
 
   if (event.streams && event.streams.length > 0) {
-    const stream = event.streams[0]; // @block:const-stream-4aec0926
+    const stream = event.streams[0];
     if (stream.getVideoTracks().length > 0) {
       logger.debug('Setting stream video element with track:', event.track.id);
       setStreamVideoElement(stream);
@@ -1666,7 +1666,7 @@ function onTrack(event) {
 }
 
 function playIdleVideo() {
-  const { idle: idleVideoElement } = getVideoElements(); // @block:const-{-f5262015
+  const { idle: idleVideoElement } = getVideoElements();
   if (!idleVideoElement) {
     logger.error('Idle video element not found');
     return;
@@ -1711,7 +1711,7 @@ function closePC(pc = peerConnection) {
   pc.removeEventListener('signalingstatechange', onSignalingStateChange, true);
   pc.removeEventListener('track', onTrack, true);
   clearInterval(statsIntervalId);
-  const labels = getStatusLabels(); // @block:const-labels-c035a50f
+  const labels = getStatusLabels();
   if (labels.iceGathering) labels.iceGathering.innerText = '';
   if (labels.signaling) labels.signaling.innerText = '';
   if (labels.ice) labels.ice.innerText = '';
@@ -1724,8 +1724,8 @@ function closePC(pc = peerConnection) {
 
 async function fetchWithRetries(url, options, retries = 0, delayMs = 1000) {
   try {
-    const now = Date.now(); // @block:const-now-075eff4b
-    const timeSinceLastCall = now - lastApiCallTime; // @block:const-timeSinceLastCall-25b67625
+    const now = Date.now();
+    const timeSinceLastCall = now - lastApiCallTime;
 
     if (timeSinceLastCall < API_CALL_INTERVAL) {
       await new Promise((resolve) => setTimeout(resolve, API_CALL_INTERVAL - timeSinceLastCall));
@@ -1733,11 +1733,11 @@ async function fetchWithRetries(url, options, retries = 0, delayMs = 1000) {
 
     lastApiCallTime = Date.now();
 
-    const response = await fetch(url, options); // @block:const-response-dde9564b
+    const response = await fetch(url, options);
     if (!response.ok) {
       if (response.status === 429) {
         // If rate limited, wait for a longer time before retrying
-        const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10); // @block:const-retryAfter-71992598
+        const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
         logger.warn(`Rate limited. Retrying after ${retryAfter} seconds.`);
         await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
         return fetchWithRetries(url, options, retries, delayMs);
@@ -1747,7 +1747,7 @@ async function fetchWithRetries(url, options, retries = 0, delayMs = 1000) {
     return response;
   } catch (err) {
     if (retries < maxRetryCount) {
-      const delay = Math.min(Math.pow(2, retries) * delayMs + Math.random() * 1000, maxDelaySec * 1000); // @block:const-delay-639172a2
+      const delay = Math.min(Math.pow(2, retries) * delayMs + Math.random() * 1000, maxDelaySec * 1000);
       logger.warn(`Request failed, retrying ${retries + 1}/${maxRetryCount} in ${delay}ms. Error: ${err.message}`);
       await new Promise((resolve) => setTimeout(resolve, delay));
       return fetchWithRetries(url, options, retries + 1, delayMs);
@@ -1774,7 +1774,7 @@ async function initializeConnection() {
       throw new Error('No avatar selected or avatar not found');
     }
 
-    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, { // @block:const-sessionResponse-ba78b095
+    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -1807,7 +1807,7 @@ async function initializeConnection() {
       }),
     });
 
-    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json(); // @block:const-{-a0f026b5
+    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
 
     if (!newStreamId || !newSessionId) {
       throw new Error('Failed to get valid stream ID or session ID from API');
@@ -1828,7 +1828,7 @@ async function initializeConnection() {
 
     await new Promise((resolve) => setTimeout(resolve, 6000));
 
-    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, { // @block:const-sdpResponse-0365b820
+    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
@@ -1866,8 +1866,8 @@ async function startStreaming(assistantReply) {
       return;
     }
 
-    const streamVideoElement = document.getElementById('stream-video-element'); // @block:const-streamVideoElement-08c9f618
-    const idleVideoElement = document.getElementById('idle-video-element'); // @block:const-idleVideoElement-4d0a1f7b
+    const streamVideoElement = document.getElementById('stream-video-element');
+    const idleVideoElement = document.getElementById('idle-video-element');
 
     if (!streamVideoElement || !idleVideoElement) {
       logger.error('Video elements not found');
@@ -1875,22 +1875,22 @@ async function startStreaming(assistantReply) {
     }
 
     // Remove outer <speak> tags if present
-    let ssmlContent = assistantReply.trim(); // @block:let-ssmlContent-5364bdf7
+    let ssmlContent = assistantReply.trim();
     if (ssmlContent.startsWith('<speak>') && ssmlContent.endsWith('</speak>')) {
       ssmlContent = ssmlContent.slice(7, -8).trim();
     }
 
     // Split the SSML content into chunks, respecting SSML tags
-    const chunks = ssmlContent.match(/(?:<[^>]+>|[^<]+)+/g) || []; // @block:const-chunks-e582f586
+    const chunks = ssmlContent.match(/(?:<[^>]+>|[^<]+)+/g) || [];
 
     logger.debug('Chunks', chunks);
 
     for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i].trim(); // @block:const-chunk-ac67a18f
+      const chunk = chunks[i].trim();
       if (chunk.length === 0) continue;
 
       isAvatarSpeaking = true;
-      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, { // @block:const-playResponse-6b1172f1
+      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
         method: 'POST',
         headers: {
           Authorization: `Basic ${DID_API.key}`,
@@ -1937,7 +1937,7 @@ async function startStreaming(assistantReply) {
         throw new Error(`HTTP error! status: ${playResponse.status}`);
       }
 
-      const playResponseData = await playResponse.json(); // @block:const-playResponseData-4e2f6363
+      const playResponseData = await playResponse.json();
       logger.debug('Streaming response:', playResponseData);
 
       if (playResponseData.status === 'started') {
@@ -1981,13 +1981,13 @@ async function startStreaming(assistantReply) {
   }
 }
 
-export function toggleSimpleMode() { // @block:export-None-9796771a
-  const content = document.getElementById('content'); // @block:const-content-1cbab236
-  const videoWrapper = document.getElementById('video-wrapper'); // @block:const-videoWrapper-b6f73bc5
-  const simpleModeButton = document.getElementById('simple-mode-button'); // @block:const-simpleModeButton-a9135ee6
-  const header = document.querySelector('.header'); // @block:const-header-1c64e815
-  const autoSpeakToggle = document.getElementById('auto-speak-toggle'); // @block:const-autoSpeakToggle-6c1c76bb
-  const startButton = document.getElementById('start-button'); // @block:const-startButton-edc43150
+export function toggleSimpleMode() {
+  const content = document.getElementById('content');
+  const videoWrapper = document.getElementById('video-wrapper');
+  const simpleModeButton = document.getElementById('simple-mode-button');
+  const header = document.querySelector('.header');
+  const autoSpeakToggle = document.getElementById('auto-speak-toggle');
+  const startButton = document.getElementById('start-button');
 
   if (content.style.display !== 'none') {
     // Entering simple mode
@@ -2015,7 +2015,7 @@ export function toggleSimpleMode() { // @block:export-None-9796771a
   } else {
     // Exiting simple mode
     content.style.display = 'flex';
-    const leftColumn = document.getElementById('left-column'); // @block:const-leftColumn-8891a847
+    const leftColumn = document.getElementById('left-column');
     leftColumn.appendChild(videoWrapper);
     videoWrapper.style.position = 'relative';
     videoWrapper.style.top = 'auto';
@@ -2041,11 +2041,11 @@ export function toggleSimpleMode() { // @block:export-None-9796771a
 function startSendingAudioData() {
   logger.debug('Starting to send audio data...');
 
-  let packetCount = 0; // @block:let-packetCount-d3af95d1
-  let totalBytesSent = 0; // @block:let-totalBytesSent-54a9fe66
+  let packetCount = 0;
+  let totalBytesSent = 0;
 
   audioWorkletNode.port.onmessage = (event) => {
-    const audioData = event.data; // @block:const-audioData-b16b9a88
+    const audioData = event.data;
 
     if (!(audioData instanceof ArrayBuffer)) {
       logger.warn('Received non-ArrayBuffer data from AudioWorklet:', typeof audioData);
@@ -2078,7 +2078,7 @@ function startSendingAudioData() {
 function handleTranscription(data) {
   if (!isRecording) return;
 
-  const transcript = data.channel.alternatives[0].transcript; // @block:const-transcript-e05d2468
+  const transcript = data.channel.alternatives[0].transcript;
   if (data.is_final) {
     logger.debug('Final transcript:', transcript);
     if (transcript.trim()) {
@@ -2111,7 +2111,7 @@ async function startRecording() {
   interimMessageAdded = false;
 
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); // @block:const-stream-36828616
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     logger.info('Microphone stream obtained');
 
     audioContext = new AudioContext();
@@ -2120,7 +2120,7 @@ async function startRecording() {
     await audioContext.audioWorklet.addModule('audio-processor.js');
     logger.debug('Audio worklet module added successfully');
 
-    const source = audioContext.createMediaStreamSource(stream); // @block:const-source-c8126819
+    const source = audioContext.createMediaStreamSource(stream);
     logger.debug('Media stream source created');
 
     audioWorkletNode = new AudioWorkletNode(audioContext, 'audio-processor');
@@ -2129,7 +2129,7 @@ async function startRecording() {
     source.connect(audioWorkletNode);
     logger.debug('Media stream source connected to audio worklet node');
 
-    const deepgramOptions = { // @block:const-deepgramOptions-bb9c4f79
+    const deepgramOptions = {
       model: 'nova-2',
       language: 'en-US',
       smart_format: true,
@@ -2178,14 +2178,14 @@ async function startRecording() {
     if (autoSpeakMode) {
       autoSpeakInProgress = true;
     }
-    const startButton = document.getElementById('start-button'); // @block:const-startButton-85077d66
+    const startButton = document.getElementById('start-button');
     startButton.textContent = 'Stop';
 
     logger.debug('Recording and transcription started successfully');
   } catch (error) {
     logger.error('Error starting recording:', error);
     isRecording = false;
-    const startButton = document.getElementById('start-button'); // @block:const-startButton-0aec905e
+    const startButton = document.getElementById('start-button');
     startButton.textContent = 'Speak';
     showErrorMessage('Failed to start recording. Please try again.');
     throw error;
@@ -2195,7 +2195,7 @@ async function startRecording() {
 function handleDeepgramError(err) {
   logger.error('Deepgram error:', err);
   isRecording = false;
-  const startButton = document.getElementById('start-button'); // @block:const-startButton-88e2488d
+  const startButton = document.getElementById('start-button');
   startButton.textContent = 'Speak';
 
   // Attempt to close the connection and clean up
@@ -2246,7 +2246,7 @@ async function stopRecording() {
 
     isRecording = false;
     autoSpeakInProgress = false;
-    const startButton = document.getElementById('start-button'); // @block:const-startButton-9a25c28f
+    const startButton = document.getElementById('start-button');
     startButton.textContent = 'Speak';
 
     logger.debug('Recording and transcription stopped');
@@ -2261,9 +2261,9 @@ async function sendChatToGroq() {
 
   logger.debug('Sending chat to Groq...');
   try {
-    const startTime = Date.now(); // @block:const-startTime-f10fc98f
-    const currentContext = document.getElementById('context-input').value.trim(); // @block:const-currentContext-3d6382d6
-    const requestBody = { // @block:const-requestBody-9585a684
+    const startTime = Date.now();
+    const currentContext = document.getElementById('context-input').value.trim();
+    const requestBody = {
       messages: [
         {
           role: 'system',
@@ -2275,7 +2275,7 @@ async function sendChatToGroq() {
     };
     logger.debug('Request body:', JSON.stringify(requestBody));
 
-    const response = await fetch('/chat', { // @block:const-response-c46d766c
+    const response = await fetch('/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -2289,36 +2289,36 @@ async function sendChatToGroq() {
       throw new Error(`HTTP error ${response.status}`);
     }
 
-    const reader = response.body.getReader(); // @block:const-reader-750dcd93
-    let assistantReply = ''; // @block:let-assistantReply-a2415eaf
-    let done = false; // @block:let-done-f91fd4ed
+    const reader = response.body.getReader();
+    let assistantReply = '';
+    let done = false;
 
-    const msgHistory = document.getElementById('msgHistory'); // @block:const-msgHistory-36c28571
-    const assistantSpan = document.createElement('span'); // @block:const-assistantSpan-3c09ded1
+    const msgHistory = document.getElementById('msgHistory');
+    const assistantSpan = document.createElement('span');
     assistantSpan.innerHTML = '<u>Assistant:</u> ';
     msgHistory.appendChild(assistantSpan);
     msgHistory.appendChild(document.createElement('br'));
 
     while (!done) {
-      const { value, done: readerDone } = await reader.read(); // @block:const-{-d300de2d
+      const { value, done: readerDone } = await reader.read();
       done = readerDone;
 
       if (value) {
-        const chunk = new TextDecoder().decode(value); // @block:const-chunk-50b3b7fd
+        const chunk = new TextDecoder().decode(value);
         logger.debug('Received chunk:', chunk);
-        const lines = chunk.split('\n'); // @block:const-lines-af157ddb
+        const lines = chunk.split('\n');
 
         for (const line of lines) {
           if (line.startsWith('data:')) {
-            const data = line.substring(5).trim(); // @block:const-data-e595b800
+            const data = line.substring(5).trim();
             if (data === '[DONE]') {
               done = true;
               break;
             }
 
             try {
-              const parsed = JSON.parse(data); // @block:const-parsed-c1b7ff1b
-              const content = parsed.choices[0]?.delta?.content || ''; // @block:const-content-f9cdea61
+              const parsed = JSON.parse(data);
+              const content = parsed.choices[0]?.delta?.content || '';
               assistantReply += content;
               assistantSpan.innerHTML += content;
               logger.debug('Parsed content:', content);
@@ -2332,8 +2332,8 @@ async function sendChatToGroq() {
       }
     }
 
-    const endTime = Date.now(); // @block:const-endTime-94d01fd0
-    const processingTime = endTime - startTime; // @block:const-processingTime-d930ea65
+    const endTime = Date.now();
+    const processingTime = endTime - startTime;
     logger.debug(`Groq processing completed in ${processingTime}ms`);
 
     chatHistory.push({
@@ -2347,7 +2347,7 @@ async function sendChatToGroq() {
     await startStreaming(assistantReply);
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
-    const msgHistory = document.getElementById('msgHistory'); // @block:const-msgHistory-5657203b
+    const msgHistory = document.getElementById('msgHistory');
     msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
     msgHistory.scrollTop = msgHistory.scrollHeight;
   }
@@ -2355,8 +2355,8 @@ async function sendChatToGroq() {
 
 function toggleAutoSpeak() {
   autoSpeakMode = !autoSpeakMode;
-  const toggleButton = document.getElementById('auto-speak-toggle'); // @block:const-toggleButton-92c176b6
-  const startButton = document.getElementById('start-button'); // @block:const-startButton-683ec05f
+  const toggleButton = document.getElementById('auto-speak-toggle');
+  const startButton = document.getElementById('start-button');
   toggleButton.textContent = `Auto-Speak: ${autoSpeakMode ? 'On' : 'Off'}`;
   if (autoSpeakMode) {
     startButton.textContent = 'Stop';
@@ -2400,13 +2400,13 @@ async function reinitializeConnection() {
     currentUtterance = '';
     interimMessageAdded = false;
 
-    const msgHistory = document.getElementById('msgHistory'); // @block:const-msgHistory-17a19b30
+    const msgHistory = document.getElementById('msgHistory');
     msgHistory.innerHTML = '';
     chatHistory = [];
 
     // Reset video elements
-    const streamVideoElement = document.getElementById('stream-video-element'); // @block:const-streamVideoElement-71a68323
-    const idleVideoElement = document.getElementById('idle-video-element'); // @block:const-idleVideoElement-cebc0f99
+    const streamVideoElement = document.getElementById('stream-video-element');
+    const idleVideoElement = document.getElementById('idle-video-element');
     if (streamVideoElement) streamVideoElement.srcObject = null;
     if (idleVideoElement) idleVideoElement.style.display = 'block';
 
@@ -2460,10 +2460,10 @@ async function cleanupOldStream() {
   }
 }
 
-const connectButton = document.getElementById('connect-button'); // @block:const-connectButton-88b71897
+const connectButton = document.getElementById('connect-button');
 connectButton.onclick = initializeConnection;
 
-const destroyButton = document.getElementById('destroy-button'); // @block:const-destroyButton-ec3add39
+const destroyButton = document.getElementById('destroy-button');
 destroyButton.onclick = async () => {
   try {
     await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
@@ -2484,7 +2484,7 @@ destroyButton.onclick = async () => {
   }
 };
 
-const startButton = document.getElementById('start-button'); // @block:const-startButton-ee9f772b
+const startButton = document.getElementById('start-button');
 
 startButton.onclick = async () => {
   logger.info('Start button clicked. Current state:', isRecording ? 'Recording' : 'Not recording');
@@ -2500,14 +2500,14 @@ startButton.onclick = async () => {
   }
 };
 
-const saveAvatarButton = document.getElementById('save-avatar-button'); // @block:const-saveAvatarButton-8ce62ad8
+const saveAvatarButton = document.getElementById('save-avatar-button');
 saveAvatarButton.onclick = saveAvatar;
 
-const avatarImageInput = document.getElementById('avatar-image'); // @block:const-avatarImageInput-cf1423cc
+const avatarImageInput = document.getElementById('avatar-image');
 avatarImageInput.onchange = (event) => {
-  const file = event.target.files[0]; // @block:const-file-f1762471
+  const file = event.target.files[0];
   if (file) {
-    const reader = new FileReader(); // @block:const-reader-80e89c75
+    const reader = new FileReader();
     reader.onload = (e) => {
       document.getElementById('avatar-image-preview').src = e.target.result;
     };
@@ -2516,7 +2516,7 @@ avatarImageInput.onchange = (event) => {
 };
 
 // Export functions and variables that need to be accessed from other modules
-export { // @block:export-None-ea3b3d30
+export {
   initialize,
   handleAvatarChange,
   openAvatarModal,
