@@ -2229,7 +2229,7 @@ async function sendChatToGroq() {
       }
     }
 
-    const endTime = Date.now();Time-af334dcc
+    const endTime = Date.now();Time-af334dccTime-551ff4ae
     const processingTime = endTime - startTime;
     logger.debug(`Groq processing completed in ${processingTime}ms`);
 
