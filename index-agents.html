@@ -120,43 +120,37 @@
 
     <script>
       // AudioWorklet implementation
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)(); // @block:const-audioContext-9aa610b4
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
       // AudioWorklet processor code
-      const workletCode = ` // @block:const-workletCode-9c397853
-// @block:class-AudioProcessor-bda0958b
+      const workletCode = `
             class AudioProcessor extends AudioWorkletProcessor {
                 process(inputs, outputs, parameters) {
-                    const input = inputs[0]; // @block:const-input-bc47ef7f
-                    const output = outputs[0]; // @block:const-output-c03049c6
+                    const input = inputs[0];
+                    const output = outputs[0];
 
-// @block:for--f740007f
                     for (let channel = 0; channel < input.length; channel++) {
-                        const inputChannel = input[channel]; // @block:const-inputChannel-0f45debc
-                        const outputChannel = output[channel]; // @block:const-outputChannel-1cccea14
-// @block:for--e27a9e49
+                        const inputChannel = input[channel];
+                        const outputChannel = output[channel];
                         for (let i = 0; i < inputChannel.length; i++) {
                             outputChannel[i] = inputChannel[i];
                         }
-// @block:for--e27a9e49-end
                     }
-// @block:for--f740007f-end
 
                     return true;
                 }
-// @block:class-AudioProcessor-bda0958b-end
             }
 
             registerProcessor('audio-processor', AudioProcessor);
         `;
 
-      const blob = new Blob([workletCode], { type: 'application/javascript' }); // @block:const-blob-8954cf13
-      const workletUrl = URL.createObjectURL(blob); // @block:const-workletUrl-1d57b65d
+      const blob = new Blob([workletCode], { type: 'application/javascript' });
+      const workletUrl = URL.createObjectURL(blob);
 
       audioContext.audioWorklet
         .addModule(workletUrl)
         .then(() => {
-          const audioProcessor = new AudioWorkletNode(audioContext, 'audio-processor'); // @block:const-audioProcessor-95833ee6
+          const audioProcessor = new AudioWorkletNode(audioContext, 'audio-processor');
           // Connect the audio processor to the audio context destination
           audioProcessor.connect(audioContext.destination);
         })
@@ -165,7 +159,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@deepgram/sdk"></script>
     <script type="module">
-      import { // @block:import-None-0b8069b4
+      import {
         initialize,
         handleAvatarChange,
         openAvatarModal,
@@ -182,8 +176,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dom-parser/0.1.5/dom-parser.min.js"></script>
 
     <script type="module">
-      import { toggleSimpleMode } from './agents-client-api.js'; // @block:import-None-1f5711db
-// @block:document.getElementById('simple-mode-button').addEventListener('click',-toggleSimpleMode);-e9ec8f34
+      import { toggleSimpleMode } from './agents-client-api.js';
       document.getElementById('simple-mode-button').addEventListener('click', toggleSimpleMode);
     </script>
   </body>
