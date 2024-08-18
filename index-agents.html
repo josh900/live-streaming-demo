@@ -1,30 +1,21 @@
 <!doctype html>
 
-<!-- @block:html-html-2-401ea177 -->
 <html lang="en">
 
-<!-- @block:head-head-4-4b7b3b0c -->
   <head>
 
-<!-- @block:meta-meta-6-6084405c -->
     <meta charset="UTF-8" />
 
-<!-- @block:meta-meta-8-1f96e574 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-<!-- @block:title-title-10-bbde6ae1 -->
     <title>Avatar Demo</title>
 
-<!-- @block:link-link-12-472a1ce6 -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
 
-<!-- @block:link-link-14-616e9ec4 -->
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 
-<!-- @block:link-link-16-3306bd52 -->
     <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@300;400;700&display=swap" rel="stylesheet" />
 
-<!-- @block:link-link-18-e413bec8 -->
     <link rel="stylesheet" href="style-agents.css" />
     <link
       rel="icon"
@@ -33,7 +24,6 @@
       href="https://cdn.prod.website-files.com/6316d11d553f411d6f1fa732/6343f55adbb1a12a532f2769_skoop-favicon.png"
     />
 
-<!-- @block:style-style-26-55bf9e80 -->
     <style>
       body,
       html {
@@ -63,37 +53,28 @@
         padding: 20px;
       }
     </style>
-<!-- @block:style-style-26-55bf9e80-end -->
 
   </head>
 
-<!-- @block:body-body-58-b847d574 -->
   <body>
 
-<!-- @block:div-div-60-02783cb3 -->
     <div class="header">
       <img
         src="https://cdn.prod.website-files.com/6316d11d553f411d6f1fa732/633ac440413e418b480baaf8_skoop-logo-p-500.png"
         alt="SKOOP logo"
       />
 
-<!-- @block:h1-h1-66-52f7626e -->
       <h1>Avatar Demo</h1>
 
-<!-- @block:button-simple-mode-button-4f69fcc5 -->
       <button id="simple-mode-button">Simple Mode</button>
     </div>
 
-<!-- @block:div-content-b89936a2 -->
     <div id="content">
 
-<!-- @block:div-left-column-e2fa1bf4 -->
       <div id="left-column">
 
-<!-- @block:div-status-8b68cf90 -->
         <div id="status">
 
-<!-- @block:h4-h4-77-5187e5b3 -->
           <h4>WebRTC Connection Status</h4>
           ICE gathering status: <label id="ice-gathering-status-label"></label><br />
           ICE status: <label id="ice-status-label"></label><br />
@@ -101,128 +82,90 @@
           Signaling status: <label id="signaling-status-label"></label><br />
           Streaming status: <label id="streaming-status-label"></label><br />
 
-<!-- @block:br-br-84-5e6bccbd -->
           <br />
 
-<!-- @block:div-buttons-bbd6d03f -->
           <div id="buttons">
 
-<!-- @block:select-avatar-select-e650a771 -->
             <select id="avatar-select"></select>
 
-<!-- @block:button-connect-button-e3acc47e -->
             <button id="connect-button" type="button">Connect</button>
 
-<!-- @block:button-destroy-button-b9189792 -->
             <button id="destroy-button" type="button">Destroy</button>
 
-<!-- @block:button-edit-avatar-button-a3de62d9 -->
             <button id="edit-avatar-button" type="button">Edit Avatar</button>
           </div>
         </div>
 
-<!-- @block:div-video-wrapper-5136b181 -->
         <div id="video-wrapper">
 
-<!-- @block:video-idle-video-element-95d30ec6 -->
           <video id="idle-video-element" width="400" height="400" autoplay loop muted></video>
 
-<!-- @block:video-stream-video-element-735786ab -->
           <video id="stream-video-element" width="400" height="400" autoplay></video>
 
-<!-- @block:video-preload-video-element-fc2310b1 -->
           <video id="preload-video-element" width="400" height="400" style="display: none"></video>
 
-<!-- @block:div-logo-wrapper-dcc89c57 -->
           <div id="logo-wrapper"></div>
         </div>
-<!-- @block:div-logo-wrapper-dcc89c57-end -->
 
       </div>
 
-<!-- @block:div-right-column-7918ab57 -->
       <div id="right-column">
 
-<!-- @block:div-context-wrapper-a4178fc9 -->
         <div id="context-wrapper">
 
-<!-- @block:h4-h4-115-1e01906c -->
           <h4>Context:</h4>
 
-<!-- @block:textarea-context-input-b4b8dad3 -->
           <textarea id="context-input" rows="4" cols="50"></textarea>
 
-<!-- @block:div-div-119-d5cf0ae5 -->
           <div>
 
-<!-- @block:button-replace-context-button-d34d0982 -->
             <button id="replace-context-button" type="button">Replace</button>
           </div>
         </div>
 
-<!-- @block:div-div-125-c4a8c9e9 -->
         <div class="chat">
 
-<!-- @block:h4-h4-127-15b94f0f -->
           <h4>Chat History</h4>
 
-<!-- @block:div-msgHistory-bea25771 -->
           <div id="msgHistory"></div>
         </div>
-<!-- @block:div-msgHistory-bea25771-end -->
 
-<!-- @block:div-speak-controls-6dd7b5bc -->
         <div id="speak-controls">
 
-<!-- @block:button-start-button-a8c530cf -->
           <button id="start-button" type="button">Speak</button>
 
-<!-- @block:button-auto-speak-toggle-574de723 -->
           <button id="auto-speak-toggle" type="button">Auto-Speak: On</button>
         </div>
 
-<!-- @block:div-text-input-controls-add5d875 -->
         <div id="text-input-controls">
 
-<!-- @block:input-text-input-9434f847 -->
           <input type="text" id="text-input" placeholder="Type your message here" />
 
-<!-- @block:button-send-text-button-934aa8f2 -->
           <button id="send-text-button" type="button">Send</button>
         </div>
       </div>
     </div>
 
-<!-- @block:div-avatar-modal-c78b5d3a -->
     <div id="avatar-modal" class="modal">
 
-<!-- @block:div-div-150-ba5d9fdc -->
       <div class="modal-content">
 
-<!-- @block:h2-h2-152-82fe142a -->
         <h2>Create/Edit Avatar</h2>
 
-<!-- @block:input-avatar-name-7996e268 -->
         <input type="text" id="avatar-name" placeholder="Avatar Name" />
 
-<!-- @block:input-avatar-voice-28f60ca8 -->
         <input type="text" id="avatar-voice" placeholder="Voice ID" />
 
-<!-- @block:input-avatar-image-6874bde4 -->
         <input type="file" id="avatar-image" accept="image/png" />
 
-<!-- @block:img-avatar-image-preview-a056071d -->
         <img id="avatar-image-preview" src="" alt="Avatar Preview" style="max-width: 200px; max-height: 200px" />
 
-<!-- @block:button-save-avatar-button-1e7c1896 -->
         <button id="save-avatar-button">Save Avatar</button>
 
-<!-- @block:button-button-164-bd679af1 -->
         <button onclick="closeAvatarModal()">Cancel</button>
       </div>
     </div>
 
-<!-- @block:script-script-168-cbca52da -->
     <script>
       // AudioWorklet implementation
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -261,12 +204,9 @@
         })
         .catch((err) => console.error('Error loading AudioWorklet:', err));
     </script>
-<!-- @block:script-script-168-cbca52da-end -->
 
-<!-- @block:script-script-207-f095e969 -->
     <script src="https://cdn.jsdelivr.net/npm/@deepgram/sdk"></script>
 
-<!-- @block:script-script-209-9a40a80a -->
     <script type="module">
       import {
         initialize,
@@ -282,17 +222,13 @@
       // Make closeAvatarModal available globally
       window.closeAvatarModal = closeAvatarModal;
     </script>
-<!-- @block:script-script-209-9a40a80a-end -->
 
-<!-- @block:script-script-225-5cad7f97 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dom-parser/0.1.5/dom-parser.min.js"></script>
 
-<!-- @block:script-script-227-0652020a -->
     <script type="module">
       import { toggleSimpleMode } from './agents-client-api.js';
       document.getElementById('simple-mode-button').addEventListener('click', toggleSimpleMode);
     </script>
-<!-- @block:script-script-227-0652020a-end -->
 
   </body>
 </html>
