@@ -1,12 +1,21 @@
 <!doctype html>
+html-html-1-46227c0d -->
 <html lang="en">
+head-head-2-6f3696a5 -->
   <head>
+meta-meta-3-b6e19199 -->
     <meta charset="UTF-8" />
+meta-meta-4-f254ab14 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+title-title-5-d2081d2f -->
     <title>Avatar Demo</title>
+link-link-6-9f28d588 -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
+link-link-7-9566d89c -->
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+link-link-8-a600e1b8 -->
     <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@300;400;700&display=swap" rel="stylesheet" />
+link-link-9-3ea249cc -->
     <link rel="stylesheet" href="style-agents.css" />
     <link
       rel="icon"
@@ -14,6 +23,7 @@
       sizes="192x192"
       href="https://cdn.prod.website-files.com/6316d11d553f411d6f1fa732/6343f55adbb1a12a532f2769_skoop-favicon.png"
     />
+style-style-16-f016877e -->
     <style>
       body,
       html {
@@ -43,90 +53,129 @@
         padding: 20px;
       }
     </style>
+style-style-16-f016877e-end -->
   </head>
+body-body-46-bcdca149 -->
   <body>
+div-div-47-8ac9e2e7 -->
     <div class="header">
       <img
         src="https://cdn.prod.website-files.com/6316d11d553f411d6f1fa732/633ac440413e418b480baaf8_skoop-logo-p-500.png"
         alt="SKOOP logo"
       />
+h1-h1-52-a3081d50 -->
       <h1>Avatar Demo</h1>
+button-simple-mode-button-387c8eff -->
       <button id="simple-mode-button">Simple Mode</button>
     </div>
+div-content-cb22a5c9 -->
     <div id="content">
+div-left-column-c6a06a79 -->
       <div id="left-column">
+div-status-0ee06491 -->
         <div id="status">
+h4-h4-58-bab40511 -->
           <h4>WebRTC Connection Status</h4>
           ICE gathering status: <label id="ice-gathering-status-label"></label><br />
           ICE status: <label id="ice-status-label"></label><br />
           Peer connection status: <label id="peer-status-label"></label><br />
           Signaling status: <label id="signaling-status-label"></label><br />
           Streaming status: <label id="streaming-status-label"></label><br />
+br-br-64-fc9fbbf0 -->
           <br />
+div-buttons-ed22d995 -->
           <div id="buttons">
+select-avatar-select-713035ed -->
             <select id="avatar-select"></select>
+button-connect-button-3bef45a4 -->
             <button id="connect-button" type="button">Connect</button>
+button-destroy-button-d190fbfc -->
             <button id="destroy-button" type="button">Destroy</button>
+button-edit-avatar-button-b3234ac1 -->
             <button id="edit-avatar-button" type="button">Edit Avatar</button>
           </div>
         </div>
-
+div-video-wrapper-9a8aceb1 -->
         <div id="video-wrapper">
+video-idle-video-element-f34f1be9 -->
           <video id="idle-video-element" width="400" height="400" autoplay loop muted></video>
+video-stream-video-element-0b63feeb -->
           <video id="stream-video-element" width="400" height="400" autoplay></video>
+video-preload-video-element-ed699834 -->
           <video id="preload-video-element" width="400" height="400" style="display: none"></video>
+div-logo-wrapper-c4f2a0dd -->
           <div id="logo-wrapper"></div>
         </div>
+div-logo-wrapper-c4f2a0dd-end -->
       </div>
-
+div-right-column-78e1cd79 -->
       <div id="right-column">
+div-context-wrapper-faa21dac -->
         <div id="context-wrapper">
+h4-h4-83-30595316 -->
           <h4>Context:</h4>
+textarea-context-input-cda7ddcb -->
           <textarea id="context-input" rows="4" cols="50"></textarea>
+div-div-85-179b1aef -->
           <div>
+button-replace-context-button-5b408a46 -->
             <button id="replace-context-button" type="button">Replace</button>
           </div>
         </div>
-
+div-div-90-1ed5e875 -->
         <div class="chat">
+h4-h4-91-3d4d4ee3 -->
           <h4>Chat History</h4>
+div-msgHistory-c27d27d4 -->
           <div id="msgHistory"></div>
         </div>
-
+div-msgHistory-c27d27d4-end -->
+div-speak-controls-7a46e2a8 -->
         <div id="speak-controls">
+button-start-button-c6e1b5d7 -->
           <button id="start-button" type="button">Speak</button>
+button-auto-speak-toggle-80392571 -->
           <button id="auto-speak-toggle" type="button">Auto-Speak: On</button>
         </div>
+div-text-input-controls-dfae7360 -->
         <div id="text-input-controls">
+input-text-input-5a193693 -->
           <input type="text" id="text-input" placeholder="Type your message here" />
+button-send-text-button-91346267 -->
           <button id="send-text-button" type="button">Send</button>
         </div>
       </div>
     </div>
-
+div-avatar-modal-9b35a301 -->
     <div id="avatar-modal" class="modal">
+div-div-107-96fda1d8 -->
       <div class="modal-content">
+h2-h2-108-a36a48de -->
         <h2>Create/Edit Avatar</h2>
+input-avatar-name-9465313f -->
         <input type="text" id="avatar-name" placeholder="Avatar Name" />
+input-avatar-voice-cc501a9e -->
         <input type="text" id="avatar-voice" placeholder="Voice ID" />
+input-avatar-image-77d42904 -->
         <input type="file" id="avatar-image" accept="image/png" />
+img-avatar-image-preview-6e7ccdfb -->
         <img id="avatar-image-preview" src="" alt="Avatar Preview" style="max-width: 200px; max-height: 200px" />
+button-save-avatar-button-113d5a0c -->
         <button id="save-avatar-button">Save Avatar</button>
+button-button-114-6a2d3c7f -->
         <button onclick="closeAvatarModal()">Cancel</button>
       </div>
     </div>
-
+script-script-118-a3f7cf82 -->
     <script>
       // AudioWorklet implementation
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-
       // AudioWorklet processor code
       const workletCode = `
             class AudioProcessor extends AudioWorkletProcessor {
                 process(inputs, outputs, parameters) {
                     const input = inputs[0];
                     const output = outputs[0];
-
                     for (let channel = 0; channel < input.length; channel++) {
                         const inputChannel = input[channel];
                         const outputChannel = output[channel];
@@ -134,17 +183,13 @@
                             outputChannel[i] = inputChannel[i];
                         }
                     }
-
                     return true;
                 }
             }
-
             registerProcessor('audio-processor', AudioProcessor);
         `;
-
       const blob = new Blob([workletCode], { type: 'application/javascript' });
       const workletUrl = URL.createObjectURL(blob);
-
       audioContext.audioWorklet
         .addModule(workletUrl)
         .then(() => {
@@ -154,8 +199,10 @@
         })
         .catch((err) => console.error('Error loading AudioWorklet:', err));
     </script>
-
+script-script-118-a3f7cf82-end -->
+script-script-157-66de6a49 -->
     <script src="https://cdn.jsdelivr.net/npm/@deepgram/sdk"></script>
+script-script-158-8a49f3fe -->
     <script type="module">
       import {
         initialize,
@@ -167,15 +214,17 @@
         handleTextInput,
         toggleAutoSpeak,
       } from './agents-client-api.js';
-
       // Make closeAvatarModal available globally
       window.closeAvatarModal = closeAvatarModal;
     </script>
+script-script-158-8a49f3fe-end -->
+script-script-173-d82323d7 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dom-parser/0.1.5/dom-parser.min.js"></script>
-
+script-script-175-df22c592 -->
     <script type="module">
       import { toggleSimpleMode } from './agents-client-api.js';
       document.getElementById('simple-mode-button').addEventListener('click', toggleSimpleMode);
     </script>
+script-script-175-df22c592-end -->
   </body>
 </html>
