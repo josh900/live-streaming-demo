@@ -61,7 +61,7 @@ const MIN_PUSH_TO_TALK_DURATION = 600; // 1 second in milliseconds
 let pushToTalkTimer = null;
 let contexts = [];
 let currentContextId = '';
-let currentAvatarId = '';
+
 
 
 
@@ -1281,47 +1281,11 @@ async function initialize() {
 }
 
 async function handleAvatarChange() {
-  const avatarSelect = document.getElementById('avatar-select');
-  currentAvatarId = avatarSelect.value;
-  if (currentAvatarId === 'create-new') {
+  currentAvatar = avatarSelect.value;
+  if (currentAvatar === 'create-new') {
     openAvatarModal();
     return;
   }
-
-  const currentAvatar = avatars.find(a => a.id === currentAvatarId);
-  if (!currentAvatar) {
-    logger.error(`Avatar with id ${currentAvatarId} not found`);
-    return;
-  }
-
-  const idleVideoElement = document.getElementById('idle-video-element');
-  if (idleVideoElement) {
-    idleVideoElement.src = currentAvatar.silentVideoUrl;
-    try {
-      await idleVideoElement.load();
-      logger.debug(`Idle video loaded for ${currentAvatar.name}`);
-    } catch (error) {
-      logger.error(`Error loading idle video for ${currentAvatar.name}:`, error);
-    }
-  }
-
-  const streamVideoElement = document.getElementById('stream-video-element');
-  if (streamVideoElement) {
-    streamVideoElement.srcObject = null;
-  }
-
-  await stopRecording();
-  currentUtterance = '';
-  interimMessageAdded = false;
-  const msgHistory = document.getElementById('msgHistory');
-  msgHistory.innerHTML = '';
-  chatHistory = [];
-
-  await destroyPersistentStream();
-  await initializePersistentStream();
-}
-
-
 
   const idleVideoElement = document.getElementById('idle-video-element');
   if (idleVideoElement) {
@@ -1358,15 +1322,11 @@ async function loadAvatars() {
     }
     avatars = await response.json();
     logger.debug('Avatars loaded:', avatars);
-    if (avatars.length > 0) {
-      currentAvatarId = avatars[0].id;
-    }
   } catch (error) {
     logger.error('Error loading avatars:', error);
     showErrorMessage('Failed to load avatars. Please try again.');
   }
 }
-
 
 function populateAvatarSelect() {
   const avatarSelect = document.getElementById('avatar-select');
@@ -1377,53 +1337,47 @@ function populateAvatarSelect() {
   createNewOption.textContent = 'Create New Avatar';
   avatarSelect.appendChild(createNewOption);
 
-  for (const avatar of avatars) {
+  for (const [key, value] of Object.entries(avatars)) {
     const option = document.createElement('option');
-    option.value = avatar.id;
-    option.textContent = avatar.name;
+    option.value = key;
+    option.textContent = value.name;
     avatarSelect.appendChild(option);
   }
 
-  if (avatars.length > 0) {
-    avatarSelect.value = currentAvatarId;
+  if (Object.keys(avatars).length > 0) {
+    currentAvatar = Object.keys(avatars)[0];
+    avatarSelect.value = currentAvatar;
   }
 }
 
-
-function openAvatarModal(avatarId = null) {
+function openAvatarModal(avatarName = null) {
   const modal = document.getElementById('avatar-modal');
   const nameInput = document.getElementById('avatar-name');
   const voiceInput = document.getElementById('avatar-voice');
   const imagePreview = document.getElementById('avatar-image-preview');
   const saveButton = document.getElementById('save-avatar-button');
 
-  if (avatarId) {
-    const avatar = avatars.find(a => a.id === avatarId);
-    if (avatar) {
-      nameInput.value = avatar.name;
-      voiceInput.value = avatar.voiceId;
-      imagePreview.src = avatar.imageUrl;
-      saveButton.textContent = 'Update Avatar';
-      saveButton.onclick = () => saveAvatar(avatarId);
-    }
+  if (avatarName && avatars[avatarName]) {
+    nameInput.value = avatars[avatarName].name;
+    voiceInput.value = avatars[avatarName].voiceId;
+    imagePreview.src = avatars[avatarName].imageUrl;
+    saveButton.textContent = 'Update Avatar';
   } else {
     nameInput.value = '';
     voiceInput.value = 'en-US-GuyNeural';
     imagePreview.src = '';
     saveButton.textContent = 'Create Avatar';
-    saveButton.onclick = () => saveAvatar();
   }
 
   modal.style.display = 'block';
 }
-
 
 function closeAvatarModal() {
   const modal = document.getElementById('avatar-modal');
   modal.style.display = 'none';
 }
 
-async function saveAvatar(avatarId = null) {
+async function saveAvatar() {
   const name = document.getElementById('avatar-name').value;
   const voiceId = document.getElementById('avatar-voice').value || 'en-US-GuyNeural';
   const imageFile = document.getElementById('avatar-image').files[0];
@@ -1436,9 +1390,6 @@ async function saveAvatar(avatarId = null) {
   const formData = new FormData();
   formData.append('name', name);
   formData.append('voiceId', voiceId);
-  if (avatarId) {
-    formData.append('id', avatarId);
-  }
   if (imageFile) {
     formData.append('image', imageFile);
   }
@@ -1467,19 +1418,10 @@ async function saveAvatar(avatarId = null) {
           if (data.status === 'processing') {
             showToast('Processing avatar...', 0);
           } else if (data.status === 'completed') {
-            if (avatarId) {
-              const index = avatars.findIndex(a => a.id === avatarId);
-              if (index !== -1) {
-                avatars[index] = data.avatar;
-              }
-            } else {
-              avatars.push(data.avatar);
-            }
+            avatars[name] = data.avatar;
             populateAvatarSelect();
             closeAvatarModal();
-            showToast('Avatar saved successfully!', 3000);
-            currentAvatarId = data.avatar.id;
-            await handleAvatarChange();
+            showToast('Avatar created successfully!', 3000);
           } else if (data.status === 'error') {
             showErrorMessage(data.message);
           }
@@ -1491,8 +1433,6 @@ async function saveAvatar(avatarId = null) {
     showErrorMessage('Failed to save avatar. Please try again.');
   }
 }
-
-
 
 function updateContext(action) {
   const contextInput = document.getElementById('context-input');
