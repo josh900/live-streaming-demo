@@ -892,9 +892,16 @@ export function startPushToTalk() {
 
 export async function initialize() {
   setLogLevel('INFO');
+
+  const isSimpleMode = window.location.pathname.includes('index-simple-push.html');
+  if (isSimpleMode) {
+    // Set push-to-talk to always be enabled in simple mode
+    window.isPushToTalkEnabled = true;
+  }
+
   connectionState = ConnectionState.DISCONNECTED;
 
-  const { avatarId, contextId } = getUrlParameters();
+  const { avatarId, contextId, simpleMode } = getUrlParameters();
 
   const { idle, stream } = getVideoElements();
   idleVideoElement = idle;
@@ -907,115 +914,84 @@ export async function initialize() {
 
   await loadAvatars(avatarId);
   await loadContexts(contextId);
+  populateAvatarSelect();
+  populateContextSelect();
+  updateContextDisplay();
 
-  if (!window.isSimpleMode) {
-      populateAvatarSelect();
-      populateContextSelect();
-      updateContextDisplay();
+  const contextSelect = document.getElementById('context-select');
+  contextSelect.addEventListener('change', handleContextChange);
 
-      const contextSelect = document.getElementById('context-select');
-      if (contextSelect) {
-          contextSelect.addEventListener('change', handleContextChange);
-      }
+  const editContextButton = document.getElementById('edit-context-button');
+  editContextButton.addEventListener('click', () => openContextModal(currentContextId));
 
-      const editContextButton = document.getElementById('edit-context-button');
-      if (editContextButton) {
-          editContextButton.addEventListener('click', () => openContextModal(currentContextId));
-      }
+  const sendTextButton = document.getElementById('send-text-button');
+  const textInput = document.getElementById('text-input');
+  const autoSpeakToggle = document.getElementById('auto-speak-toggle');
+  const editAvatarButton = document.getElementById('edit-avatar-button');
+  const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
+  const pushToTalkButton = document.getElementById('push-to-talk-button');
 
-      const sendTextButton = document.getElementById('send-text-button');
-      const textInput = document.getElementById('text-input');
-      const autoSpeakToggle = document.getElementById('auto-speak-toggle');
-      const editAvatarButton = document.getElementById('edit-avatar-button');
-      const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
-      const pushToTalkButton = document.getElementById('push-to-talk-button');
-
-      if (sendTextButton && textInput) {
-          sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
-          textInput.addEventListener('keypress', (event) => {
-              if (event.key === 'Enter') handleTextInput(textInput.value);
-          });
-      }
-
-      if (autoSpeakToggle) {
-          autoSpeakToggle.addEventListener('click', toggleAutoSpeak);
-      }
-
-      if (editAvatarButton) {
-          editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatarId));
-      }
-
-      if (pushToTalkToggle) {
-          pushToTalkToggle.addEventListener('click', togglePushToTalk);
-      }
-
-      if (pushToTalkButton) {
-          pushToTalkButton.addEventListener('mousedown', startPushToTalk);
-          pushToTalkButton.addEventListener('mouseup', endPushToTalk);
-          pushToTalkButton.addEventListener('mouseleave', endPushToTalk);
-          pushToTalkButton.addEventListener('touchstart', startPushToTalk);
-          pushToTalkButton.addEventListener('touchend', endPushToTalk);
-      }
-
-      const avatarSelect = document.getElementById('avatar-select');
-      if (avatarSelect) {
-          avatarSelect.addEventListener('change', handleAvatarChange);
-      }
-  } else {
-      // Simple mode initialization
-      window.isPushToTalkEnabled = true;
-      const pushToTalkButton = document.getElementById('push-to-talk-button');
-      if (pushToTalkButton) {
-          pushToTalkButton.addEventListener('mousedown', startPushToTalk);
-          pushToTalkButton.addEventListener('mouseup', endPushToTalk);
-          pushToTalkButton.addEventListener('mouseleave', endPushToTalk);
-          pushToTalkButton.addEventListener('touchstart', startPushToTalk);
-          pushToTalkButton.addEventListener('touchend', endPushToTalk);
-      }
-  }
+  sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
+  textInput.addEventListener('keypress', (event) => {
+    if (event.key === 'Enter') handleTextInput(textInput.value);
+  });
+  autoSpeakToggle.addEventListener('click', toggleAutoSpeak);
+  editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatarId));
+  pushToTalkToggle.addEventListener('click', togglePushToTalk);
+  pushToTalkButton.addEventListener('mousedown', startPushToTalk);
+  pushToTalkButton.addEventListener('mouseup', endPushToTalk);
+  pushToTalkButton.addEventListener('mouseleave', endPushToTalk);
+  pushToTalkButton.addEventListener('touchstart', startPushToTalk);
+  pushToTalkButton.addEventListener('touchend', endPushToTalk);
 
   initializeWebSocket();
   playIdleVideo();
 
   if (avatars.length > 0 && currentAvatarId) {
-      showLoadingSymbol();
-      try {
-          await initializePersistentStream();
-          startConnectionHealthCheck();
-          hideLoadingSymbol();
-      } catch (error) {
-          logger.error('Error during initialization:', error);
-          hideLoadingSymbol();
-          showErrorMessage('Failed to connect. Please try again.');
-          connectionState = ConnectionState.DISCONNECTED;
-      }
+    showLoadingSymbol();
+    try {
+      await initializePersistentStream();
+      startConnectionHealthCheck();
+      hideLoadingSymbol();
+    } catch (error) {
+      logger.error('Error during initialization:', error);
+      hideLoadingSymbol();
+      showErrorMessage('Failed to connect. Please try again.');
+      connectionState = ConnectionState.DISCONNECTED;
+    }
   } else {
-      logger.warn('No avatars available or no current avatar selected. Skipping stream initialization.');
-      showErrorMessage('No avatars available or no avatar selected. Please create or select an avatar before connecting.');
+    logger.warn('No avatars available or no current avatar selected. Skipping stream initialization.');
+    showErrorMessage('No avatars available or no avatar selected. Please create or select an avatar before connecting.');
   }
 
   window.addEventListener('online', async () => {
-      if (connectionState === ConnectionState.DISCONNECTED) {
-          logger.info('Network connection restored. Attempting to reconnect...');
-          try {
-              await backgroundReconnect();
-          } catch (error) {
-              logger.error('Failed to reconnect after network restoration:', error);
-          }
+    if (connectionState === ConnectionState.DISCONNECTED) {
+      logger.info('Network connection restored. Attempting to reconnect...');
+      try {
+        await backgroundReconnect();
+      } catch (error) {
+        logger.error('Failed to reconnect after network restoration:', error);
       }
+    }
   });
 
   document.addEventListener('visibilitychange', () => {
-      if (!document.hidden && connectionState === ConnectionState.DISCONNECTED) {
-          logger.info('Page became visible. Checking connection...');
-          if (navigator.onLine) {
-              backgroundReconnect();
-          }
+    if (!document.hidden && connectionState === ConnectionState.DISCONNECTED) {
+      logger.info('Page became visible. Checking connection...');
+      if (navigator.onLine) {
+        backgroundReconnect();
       }
+    }
   });
+
+  if (simpleMode) {
+    toggleSimpleMode();
+  }
+
 
   logger.info('Initialization complete');
 }
+
 
 async function handleAvatarChange() {
   const avatarSelect = document.getElementById('avatar-select');
@@ -1066,26 +1042,23 @@ async function handleAvatarChange() {
 
 async function loadAvatars(selectedAvatarId) {
   try {
-      const response = await fetch('/avatars');
-      if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      avatars = await response.json();
-      logger.debug('Avatars loaded:', avatars);
+    const response = await fetch('/avatars');
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    avatars = await response.json();
+    logger.debug('Avatars loaded:', avatars);
 
-      if (window.isSimpleMode && avatars.length > 0) {
-          currentAvatarId = avatars[0].id;
-      } else if (selectedAvatarId && avatars.some(avatar => avatar.id === selectedAvatarId)) {
-          currentAvatarId = selectedAvatarId;
-      } else if (!currentAvatarId && avatars.length > 0) {
-          currentAvatarId = avatars[0].id;
-      }
+    if (selectedAvatarId && avatars.some(avatar => avatar.id === selectedAvatarId)) {
+      currentAvatarId = selectedAvatarId;
+    } else if (!currentAvatarId && avatars.length > 0) {
+      currentAvatarId = avatars[0].id;
+    }
   } catch (error) {
-      logger.error('Error loading avatars:', error);
-      showErrorMessage('Failed to load avatars. Please try again.');
+    logger.error('Error loading avatars:', error);
+    showErrorMessage('Failed to load avatars. Please try again.');
   }
 }
-
 
 
 
