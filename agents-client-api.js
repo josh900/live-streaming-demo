@@ -1028,36 +1028,20 @@ function togglePushToTalk() {
   if (isPushToTalkEnabled) {
     autoSpeakMode = false;
     document.getElementById('auto-speak-toggle').textContent = 'Auto-Speak: Off';
-    pushToTalkButton.addEventListener('mousedown', startPushToTalk);
-    pushToTalkButton.addEventListener('mouseup', endPushToTalk);
-    pushToTalkButton.addEventListener('mouseleave', endPushToTalk);
-  } else {
-    pushToTalkButton.removeEventListener('mousedown', startPushToTalk);
-    pushToTalkButton.removeEventListener('mouseup', endPushToTalk);
-    pushToTalkButton.removeEventListener('mouseleave', endPushToTalk);
   }
 }
 
-async function startPushToTalk() {
-  if (!isPushToTalkEnabled) return;
-  isPushToTalkActive = true;
-  await startRecording(true);
-}
-
-async function endPushToTalk() {
+function endPushToTalk() {
   if (!isPushToTalkEnabled || !isPushToTalkActive) return;
   isPushToTalkActive = false;
-  await stopRecording(true);
-  if (currentUtterance.trim()) {
-    updateTranscript(currentUtterance.trim(), true);
-    chatHistory.push({
-      role: 'user',
-      content: currentUtterance.trim(),
-    });
-    sendChatToGroq();
-    currentUtterance = '';
-    interimMessageAdded = false;
-  }
+  stopRecording(true);
+}
+
+
+function startPushToTalk() {
+  if (!isPushToTalkEnabled) return;
+  isPushToTalkActive = true;
+  startRecording(true);
 }
 
 
@@ -1091,12 +1075,8 @@ async function initialize() {
   const replaceContextButton = document.getElementById('replace-context-button');
   const autoSpeakToggle = document.getElementById('auto-speak-toggle');
   const editAvatarButton = document.getElementById('edit-avatar-button');
-
   const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
   const pushToTalkButton = document.getElementById('push-to-talk-button');
-
-  pushToTalkToggle.addEventListener('click', togglePushToTalk);
-
 
   sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
   textInput.addEventListener('keypress', (event) => {
@@ -1106,7 +1086,9 @@ async function initialize() {
   autoSpeakToggle.addEventListener('click', toggleAutoSpeak);
   editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatar));
   pushToTalkToggle.addEventListener('click', togglePushToTalk);
-
+  pushToTalkButton.addEventListener('mousedown', startPushToTalk);
+  pushToTalkButton.addEventListener('mouseup', endPushToTalk);
+  pushToTalkButton.addEventListener('mouseleave', endPushToTalk);
 
   initializeWebSocket();
   playIdleVideo();
@@ -2162,10 +2144,6 @@ async function startRecording(isPushToTalk = false) {
     return;
   }
 
-  if (isPushToTalk && isRecording) {
-    return; // Don't start a new recording if push-to-talk is already active
-  }
-
   logger.debug('Starting recording process...');
 
   currentUtterance = '';
@@ -2243,19 +2221,15 @@ async function startRecording(isPushToTalk = false) {
     if (autoSpeakMode && !isPushToTalk) {
       autoSpeakInProgress = true;
     }
-    if (!isPushToTalk) {
-      const startButton = document.getElementById('start-button');
-      startButton.textContent = 'Stop';
-    }
+    const startButton = document.getElementById('start-button');
+    startButton.textContent = 'Stop';
 
     logger.debug('Recording and transcription started successfully');
   } catch (error) {
     logger.error('Error starting recording:', error);
     isRecording = false;
-    if (!isPushToTalk) {
-      const startButton = document.getElementById('start-button');
-      startButton.textContent = 'Speak';
-    }
+    const startButton = document.getElementById('start-button');
+    startButton.textContent = 'Speak';
     showErrorMessage('Failed to start recording. Please try again.');
     throw error;
   }
@@ -2321,6 +2295,17 @@ async function stopRecording(isPushToTalk = false) {
     }
 
     logger.debug('Recording and transcription stopped');
+
+    if (isPushToTalk && currentUtterance.trim()) {
+      updateTranscript(currentUtterance.trim(), true);
+      chatHistory.push({
+        role: 'user',
+        content: currentUtterance.trim(),
+      });
+      sendChatToGroq();
+      currentUtterance = '';
+      interimMessageAdded = false;
+    }
   }
 }
 
