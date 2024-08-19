@@ -11,6 +11,9 @@ import { dirname, join } from 'path';
 import groqServer from './groqServer.js';
 import { readFile, writeFile } from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
+import { readFile } from 'fs/promises';
+import path from 'path';
+
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -116,6 +119,31 @@ app.post('/context', async (req, res) => {
   } catch (error) {
     console.error('Error saving context:', error);
     res.status(500).json({ error: 'Failed to save context' });
+  }
+});
+
+app.get('/api/avatars', async (req, res) => {
+  try {
+    const avatarsFile = path.join(__dirname, 'avatars.json');
+    const avatarsData = await readFile(avatarsFile, 'utf8');
+    const avatars = JSON.parse(avatarsData);
+    res.json(avatars);
+  } catch (error) {
+    console.error('Error reading avatars file:', error);
+    res.status(500).json({ error: 'Failed to retrieve avatars' });
+  }
+});
+
+app.get('/api/contexts', async (req, res) => {
+  try {
+    const contextsFile = path.join(__dirname, 'contexts.json');
+    const contextsData = await readFile(contextsFile, 'utf8');
+    const contexts = JSON.parse(contextsData);
+    const filteredContexts = contexts.map(({ id, name }) => ({ id, name }));
+    res.json(filteredContexts);
+  } catch (error) {
+    console.error('Error reading contexts file:', error);
+    res.status(500).json({ error: 'Failed to retrieve contexts' });
   }
 });
 
