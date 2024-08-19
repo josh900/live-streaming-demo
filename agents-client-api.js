@@ -1195,14 +1195,13 @@ function startPushToTalk() {
 
 
 
-
 async function initialize() {
   setLogLevel('DEBUG');
   connectionState = ConnectionState.DISCONNECTED;
 
-  const { idle, stream } = getVideoElements();
-  idleVideoElement = idle;
-  streamVideoElement = stream;
+  const videoElements = getVideoElements();
+  idleVideoElement = videoElements.idle;
+  streamVideoElement = videoElements.stream;
 
   if (idleVideoElement) idleVideoElement.setAttribute('playsinline', '');
   if (streamVideoElement) streamVideoElement.setAttribute('playsinline', '');
