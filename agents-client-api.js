@@ -192,7 +192,7 @@ async function saveContext(contextId = null) {
     }
 
     const savedContext = await response.json();
-
+    
     if (contextId) {
       const index = contexts.findIndex(c => c.id === contextId);
       if (index !== -1) {
@@ -1320,31 +1320,31 @@ async function handleAvatarChange() {
 
 
 
-const idleVideoElement = document.getElementById('idle-video-element');
-if (idleVideoElement) {
-  idleVideoElement.src = avatars[currentAvatar].silentVideoUrl;
-  try {
-    await idleVideoElement.load();
-    logger.debug(`Idle video loaded for ${currentAvatar}`);
-  } catch (error) {
-    logger.error(`Error loading idle video for ${currentAvatar}:`, error);
+  const idleVideoElement = document.getElementById('idle-video-element');
+  if (idleVideoElement) {
+    idleVideoElement.src = avatars[currentAvatar].silentVideoUrl;
+    try {
+      await idleVideoElement.load();
+      logger.debug(`Idle video loaded for ${currentAvatar}`);
+    } catch (error) {
+      logger.error(`Error loading idle video for ${currentAvatar}:`, error);
+    }
   }
-}
 
-const streamVideoElement = document.getElementById('stream-video-element');
-if (streamVideoElement) {
-  streamVideoElement.srcObject = null;
-}
+  const streamVideoElement = document.getElementById('stream-video-element');
+  if (streamVideoElement) {
+    streamVideoElement.srcObject = null;
+  }
 
-await stopRecording();
-currentUtterance = '';
-interimMessageAdded = false;
-const msgHistory = document.getElementById('msgHistory');
-msgHistory.innerHTML = '';
-chatHistory = [];
+  await stopRecording();
+  currentUtterance = '';
+  interimMessageAdded = false;
+  const msgHistory = document.getElementById('msgHistory');
+  msgHistory.innerHTML = '';
+  chatHistory = [];
 
-await destroyPersistentStream();
-await initializePersistentStream();
+  await destroyPersistentStream();
+  await initializePersistentStream();
 }
 
 async function loadAvatars() {
