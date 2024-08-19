@@ -1051,27 +1051,32 @@ function populateAvatarSelect() {
 
 
 
-function openAvatarModal(avatarName = null) {
+function openAvatarModal(avatarId = null) {
   const modal = document.getElementById('avatar-modal');
   const nameInput = document.getElementById('avatar-name');
   const voiceInput = document.getElementById('avatar-voice');
   const imagePreview = document.getElementById('avatar-image-preview');
   const saveButton = document.getElementById('save-avatar-button');
+  const idInput = document.getElementById('avatar-id');
 
-  if (avatarName && avatars[avatarName]) {
-    nameInput.value = avatars[avatarName].name;
-    voiceInput.value = avatars[avatarName].voiceId;
-    imagePreview.src = avatars[avatarName].imageUrl;
+  if (avatarId && avatars.find(a => a.id === avatarId)) {
+    const avatar = avatars.find(a => a.id === avatarId);
+    nameInput.value = avatar.name;
+    voiceInput.value = avatar.voiceId;
+    imagePreview.src = avatar.imageUrl;
+    idInput.value = avatar.id;
     saveButton.textContent = 'Update Avatar';
   } else {
     nameInput.value = '';
     voiceInput.value = 'en-US-GuyNeural';
     imagePreview.src = '';
+    idInput.value = uuidv4(); // Generate a new UUID for new avatars
     saveButton.textContent = 'Create Avatar';
   }
 
   modal.style.display = 'block';
 }
+
 
 function closeAvatarModal() {
   const modal = document.getElementById('avatar-modal');
@@ -1082,6 +1087,7 @@ async function saveAvatar() {
   const name = document.getElementById('avatar-name').value;
   const voiceId = document.getElementById('avatar-voice').value || 'en-US-GuyNeural';
   const imageFile = document.getElementById('avatar-image').files[0];
+  const avatarId = document.getElementById('avatar-id').value;
 
   if (!name) {
     showErrorMessage('Please fill in the avatar name.');
@@ -1091,6 +1097,7 @@ async function saveAvatar() {
   const formData = new FormData();
   formData.append('name', name);
   formData.append('voiceId', voiceId);
+  formData.append('id', avatarId);
   if (imageFile) {
     formData.append('image', imageFile);
   }
@@ -1119,10 +1126,17 @@ async function saveAvatar() {
           if (data.status === 'processing') {
             showToast('Processing avatar...', 0);
           } else if (data.status === 'completed') {
-            avatars[name] = data.avatar;
+            const updatedAvatarIndex = avatars.findIndex(avatar => avatar.id === data.avatar.id);
+            if (updatedAvatarIndex !== -1) {
+              avatars[updatedAvatarIndex] = data.avatar;
+            } else {
+              avatars.push(data.avatar);
+            }
             populateAvatarSelect();
             closeAvatarModal();
-            showToast('Avatar created successfully!', 3000);
+            showToast('Avatar saved successfully!', 3000);
+            currentAvatarId = data.avatar.id;
+            await handleAvatarChange();
           } else if (data.status === 'error') {
             showErrorMessage(data.message);
           }
@@ -1134,6 +1148,7 @@ async function saveAvatar() {
     showErrorMessage('Failed to save avatar. Please try again.');
   }
 }
+
 
 function updateContext(action) {
   const contextInput = document.getElementById('context-input');

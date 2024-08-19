@@ -6,16 +6,18 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { Readable } from 'stream';
 import sharp from 'sharp';
+import { v4 as uuidv4 } from 'uuid';
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const s3Client = new S3Client(DID_API.awsConfig);
 
-export async function createOrUpdateAvatar(name, imageFile, voiceId) {
+export async function createOrUpdateAvatar(id, name, imageFile, voiceId) {
   try {
     let avatars = await getAvatars();
-    let avatar = avatars.find(a => a.name === name);
+    let avatar = avatars.find(a => a.id === id);
     const isNewAvatar = !avatar;
     const isImageChanged = imageFile !== undefined;
 
@@ -31,21 +33,21 @@ export async function createOrUpdateAvatar(name, imageFile, voiceId) {
       if (isNewAvatar || avatar.voiceId !== voiceId) {
         // Generate silent video only if it's a new avatar or voice changed
         const silentVideoUrl = await generateSilentVideo(imageUrl, voiceId, name);
-        avatar = { name, imageUrl, voiceId, silentVideoUrl };
+        avatar = { id, name, imageUrl, voiceId, silentVideoUrl };
       } else {
-        avatar = { ...avatar, imageUrl, voiceId };
+        avatar = { ...avatar, name, imageUrl, voiceId };
       }
     } else if (isNewAvatar || (avatar && avatar.voiceId !== voiceId)) {
       // If only voice changed or it's a new avatar without image
       const silentVideoUrl = await generateSilentVideo(avatar ? avatar.imageUrl : '', voiceId, name);
-      avatar = { ...(avatar || {}), name, voiceId, silentVideoUrl };
+      avatar = { ...(avatar || {}), id, name, voiceId, silentVideoUrl };
     } else {
       // No changes, return existing avatar
       return avatar;
     }
 
     // Save avatar details
-    await saveAvatarDetails(name, avatar);
+    await saveAvatarDetails(id, avatar);
 
     console.log(`Avatar created/updated successfully:`, JSON.stringify(avatar));
     return avatar;
@@ -54,6 +56,31 @@ export async function createOrUpdateAvatar(name, imageFile, voiceId) {
     throw error;
   }
 }
+
+async function saveAvatarDetails(id, avatar) {
+  const avatarsFile = path.join(__dirname, 'avatars.json');
+  let avatars = [];
+
+  try {
+    const data = await fs.readFile(avatarsFile, 'utf8');
+    avatars = JSON.parse(data);
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      console.error('Error reading avatars file:', err);
+      throw err;
+    }
+  }
+
+  const existingIndex = avatars.findIndex(a => a.id === id);
+  if (existingIndex !== -1) {
+    avatars[existingIndex] = avatar;
+  } else {
+    avatars.push(avatar);
+  }
+
+  await fs.writeFile(avatarsFile, JSON.stringify(avatars, null, 2));
+}
+
 
 
 async function uploadToS3(key, file) {
@@ -164,29 +191,6 @@ async function generateSilentVideo(imageUrl, voiceId, name) {
   return s3Url;
 }
 
-async function saveAvatarDetails(name, avatar) {
-  const avatarsFile = path.join(__dirname, 'avatars.json');
-  let avatars = [];
-
-  try {
-    const data = await fs.readFile(avatarsFile, 'utf8');
-    avatars = JSON.parse(data);
-  } catch (err) {
-    if (err.code !== 'ENOENT') {
-      console.error('Error reading avatars file:', err);
-      throw err;
-    }
-  }
-
-  const existingIndex = avatars.findIndex(a => a.name === name);
-  if (existingIndex !== -1) {
-    avatars[existingIndex] = avatar;
-  } else {
-    avatars.push(avatar);
-  }
-
-  await fs.writeFile(avatarsFile, JSON.stringify(avatars, null, 2));
-}
 
 export async function getAvatars() {
   try {
