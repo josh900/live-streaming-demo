@@ -1,8 +1,9 @@
 'use strict';
 import DID_API from './api.js';
 import logger from './logger.js';
-const { createClient, LiveTranscriptionEvents } = deepgram;
 import { v4 as uuidv4 } from 'uuid';
+
+const { createClient, LiveTranscriptionEvents } = deepgram;
 
 
 const deepgramClient = createClient(DID_API.deepgramKey);
