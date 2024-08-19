@@ -808,6 +808,11 @@ async function initializePersistentStream() {
   connectionState = ConnectionState.CONNECTING;
 
   try {
+    const currentAvatar = avatars.find(a => a.id === currentAvatarId);
+    if (!currentAvatar) {
+      throw new Error('No avatar selected or avatar not found');
+    }
+
     const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
       method: 'POST',
       headers: {
@@ -815,7 +820,7 @@ async function initializePersistentStream() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        source_url: avatars[currentAvatar].imageUrl,
+        source_url: currentAvatar.imageUrl,
         driver_url: 'bank://lively/driver-06',
         output_resolution: 512,
         stream_warmup: true,
@@ -885,6 +890,7 @@ async function initializePersistentStream() {
     persistentStreamId = null;
     persistentSessionId = null;
     connectionState = ConnectionState.DISCONNECTED;
+    showErrorMessage('Failed to initialize stream. Please try again.');
     throw error;
   }
 }
@@ -1212,6 +1218,16 @@ async function initialize() {
   await loadAvatars();
   populateAvatarSelect();
 
+  if (avatars.length > 0) {
+    currentAvatarId = avatars[0].id;
+    await handleAvatarChange();
+  } else {
+    logger.error('No avatars available. Cannot initialize stream.');
+    showErrorMessage('No avatars available. Please create an avatar first.');
+    return;
+  }
+
+
   await loadContexts();
   populateContextSelect();
   updateContextDisplay();
@@ -1291,6 +1307,7 @@ async function handleAvatarChange() {
   const currentAvatar = avatars.find(a => a.id === currentAvatarId);
   if (!currentAvatar) {
     logger.error(`Avatar with id ${currentAvatarId} not found`);
+    showErrorMessage('Selected avatar not found. Please try again.');
     return;
   }
 
@@ -1328,28 +1345,26 @@ async function loadAvatars() {
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    avatars = await response.json();
-    logger.debug('Avatars loaded:', avatars);
-    if (avatars.length > 0) {
+    const data = await response.json();
+    if (Array.isArray(data) && data.length > 0) {
+      avatars = data;
       currentAvatarId = avatars[0].id;
+      logger.debug('Avatars loaded:', avatars);
+    } else {
+      throw new Error('No avatars found or invalid avatar data format');
     }
   } catch (error) {
     logger.error('Error loading avatars:', error);
     showErrorMessage('Failed to load avatars. Please try again.');
+    avatars = []; // Set avatars to an empty array to prevent further errors
   }
 }
-
 
 function populateAvatarSelect() {
   const avatarSelect = document.getElementById('avatar-select');
   avatarSelect.innerHTML = '';
 
-  const createNewOption = document.createElement('option');
-  createNewOption.value = 'create-new';
-  createNewOption.textContent = 'Create New Avatar';
-  avatarSelect.appendChild(createNewOption);
-
-  if (Array.isArray(avatars)) {
+  if (Array.isArray(avatars) && avatars.length > 0) {
     for (const avatar of avatars) {
       const option = document.createElement('option');
       option.value = avatar.id;
@@ -1357,11 +1372,18 @@ function populateAvatarSelect() {
       avatarSelect.appendChild(option);
     }
 
-    if (avatars.length > 0) {
-      avatarSelect.value = currentAvatarId;
-    }
+    avatarSelect.value = currentAvatarId;
+
+    const createNewOption = document.createElement('option');
+    createNewOption.value = 'create-new';
+    createNewOption.textContent = 'Create New Avatar';
+    avatarSelect.appendChild(createNewOption);
   } else {
-    logger.error('Avatars is not an array:', avatars);
+    logger.error('No avatars available');
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'No avatars available';
+    avatarSelect.appendChild(option);
   }
 }
 
