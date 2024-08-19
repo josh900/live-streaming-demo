@@ -124,13 +124,15 @@ async function updateAvatar(id, name, imageFile, voiceId) {
 
 app.get('/avatars', async (req, res) => {
   try {
-    const avatars = JSON.parse(await readFile('avatars.json', 'utf8'));
+    const avatarsData = await readFile('avatars.json', 'utf8');
+    const avatars = JSON.parse(avatarsData);
     res.json(avatars);
   } catch (error) {
     console.error('Error reading avatars:', error);
     res.status(500).json({ error: 'Failed to get avatars' });
   }
 });
+
 
 
 app.get('/contexts', async (req, res) => {

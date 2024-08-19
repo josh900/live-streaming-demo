@@ -1349,17 +1349,23 @@ function populateAvatarSelect() {
   createNewOption.textContent = 'Create New Avatar';
   avatarSelect.appendChild(createNewOption);
 
-  for (const avatar of avatars) {
-    const option = document.createElement('option');
-    option.value = avatar.id;
-    option.textContent = avatar.name;
-    avatarSelect.appendChild(option);
-  }
+  if (Array.isArray(avatars)) {
+    for (const avatar of avatars) {
+      const option = document.createElement('option');
+      option.value = avatar.id;
+      option.textContent = avatar.name;
+      avatarSelect.appendChild(option);
+    }
 
-  if (avatars.length > 0) {
-    avatarSelect.value = currentAvatarId;
+    if (avatars.length > 0) {
+      avatarSelect.value = currentAvatarId;
+    }
+  } else {
+    logger.error('Avatars is not an array:', avatars);
   }
 }
+
+
 
 
 function openAvatarModal(avatarId = null) {
