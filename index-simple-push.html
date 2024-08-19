@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Avatar Demo - Simple Push-to-Talk Mode</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@300;400;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="style-agents.css" />
+    <link rel="icon" type="image/png" sizes="192x192"
+        href="https://cdn.prod.website-files.com/6316d11d553f411d6f1fa732/6343f55adbb1a12a532f2769_skoop-favicon.png" />
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            padding: 15px;
+            background-color: #f5f5f5;
+        }
+        #content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        #video-wrapper {
+            width: 100%;
+            max-width: 550px;
+            aspect-ratio: 1 / 1;
+            margin-bottom: 20px;
+        }
+        #push-to-talk-button {
+            font-size: 24px;
+            padding: 15px 30px;
+        }
+        #msgHistory {
+            width: 100%;
+            max-width: 550px;
+            height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 20px;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/8.3.2/uuid.min.js"></script>
+</head>
+<body>
+    <div class="header">
+        <img src="https://cdn.prod.website-files.com/6316d11d553f411d6f1fa732/633ac440413e418b480baaf8_skoop-logo-p-500.png"
+            alt="SKOOP logo" style="height: 30px;" />
+    </div>
+    <div id="content">
+        <div id="video-wrapper">
+            <video id="idle-video-element" width="100%" height="100%" autoplay loop muted></video>
+            <video id="stream-video-element" width="100%" height="100%" autoplay></video>
+            <div id="logo-wrapper"></div>
+        </div>
+        <div id="msgHistory"></div>
+        <button id="push-to-talk-button">Push to Talk</button>
+    </div>
+
+    <script>
+        // AudioWorklet implementation
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+        // AudioWorklet processor code
+        const workletCode = `
+        class AudioProcessor extends AudioWorkletProcessor {
+            process(inputs, outputs, parameters) {
+                const input = inputs[0];
+                const output = outputs[0];
+
+                for (let channel = 0; channel < input.length; channel++) {
+                    const inputChannel = input[channel];
+                    const outputChannel = output[channel];
+                    for (let i = 0; i < inputChannel.length; i++) {
+                        outputChannel[i] = inputChannel[i];
+                    }
+                }
+
+                return true;
+            }
+        }
+
+        registerProcessor('audio-processor', AudioProcessor);
+        `;
+
+        const blob = new Blob([workletCode], { type: 'application/javascript' });
+        const workletUrl = URL.createObjectURL(blob);
+
+        audioContext.audioWorklet
+            .addModule(workletUrl)
+            .then(() => {
+                const audioProcessor = new AudioWorkletNode(audioContext, 'audio-processor');
+                audioProcessor.connect(audioContext.destination);
+            })
+            .catch((err) => console.error('Error loading AudioWorklet:', err));
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/@deepgram/sdk"></script>
+    <script type="module">
+        import {
+            initialize,
+            handleAvatarChange,
+            handleTextInput,
+            startPushToTalk,
+            endPushToTalk
+        } from './agents-client-api.js';
+
+        // Initialize the app when the DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeSimpleMode);
+        } else {
+            initializeSimpleMode();
+        }
+
+        function initializeSimpleMode() {
+            initialize();
+
+            const pushToTalkButton = document.getElementById('push-to-talk-button');
+            pushToTalkButton.addEventListener('mousedown', startPushToTalk);
+            pushToTalkButton.addEventListener('mouseup', endPushToTalk);
+            pushToTalkButton.addEventListener('mouseleave', endPushToTalk);
+            pushToTalkButton.addEventListener('touchstart', startPushToTalk);
+            pushToTalkButton.addEventListener('touchend', endPushToTalk);
+
+            // Set push-to-talk mode
+            window.isPushToTalkEnabled = true;
+        }
+    </script>
+</body>
+</html>
