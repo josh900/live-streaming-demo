@@ -1057,24 +1057,21 @@ async function startPushToTalk(event) {
 
 
 async function endPushToTalk() {
-  if (!isPushToTalkEnabled) return;
-  clearTimeout(pushToTalkTimeout);
-  if (isPushToTalkActive) {
-    isPushToTalkActive = false;
-    stopRecording(true).then(() => {
-      if (currentUtterance.trim()) {
-        updateTranscript(currentUtterance.trim(), true);
-        chatHistory.push({
-          role: 'user',
-          content: currentUtterance.trim(),
-        });
-        sendChatToGroq();
-        currentUtterance = '';
-        interimMessageAdded = false;
-      }
+  if (!isPushToTalkEnabled || !isPushToTalkActive) return;
+  isPushToTalkActive = false;
+  await stopRecording(true);
+  if (currentUtterance.trim()) {
+    updateTranscript(currentUtterance.trim(), true);
+    chatHistory.push({
+      role: 'user',
+      content: currentUtterance.trim(),
     });
+    await sendChatToGroq(); // Make sure this is awaited
+    currentUtterance = '';
+    interimMessageAdded = false;
   }
 }
+
 
 
 
@@ -2161,7 +2158,7 @@ function handleTranscription(data, isPushToTalk) {
           role: 'user',
           content: currentUtterance.trim(),
         });
-        sendChatToGroq();
+        sendChatToGroq(); // Make sure this is called for non-push-to-talk mode
         currentUtterance = '';
         interimMessageAdded = false;
       }
@@ -2171,6 +2168,7 @@ function handleTranscription(data, isPushToTalk) {
     updateTranscript(currentUtterance + transcript, false);
   }
 }
+
 
 async function startRecording(isPushToTalk = false) {
   if (isRecording) {
