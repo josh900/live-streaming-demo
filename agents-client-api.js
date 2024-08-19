@@ -4,6 +4,14 @@ import logger from './logger.js';
 
 const { createClient, LiveTranscriptionEvents } = deepgram;
 
+function getUrlParameters() {
+  const urlParams = new URLSearchParams(window.location.search);
+  return {
+    avatarId: urlParams.get('avatar'),
+    contextId: urlParams.get('context'),
+    simpleMode: urlParams.get('simple') === 'true'
+  };
+}
 
 const deepgramClient = createClient(DID_API.deepgramKey);
 
@@ -86,11 +94,13 @@ export function setLogLevel(level) {
 }
 
 
-async function loadContexts() {
+async function loadContexts(selectedContextId) {
   try {
     const response = await fetch('/contexts');
     contexts = await response.json();
-    if (contexts.length > 0) {
+    if (selectedContextId && contexts.some(context => context.id === selectedContextId)) {
+      currentContextId = selectedContextId;
+    } else if (contexts.length > 0) {
       currentContextId = contexts[0].id;
     }
   } catch (error) {
@@ -130,8 +140,14 @@ function handleContextChange() {
     openContextModal();
   } else {
     updateContextDisplay();
+    
+    // Update URL with new context ID
+    const url = new URL(window.location);
+    url.searchParams.set('context', currentContextId);
+    window.history.pushState({}, '', url);
   }
 }
+
 
 function updateContextDisplay() {
   const contextInput = document.getElementById('context-input');
@@ -873,8 +889,10 @@ function startPushToTalk() {
 
 
 async function initialize() {
-  setLogLevel('DEBUG');
+  setLogLevel('INFO');
   connectionState = ConnectionState.DISCONNECTED;
+
+  const { avatarId, contextId, simpleMode } = getUrlParameters();
 
   const { idle, stream } = getVideoElements();
   idleVideoElement = idle;
@@ -885,10 +903,9 @@ async function initialize() {
 
   initializeTransitionCanvas();
 
-  await loadAvatars();
+  await loadAvatars(avatarId);
+  await loadContexts(contextId);
   populateAvatarSelect();
-
-  await loadContexts();
   populateContextSelect();
   updateContextDisplay();
 
@@ -958,6 +975,11 @@ async function initialize() {
     }
   });
 
+  if (simpleMode) {
+    toggleSimpleMode();
+  }
+
+
   logger.info('Initialization complete');
 }
 
@@ -975,6 +997,11 @@ async function handleAvatarChange() {
     logger.error(`Avatar with id ${currentAvatarId} not found`);
     return;
   }
+
+  // Update URL with new avatar ID
+  const url = new URL(window.location);
+  url.searchParams.set('avatar', currentAvatarId);
+  window.history.pushState({}, '', url);
 
   const idleVideoElement = document.getElementById('idle-video-element');
   if (idleVideoElement) {
@@ -1004,7 +1031,7 @@ async function handleAvatarChange() {
 }
 
 
-async function loadAvatars() {
+async function loadAvatars(selectedAvatarId) {
   try {
     const response = await fetch('/avatars');
     if (!response.ok) {
@@ -1013,8 +1040,9 @@ async function loadAvatars() {
     avatars = await response.json();
     logger.debug('Avatars loaded:', avatars);
     
-    // Set the current avatar ID if it's not set and there are avatars available
-    if (!currentAvatarId && avatars.length > 0) {
+    if (selectedAvatarId && avatars.some(avatar => avatar.id === selectedAvatarId)) {
+      currentAvatarId = selectedAvatarId;
+    } else if (!currentAvatarId && avatars.length > 0) {
       currentAvatarId = avatars[0].id;
     }
   } catch (error) {
@@ -1022,6 +1050,7 @@ async function loadAvatars() {
     showErrorMessage('Failed to load avatars. Please try again.');
   }
 }
+
 
 
 
@@ -1897,7 +1926,9 @@ export function toggleSimpleMode() {
   const autoSpeakToggle = document.getElementById('auto-speak-toggle');
   const startButton = document.getElementById('start-button');
 
-  if (content.style.display !== 'none') {
+  const isEnteringSimpleMode = content.style.display !== 'none';
+
+  if (isEnteringSimpleMode) {
     // Entering simple mode
     content.style.display = 'none';
     document.body.appendChild(videoWrapper);
@@ -1920,6 +1951,11 @@ export function toggleSimpleMode() {
     if (startButton.textContent === 'Speak') {
       startButton.click();
     }
+
+    // Update URL
+    const url = new URL(window.location);
+    url.searchParams.set('simple', 'true');
+    window.history.pushState({}, '', url);
   } else {
     // Exiting simple mode
     content.style.display = 'flex';
@@ -1943,8 +1979,14 @@ export function toggleSimpleMode() {
     if (startButton.textContent === 'Stop') {
       startButton.click();
     }
+
+    // Update URL
+    const url = new URL(window.location);
+    url.searchParams.delete('simple');
+    window.history.pushState({}, '', url);
   }
 }
+
 
 
 
