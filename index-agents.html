@@ -82,11 +82,11 @@
       <div id="right-column">
         <div id="context-wrapper">
           <h4>Context:</h4>
-          <textarea id="context-input" rows="4" cols="50"></textarea>
-          <div>
-            <button id="replace-context-button" type="button">Replace</button>
-          </div>
+          <select id="context-select"></select>
+          <button id="edit-context-button">Edit Context</button>
+          <textarea id="context-input" rows="4" cols="50" readonly></textarea>
         </div>
+        
 
         <div class="chat">
           <h4>Chat History</h4>
@@ -115,6 +115,16 @@
         <img id="avatar-image-preview" src="" alt="Avatar Preview" style="max-width: 200px; max-height: 200px" />
         <button id="save-avatar-button">Save Avatar</button>
         <button onclick="closeAvatarModal()">Cancel</button>
+      </div>
+    </div>
+
+    <div id="context-modal" class="modal">
+      <div class="modal-content">
+        <h2>Create/Edit Context</h2>
+        <input type="text" id="context-name" placeholder="Context Name">
+        <textarea id="context-content" rows="10" cols="50" placeholder="Context Content"></textarea>
+        <button id="save-context-button">Save Context</button>
+        <button onclick="closeContextModal()">Cancel</button>
       </div>
     </div>
 

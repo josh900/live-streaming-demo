@@ -436,3 +436,25 @@ body {
 #push-to-talk-button:active {
   background-color: #45a049;
 }
+
+#context-select {
+  margin-bottom: 10px;
+}
+
+#edit-context-button {
+  margin-left: 10px;
+}
+
+#context-modal .modal-content {
+  display: flex;
+  flex-direction: column;
+}
+
+#context-modal input,
+#context-modal textarea {
+  margin-bottom: 10px;
+}
+
+#context-modal button {
+  margin-right: 10px;
+}

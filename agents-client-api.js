@@ -59,6 +59,8 @@ let isPushToTalkActive = false;
 let pushToTalkStartTime = 0;
 const MIN_PUSH_TO_TALK_DURATION = 600; // 1 second in milliseconds
 let pushToTalkTimer = null;
+let contexts = [];
+let currentContextId = '';
 
 
 
@@ -79,6 +81,141 @@ export function setLogLevel(level) {
   isDebugMode = level === 'DEBUG';
   logger.debug(`Log level set to ${level}. Debug mode is ${isDebugMode ? 'enabled' : 'disabled'}.`);
 }
+
+
+async function loadContexts() {
+  try {
+    const response = await fetch('/contexts');
+    contexts = await response.json();
+    if (contexts.length > 0) {
+      currentContextId = contexts[0].id;
+    }
+  } catch (error) {
+    logger.error('Error loading contexts:', error);
+    showErrorMessage('Failed to load contexts. Please try again.');
+  }
+}
+
+function getCurrentContext() {
+  return contexts.find(c => c.id === currentContextId)?.context || '';
+}
+
+function populateContextSelect() {
+  const contextSelect = document.getElementById('context-select');
+  contextSelect.innerHTML = '';
+
+  const createNewOption = document.createElement('option');
+  createNewOption.value = 'create-new';
+  createNewOption.textContent = 'Create New Context';
+  contextSelect.appendChild(createNewOption);
+
+  for (const context of contexts) {
+    const option = document.createElement('option');
+    option.value = context.id;
+    option.textContent = context.name;
+    contextSelect.appendChild(option);
+  }
+
+  if (contexts.length > 0) {
+    contextSelect.value = currentContextId;
+  }
+}
+
+function handleContextChange() {
+  currentContextId = document.getElementById('context-select').value;
+  if (currentContextId === 'create-new') {
+    openContextModal();
+  } else {
+    updateContextDisplay();
+  }
+}
+
+function updateContextDisplay() {
+  const contextInput = document.getElementById('context-input');
+  contextInput.value = getCurrentContext();
+}
+
+function openContextModal(contextId = null) {
+  const modal = document.getElementById('context-modal');
+  const nameInput = document.getElementById('context-name');
+  const contentInput = document.getElementById('context-content');
+  const saveButton = document.getElementById('save-context-button');
+
+  if (contextId && contexts.find(c => c.id === contextId)) {
+    const context = contexts.find(c => c.id === contextId);
+    nameInput.value = context.name;
+    contentInput.value = context.context;
+    saveButton.textContent = 'Update Context';
+    saveButton.onclick = () => saveContext(contextId);
+  } else {
+    nameInput.value = '';
+    contentInput.value = '';
+    saveButton.textContent = 'Create Context';
+    saveButton.onclick = () => saveContext();
+  }
+
+  modal.style.display = 'block';
+}
+
+function closeContextModal() {
+  const modal = document.getElementById('context-modal');
+  modal.style.display = 'none';
+}
+
+async function saveContext(contextId = null) {
+  const name = document.getElementById('context-name').value;
+  const content = document.getElementById('context-content').value;
+
+  if (!name || !content) {
+    showErrorMessage('Please fill in both the context name and content.');
+    return;
+  }
+
+  const contextData = {
+    name,
+    context: content
+  };
+
+  if (contextId) {
+    contextData.id = contextId;
+  }
+
+  try {
+    const response = await fetch('/context', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(contextData)
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const savedContext = await response.json();
+    
+    if (contextId) {
+      const index = contexts.findIndex(c => c.id === contextId);
+      if (index !== -1) {
+        contexts[index] = savedContext;
+      }
+    } else {
+      contexts.push(savedContext);
+    }
+
+    populateContextSelect();
+    currentContextId = savedContext.id;
+    updateContextDisplay();
+    closeContextModal();
+    showToast('Context saved successfully!');
+  } catch (error) {
+    logger.error('Error saving context:', error);
+    showErrorMessage('Failed to save context. Please try again.');
+  }
+}
+
+
 
 let avatars = {};
 let currentAvatar = '';
@@ -1075,17 +1212,18 @@ async function initialize() {
   await loadAvatars();
   populateAvatarSelect();
 
-  const contextInput = document.getElementById('context-input');
-  contextInput.value = context.trim();
-  contextInput.addEventListener('input', () => {
-    if (!contextInput.value.includes('Original Context:')) {
-      context = contextInput.value.trim();
-    }
-  });
+  await loadContexts();
+  populateContextSelect();
+  updateContextDisplay();
+
+  const contextSelect = document.getElementById('context-select');
+  contextSelect.addEventListener('change', handleContextChange);
+
+  const editContextButton = document.getElementById('edit-context-button');
+  editContextButton.addEventListener('click', () => openContextModal(currentContextId));
 
   const sendTextButton = document.getElementById('send-text-button');
   const textInput = document.getElementById('text-input');
-  const replaceContextButton = document.getElementById('replace-context-button');
   const autoSpeakToggle = document.getElementById('auto-speak-toggle');
   const editAvatarButton = document.getElementById('edit-avatar-button');
   const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
@@ -1095,7 +1233,6 @@ async function initialize() {
   textInput.addEventListener('keypress', (event) => {
     if (event.key === 'Enter') handleTextInput(textInput.value);
   });
-  replaceContextButton.addEventListener('click', () => updateContext('replace'));
   autoSpeakToggle.addEventListener('click', toggleAutoSpeak);
   editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatar));
   pushToTalkToggle.addEventListener('click', togglePushToTalk);
@@ -1104,7 +1241,6 @@ async function initialize() {
   pushToTalkButton.addEventListener('mouseleave', endPushToTalk);
   pushToTalkButton.addEventListener('touchstart', startPushToTalk);
   pushToTalkButton.addEventListener('touchend', endPushToTalk);
-
 
   initializeWebSocket();
   playIdleVideo();
@@ -2334,12 +2470,12 @@ async function sendChatToGroq() {
   logger.debug('Sending chat to Groq...');
   try {
     const startTime = Date.now();
-    const currentContext = document.getElementById('context-input').value.trim();
+    const currentContext = getCurrentContext();
     const requestBody = {
       messages: [
         {
           role: 'system',
-          content: currentContext || context,
+          content: currentContext,
         },
         ...chatHistory,
       ],
