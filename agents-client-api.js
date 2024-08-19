@@ -25,8 +25,6 @@ let keepAliveInterval;
 let socket;
 let isInitializing = false;
 let audioContext;
-let streamVideoElement;
-let idleVideoElement;
 let deepgramConnection;
 let isRecording = false;
 let audioWorkletNode;
@@ -1200,8 +1198,8 @@ async function initialize() {
   connectionState = ConnectionState.DISCONNECTED;
 
   const videoElements = getVideoElements();
-  idleVideoElement = videoElements.idle;
-  streamVideoElement = videoElements.stream;
+  const idleVideoElement = videoElements.idle;
+  const streamVideoElement = videoElements.stream;
 
   if (idleVideoElement) idleVideoElement.setAttribute('playsinline', '');
   if (streamVideoElement) streamVideoElement.setAttribute('playsinline', '');
