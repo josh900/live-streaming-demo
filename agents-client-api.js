@@ -1311,11 +1311,8 @@ export async function handleAvatarChange() {
   const currentAvatar = avatars.find(a => a.id === currentAvatarId);
   if (!currentAvatar) {
     logger.error(`Avatar with id ${currentAvatarId} not found`);
-    showErrorMessage('Selected avatar not found. Please try again.');
     return;
   }
-
-  logger.debug(`Changing to avatar: ${currentAvatar.name}`);
 
   const idleVideoElement = document.getElementById('idle-video-element');
   if (idleVideoElement) {
@@ -1343,8 +1340,6 @@ export async function handleAvatarChange() {
   await destroyPersistentStream();
   await initializePersistentStream();
 }
-
-
 
 
 
@@ -2117,9 +2112,8 @@ async function startStreaming(assistantReply) {
       await initializePersistentStream();
     }
 
-    const currentAvatar = avatars.find(a => a.id === currentAvatarId);
-    if (!currentAvatar) {
-      logger.error(`No avatar selected or avatar with id ${currentAvatarId} not found. Cannot start streaming.`);
+    if (!currentAvatar || !avatars[currentAvatar]) {
+      logger.error('No avatar selected or avatar not found. Cannot start streaming.');
       return;
     }
 
@@ -2156,11 +2150,11 @@ async function startStreaming(assistantReply) {
         body: JSON.stringify({
           script: {
             type: 'text',
-            input: chunk,
+            input: chunk, // Send the chunk without additional <speak> tags
             ssml: true,
             provider: {
               type: 'microsoft',
-              voice_id: currentAvatar.voiceId,
+              voice_id: avatars[currentAvatar].voiceId,
             },
           },
           session_id: persistentSessionId,
@@ -2189,7 +2183,6 @@ async function startStreaming(assistantReply) {
           },
         }),
       });
-  
 
       if (!playResponse.ok) {
         throw new Error(`HTTP error! status: ${playResponse.status}`);
