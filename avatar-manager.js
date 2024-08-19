@@ -15,7 +15,7 @@ const s3Client = new S3Client(DID_API.awsConfig);
 export async function createOrUpdateAvatar(name, imageFile, voiceId) {
   try {
     let avatars = await getAvatars();
-    let avatar = avatars[name];
+    let avatar = avatars.find(a => a.name === name);
     const isNewAvatar = !avatar;
     const isImageChanged = imageFile !== undefined;
 
@@ -54,6 +54,7 @@ export async function createOrUpdateAvatar(name, imageFile, voiceId) {
     throw error;
   }
 }
+
 
 async function uploadToS3(key, file) {
   const command = new PutObjectCommand({
@@ -165,7 +166,7 @@ async function generateSilentVideo(imageUrl, voiceId, name) {
 
 async function saveAvatarDetails(name, avatar) {
   const avatarsFile = path.join(__dirname, 'avatars.json');
-  let avatars = {};
+  let avatars = [];
 
   try {
     const data = await fs.readFile(avatarsFile, 'utf8');
@@ -177,7 +178,12 @@ async function saveAvatarDetails(name, avatar) {
     }
   }
 
-  avatars[name] = avatar;
+  const existingIndex = avatars.findIndex(a => a.name === name);
+  if (existingIndex !== -1) {
+    avatars[existingIndex] = avatar;
+  } else {
+    avatars.push(avatar);
+  }
 
   await fs.writeFile(avatarsFile, JSON.stringify(avatars, null, 2));
 }
@@ -188,9 +194,9 @@ export async function getAvatars() {
     return JSON.parse(data);
   } catch (err) {
     if (err.code === 'ENOENT') {
-      return {};
+      return [];
     }
     console.error('Error reading avatars file:', err);
-    return {};
+    return [];
   }
 }
