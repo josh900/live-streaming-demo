@@ -9,10 +9,10 @@ function getUrlParameters() {
   return {
     avatarId: urlParams.get('avatar'),
     contextId: urlParams.get('context'),
-    interface: urlParams.get('interface'),
-    showHeader: urlParams.get('showHeader') !== 'false'
+    simpleMode: urlParams.get('simple') === 'true'
   };
 }
+
 const deepgramClient = createClient(DID_API.deepgramKey);
 
 const RTCPeerConnection = (
@@ -892,7 +892,7 @@ async function initialize() {
   setLogLevel('INFO');
   connectionState = ConnectionState.DISCONNECTED;
 
-  const { avatarId, contextId, interface, showHeader } = getUrlParameters();
+  const { avatarId, contextId, simpleMode } = getUrlParameters();
 
   const { idle, stream } = getVideoElements();
   idleVideoElement = idle;
@@ -975,17 +975,13 @@ async function initialize() {
     }
   });
 
-  if (interface === 'simple-speak' || interface === 'simple-push') {
-    toggleSimpleMode(interface);
-  } else if (interface === 'debug') {
-    setLogLevel('DEBUG');
+  if (simpleMode) {
+    toggleSimpleMode();
   }
 
-  toggleHeaderVisibility(showHeader);
 
   logger.info('Initialization complete');
 }
-
 
 
 async function handleAvatarChange() {
@@ -1922,18 +1918,18 @@ async function startStreaming(assistantReply) {
   }
 }
 
-function toggleSimpleMode(mode) {
+export function toggleSimpleMode() {
   const content = document.getElementById('content');
   const videoWrapper = document.getElementById('video-wrapper');
   const simpleModeButton = document.getElementById('simple-mode-button');
   const header = document.querySelector('.header');
   const autoSpeakToggle = document.getElementById('auto-speak-toggle');
   const startButton = document.getElementById('start-button');
-  const pushToTalkButton = document.getElementById('push-to-talk-button');
 
   const isEnteringSimpleMode = content.style.display !== 'none';
 
   if (isEnteringSimpleMode) {
+    // Entering simple mode
     content.style.display = 'none';
     document.body.appendChild(videoWrapper);
     videoWrapper.style.position = 'fixed';
@@ -1946,24 +1942,22 @@ function toggleSimpleMode(mode) {
     header.style.width = '100%';
     header.style.zIndex = '1000';
 
-    if (mode === 'simple-speak') {
-      if (autoSpeakToggle.textContent.includes('Off')) {
-        autoSpeakToggle.click();
-      }
-      if (startButton.textContent === 'Speak') {
-        startButton.click();
-      }
-      pushToTalkButton.style.display = 'none';
-    } else if (mode === 'simple-push') {
-      autoSpeakToggle.textContent = 'Auto-Speak: Off';
-      startButton.style.display = 'none';
-      pushToTalkButton.style.display = 'block';
+    // Turn on auto-speak if it's not already on
+    if (autoSpeakToggle.textContent.includes('Off')) {
+      autoSpeakToggle.click();
     }
 
+    // Start recording if it's not already recording
+    if (startButton.textContent === 'Speak') {
+      startButton.click();
+    }
+
+    // Update URL
     const url = new URL(window.location);
-    url.searchParams.set('interface', mode);
+    url.searchParams.set('simple', 'true');
     window.history.pushState({}, '', url);
   } else {
+    // Exiting simple mode
     content.style.display = 'flex';
     const leftColumn = document.getElementById('left-column');
     leftColumn.appendChild(videoWrapper);
@@ -1976,32 +1970,23 @@ function toggleSimpleMode(mode) {
     header.style.position = 'static';
     header.style.width = 'auto';
 
+    // Turn off auto-speak
     if (autoSpeakToggle.textContent.includes('On')) {
       autoSpeakToggle.click();
     }
 
+    // Stop recording
     if (startButton.textContent === 'Stop') {
       startButton.click();
     }
 
+    // Update URL
     const url = new URL(window.location);
-    url.searchParams.delete('interface');
+    url.searchParams.delete('simple');
     window.history.pushState({}, '', url);
   }
 }
 
-function toggleHeaderVisibility(show) {
-  const header = document.querySelector('.header');
-  header.style.display = show ? 'flex' : 'none';
-}
-
-function handlePushToTalk(event) {
-  if (event.type === 'mousedown' || event.type === 'touchstart') {
-    startRecording(true);
-  } else if (event.type === 'mouseup' || event.type === 'touchend') {
-    stopRecording(true);
-  }
-}
 
 
 
@@ -2164,7 +2149,6 @@ async function startRecording(isPushToTalk = false) {
     throw error;
   }
 }
-
 
 function handleDeepgramError(err) {
   logger.error('Deepgram error:', err);
