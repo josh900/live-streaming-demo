@@ -56,6 +56,9 @@ const MAX_RECONNECT_DELAY = 90000; // 30 seconds
 let autoSpeakInProgress = false;
 let isPushToTalkEnabled = false;
 let isPushToTalkActive = false;
+let pushToTalkStartTime = 0;
+const MIN_PUSH_TO_TALK_DURATION = 1000; // 1 second in milliseconds
+
 
 
 const ConnectionState = {
@@ -1023,7 +1026,7 @@ function togglePushToTalk() {
   isPushToTalkEnabled = !isPushToTalkEnabled;
   const toggleButton = document.getElementById('push-to-talk-toggle');
   const pushToTalkButton = document.getElementById('push-to-talk-button');
-  toggleButton.textContent = `Push to Talk: ${isPushToTalkEnabled ? 'On' : 'Off'}`;
+  toggleButton.textContent = Push to Talk: ${ isPushToTalkEnabled ? 'On' : 'Off' };
   pushToTalkButton.style.display = isPushToTalkEnabled ? 'inline-block' : 'none';
   if (isPushToTalkEnabled) {
     autoSpeakMode = false;
@@ -1032,18 +1035,20 @@ function togglePushToTalk() {
 }
 
 function endPushToTalk() {
-  if (!isPushToTalkEnabled || !isPushToTalkActive) return;
-  isPushToTalkActive = false;
-  stopRecording(true);
+  if (!isPushToTalkEnabled) return;
+  const duration = Date.now() - pushToTalkStartTime;
+  if (duration >= MIN_PUSH_TO_TALK_DURATION) {
+    startRecording(true);
+    setTimeout(() => stopRecording(true), 100); // Small delay to ensure audio is captured
+  }
+  pushToTalkStartTime = 0;
 }
-
 
 function startPushToTalk() {
   if (!isPushToTalkEnabled) return;
-  isPushToTalkActive = true;
-  startRecording(true);
+  pushToTalkStartTime = Date.now();
+  // We don't start recording immediately
 }
-
 
 
 async function initialize() {
@@ -1089,6 +1094,8 @@ async function initialize() {
   pushToTalkButton.addEventListener('mousedown', startPushToTalk);
   pushToTalkButton.addEventListener('mouseup', endPushToTalk);
   pushToTalkButton.addEventListener('mouseleave', endPushToTalk);
+  pushToTalkButton.addEventListener('touchstart', startPushToTalk);
+  pushToTalkButton.addEventListener('touchend', endPushToTalk);
 
   initializeWebSocket();
   playIdleVideo();
