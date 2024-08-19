@@ -1026,7 +1026,7 @@ function togglePushToTalk() {
   isPushToTalkEnabled = !isPushToTalkEnabled;
   const toggleButton = document.getElementById('push-to-talk-toggle');
   const pushToTalkButton = document.getElementById('push-to-talk-button');
-  toggleButton.textContent = Push to Talk: ${ isPushToTalkEnabled ? 'On' : 'Off' };
+  toggleButton.textContent = `Push to Talk: ${isPushToTalkEnabled ? 'On' : 'Off'}`;
   pushToTalkButton.style.display = isPushToTalkEnabled ? 'inline-block' : 'none';
   if (isPushToTalkEnabled) {
     autoSpeakMode = false;
