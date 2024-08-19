@@ -57,7 +57,9 @@ let autoSpeakInProgress = false;
 let isPushToTalkEnabled = false;
 let isPushToTalkActive = false;
 let pushToTalkStartTime = 0;
-const MIN_PUSH_TO_TALK_DURATION = 1000; // 1 second in milliseconds
+const MIN_PUSH_TO_TALK_DURATION = 600; // 1 second in milliseconds
+let pushToTalkTimer = null;
+
 
 
 
@@ -1034,21 +1036,27 @@ function togglePushToTalk() {
   }
 }
 
+
 function endPushToTalk() {
   if (!isPushToTalkEnabled) return;
+  clearTimeout(pushToTalkTimer);
   const duration = Date.now() - pushToTalkStartTime;
   if (duration >= MIN_PUSH_TO_TALK_DURATION) {
-    startRecording(true);
-    setTimeout(() => stopRecording(true), 100); // Small delay to ensure audio is captured
+    stopRecording(true);
   }
   pushToTalkStartTime = 0;
 }
 
+
 function startPushToTalk() {
   if (!isPushToTalkEnabled) return;
   pushToTalkStartTime = Date.now();
-  // We don't start recording immediately
+  pushToTalkTimer = setTimeout(() => {
+    startRecording(true);
+  }, MIN_PUSH_TO_TALK_DURATION);
 }
+
+
 
 
 async function initialize() {
@@ -1096,6 +1104,7 @@ async function initialize() {
   pushToTalkButton.addEventListener('mouseleave', endPushToTalk);
   pushToTalkButton.addEventListener('touchstart', startPushToTalk);
   pushToTalkButton.addEventListener('touchend', endPushToTalk);
+
 
   initializeWebSocket();
   playIdleVideo();
