@@ -7,6 +7,9 @@ import { fileURLToPath } from 'url';
 import { Readable } from 'stream';
 import sharp from 'sharp';
 import { v4 as uuidv4 } from 'uuid';
+import sharp from 'sharp';
+import { uploadToS3, generateSilentVideo } from './aws-utils.js';
+import { DID_API } from './config.js';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -16,17 +19,21 @@ const s3Client = new S3Client(DID_API.awsConfig);
 
 export async function createOrUpdateAvatar(id, name, imageFile, voiceId) {
   try {
-    let avatars = await getAvatars();
-    let avatar = avatars.find(a => a.id === id);
-    const isNewAvatar = !avatar;
+    const isNewAvatar = !id;
+    let avatar = isNewAvatar ? null : await getAvatarById(id);
     const isImageChanged = imageFile !== undefined;
 
     if (isImageChanged) {
+      // Generate a unique identifier for the file
+      const uniqueId = uuidv4();
+      const fileExtension = imageFile.originalname.split('.').pop();
+      const uniqueFileName = `${uniqueId}.${fileExtension}`;
+
       // Crop image to 512x512 px using mode "Fill"
       const croppedImageBuffer = await sharp(imageFile.buffer).resize(512, 512, { fit: 'cover' }).toBuffer();
 
-      // Upload image to S3
-      const imageKey = `avatars/${name}/image.png`;
+      // Upload image to S3 with unique filename
+      const imageKey = `avatars/${name}/${uniqueFileName}`;
       await uploadToS3(imageKey, croppedImageBuffer);
       const imageUrl = `https://${DID_API.awsConfig.bucketName}.s3.${DID_API.awsConfig.region}.amazonaws.com/${imageKey}`;
 
@@ -46,16 +53,20 @@ export async function createOrUpdateAvatar(id, name, imageFile, voiceId) {
       return avatar;
     }
 
-    // Save avatar details
-    await saveAvatarDetails(id, avatar);
+    // Save avatar to database
+    if (isNewAvatar) {
+      await insertAvatar(avatar);
+    } else {
+      await updateAvatar(avatar);
+    }
 
-    console.log(`Avatar created/updated successfully:`, JSON.stringify(avatar));
     return avatar;
   } catch (error) {
     console.error(`Error creating/updating avatar:`, error);
     throw error;
   }
 }
+
 
 async function saveAvatarDetails(id, avatar) {
   const avatarsFile = path.join(__dirname, 'avatars.json');
@@ -81,6 +92,18 @@ async function saveAvatarDetails(id, avatar) {
   await fs.writeFile(avatarsFile, JSON.stringify(avatars, null, 2));
 }
 
+async function getAvatarById(id) {
+  // Implementation depends on your database setup
+  // This is a placeholder function
+  console.log(`Getting avatar with id: ${id}`);
+  return null;
+}
+
+async function insertAvatar(avatar) {
+  // Implementation depends on your database setup
+  // This is a placeholder function
+  console.log(`Inserting new avatar: ${JSON.stringify(avatar)}`);
+}
 
 
 async function uploadToS3(key, file) {

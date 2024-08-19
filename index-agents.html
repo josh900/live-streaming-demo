@@ -99,7 +99,7 @@
         <button id="start-button" type="button">Speak</button>
         <button id="auto-speak-toggle" type="button">Auto-Speak: On</button>
         <button id="push-to-talk-toggle" type="button">Push to Talk: Off</button>
-        <button id="push-to-talk-button" type="button" style="display: none;">Push to Talk</button>
+        <button id="push-to-talk-button" style="display: none;">Push to Talk</button>
       </div>
       <div id="text-input-controls">
         <input type="text" id="text-input" placeholder="Type your message here" />
@@ -182,10 +182,10 @@
       updateContext,
       handleTextInput,
       toggleAutoSpeak,
-      toggleSimpleMode
+      toggleSimpleMode,
+      handlePushToTalk
     } from './agents-client-api.js';
-
-
+  
     // Make closeAvatarModal available globally
     window.closeAvatarModal = closeAvatarModal;
     // Initialize the app when the DOM is ready
@@ -194,13 +194,16 @@
     } else {
       initialize();
     }
+    import { toggleSimpleMode } from './agents-client-api.js';
+    document.getElementById('simple-mode-button').addEventListener('click', toggleSimpleMode);
+    document.getElementById('push-to-talk-button').addEventListener('mousedown', handlePushToTalk);
+    document.getElementById('push-to-talk-button').addEventListener('mouseup', handlePushToTalk);
+    document.getElementById('push-to-talk-button').addEventListener('touchstart', handlePushToTalk);
+    document.getElementById('push-to-talk-button').addEventListener('touchend', handlePushToTalk);
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/dom-parser/0.1.5/dom-parser.min.js"></script>
 
-  <script type="module">
-    import { toggleSimpleMode } from './agents-client-api.js';
-    document.getElementById('simple-mode-button').addEventListener('click', toggleSimpleMode);
-  </script>
+
 
 
 </body>
