@@ -333,7 +333,7 @@ body {
   flex: 1;
   display: flex;
   justify-content: space-between;
-  max-widtvh: 1200px;
+  max-width: 1200px;
   margin: 0 5%;
   padding: 20px;
 }
@@ -347,6 +347,7 @@ body {
   height: 100%;
   object-fit: cover;
   transition: opacity 0.1s ease-in-out;
+  background: transparent;
   /*
   max-width: 550px;
   max-height: 550px;
@@ -370,6 +371,7 @@ body {
   margin: 0 auto;
   overflow: hidden;
   border-radius: 13%;
+  background: transparent;
 }
 
 #video-wrapper::before {
@@ -380,6 +382,7 @@ body {
 
 #preload-video-element {
   visibility: hidden;
+  background: transparent;
 }
 
 @media (max-width: 1024px) {
@@ -414,4 +417,44 @@ body {
 @media (max-width: 480px) {
   #video-wrapper {
   }
+}
+
+#push-to-talk-toggle, #push-to-talk-button {
+  margin-left: 10px;
+}
+
+#push-to-talk-button {
+  background-color: #4CAF50;
+  color: white;
+  padding: 15px 25px;
+  font-size: 18px;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+#push-to-talk-button:active {
+  background-color: #45a049;
+}
+
+#context-select {
+  margin-bottom: 10px;
+}
+
+#edit-context-button {
+  margin-left: 10px;
+}
+
+#context-modal .modal-content {
+  display: flex;
+  flex-direction: column;
+}
+
+#context-modal input,
+#context-modal textarea {
+  margin-bottom: 10px;
+}
+
+#context-modal button {
+  margin-right: 10px;
 }
