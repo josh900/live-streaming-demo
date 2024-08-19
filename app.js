@@ -54,17 +54,22 @@ app.use(
 
 app.post('/avatar', upload.single('image'), async (req, res) => {
   try {
-    const { name, voiceId } = req.body;
+    const { id, name, voiceId } = req.body;
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
+      'Connection': 'keep-alive',
     });
     res.write('data: {"status": "processing"}\n\n');
 
-    const avatar = await createOrUpdateAvatar(name, req.file, voiceId || 'en-US-GuyNeural');
+    let avatar;
+    if (id) {
+      avatar = await updateAvatar(id, name, req.file, voiceId);
+    } else {
+      avatar = await createAvatar(name, req.file, voiceId);
+    }
 
-    res.write('data: {"status": "completed", "avatar": ' + JSON.stringify(avatar) + '}\n\n');
+    res.write(`data: {"status": "completed", "avatar": ${JSON.stringify(avatar)}}\n\n`);
     res.end();
   } catch (error) {
     console.error('Error creating/updating avatar:', error);
@@ -73,15 +78,60 @@ app.post('/avatar', upload.single('image'), async (req, res) => {
   }
 });
 
+async function createAvatar(name, imageFile, voiceId) {
+  const avatars = JSON.parse(await readFile('avatars.json', 'utf8'));
+  const newAvatar = {
+    id: uuidv4(),
+    name,
+    voiceId: voiceId || 'en-US-GuyNeural',
+    imageUrl: '',
+    silentVideoUrl: ''
+  };
+
+  if (imageFile) {
+    const imageUrl = await uploadToS3(imageFile, `avatars/${newAvatar.id}/image.png`);
+    newAvatar.imageUrl = imageUrl;
+    newAvatar.silentVideoUrl = await generateSilentVideo(imageUrl, newAvatar.voiceId, newAvatar.name);
+  }
+
+  avatars.push(newAvatar);
+  await writeFile('avatars.json', JSON.stringify(avatars, null, 2));
+  return newAvatar;
+}
+
+
+async function updateAvatar(id, name, imageFile, voiceId) {
+  const avatars = JSON.parse(await readFile('avatars.json', 'utf8'));
+  const index = avatars.findIndex(a => a.id === id);
+  if (index === -1) {
+    throw new Error('Avatar not found');
+  }
+
+  const updatedAvatar = { ...avatars[index], name, voiceId };
+
+  if (imageFile) {
+    const imageUrl = await uploadToS3(imageFile, `avatars/${id}/image.png`);
+    updatedAvatar.imageUrl = imageUrl;
+    updatedAvatar.silentVideoUrl = await generateSilentVideo(imageUrl, voiceId, name);
+  }
+
+  avatars[index] = updatedAvatar;
+  await writeFile('avatars.json', JSON.stringify(avatars, null, 2));
+  return updatedAvatar;
+}
+
+
+
 app.get('/avatars', async (req, res) => {
   try {
-    const avatars = await getAvatars();
+    const avatars = JSON.parse(await readFile('avatars.json', 'utf8'));
     res.json(avatars);
   } catch (error) {
-    console.error('Error getting avatars:', error);
+    console.error('Error reading avatars:', error);
     res.status(500).json({ error: 'Failed to get avatars' });
   }
 });
+
 
 app.get('/contexts', async (req, res) => {
   try {
