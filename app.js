@@ -42,12 +42,8 @@ app.get('/', function (req, res) {
   res.sendFile(join(__dirname, 'index.html'));
 });
 
-app.get('/index-debug', function (req, res) {
+app.get('/agents', function (req, res) {
   res.sendFile(join(__dirname, 'index-agents.html'));
-});
-
-app.get('/index-simple-push', function (req, res) {
-  res.sendFile(join(__dirname, 'index-simple-push.html'));
 });
 
 app.use(
@@ -149,7 +145,6 @@ app.get('/api/contexts', async (req, res) => {
     res.status(500).json({ error: 'Failed to retrieve contexts' });
   }
 });
-
 
 
 

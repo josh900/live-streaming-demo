@@ -140,7 +140,7 @@ function handleContextChange() {
     openContextModal();
   } else {
     updateContextDisplay();
-
+    
     // Update URL with new context ID
     const url = new URL(window.location);
     url.searchParams.set('context', currentContextId);
@@ -213,7 +213,7 @@ async function saveContext(contextId = null) {
     }
 
     const savedContext = await response.json();
-
+    
     if (contextId) {
       const index = contexts.findIndex(c => c.id === contextId);
       if (index !== -1) {
@@ -868,37 +868,28 @@ function togglePushToTalk() {
 }
 
 
-export function endPushToTalk() {
-  if (!window.isPushToTalkEnabled) return;
-  clearTimeout(window.pushToTalkTimer);
-  const duration = Date.now() - window.pushToTalkStartTime;
+function endPushToTalk() {
+  if (!isPushToTalkEnabled) return;
+  clearTimeout(pushToTalkTimer);
+  const duration = Date.now() - pushToTalkStartTime;
   if (duration >= MIN_PUSH_TO_TALK_DURATION) {
     stopRecording(true);
   }
-  window.pushToTalkStartTime = 0;
+  pushToTalkStartTime = 0;
 }
 
 
-
-
-export function startPushToTalk() {
-  if (!window.isPushToTalkEnabled) return;
-  window.pushToTalkStartTime = Date.now();
-  window.pushToTalkTimer = setTimeout(() => {
+function startPushToTalk() {
+  if (!isPushToTalkEnabled) return;
+  pushToTalkStartTime = Date.now();
+  pushToTalkTimer = setTimeout(() => {
     startRecording(true);
   }, MIN_PUSH_TO_TALK_DURATION);
 }
 
 
-export async function initialize() {
+async function initialize() {
   setLogLevel('INFO');
-
-  const isSimpleMode = window.location.pathname.includes('index-simple-push.html');
-  if (isSimpleMode) {
-    // Set push-to-talk to always be enabled in simple mode
-    window.isPushToTalkEnabled = true;
-  }
-
   connectionState = ConnectionState.DISCONNECTED;
 
   const { avatarId, contextId, simpleMode } = getUrlParameters();
@@ -1048,7 +1039,7 @@ async function loadAvatars(selectedAvatarId) {
     }
     avatars = await response.json();
     logger.debug('Avatars loaded:', avatars);
-
+    
     if (selectedAvatarId && avatars.some(avatar => avatar.id === selectedAvatarId)) {
       currentAvatarId = selectedAvatarId;
     } else if (!currentAvatarId && avatars.length > 0) {
@@ -2503,6 +2494,7 @@ avatarImageInput.onchange = (event) => {
 
 // Export functions and variables that need to be accessed from other modules
 export {
+  initialize,
   handleAvatarChange,
   openAvatarModal,
   closeAvatarModal,
