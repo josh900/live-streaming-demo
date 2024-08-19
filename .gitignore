@@ -4,3 +4,5 @@ api.json
 /git2gpt
 api.js
 /context
+avatars.json
+contexts.json
