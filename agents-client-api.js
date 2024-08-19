@@ -56,6 +56,8 @@ const MAX_RECONNECT_DELAY = 90000; // 30 seconds
 let autoSpeakInProgress = false;
 let isPushToTalkEnabled = false;
 let isPushToTalkActive = false;
+let pushToTalkTimeout;
+
 
 
 const ConnectionState = {
@@ -1031,34 +1033,49 @@ function togglePushToTalk() {
     pushToTalkButton.addEventListener('mousedown', startPushToTalk);
     pushToTalkButton.addEventListener('mouseup', endPushToTalk);
     pushToTalkButton.addEventListener('mouseleave', endPushToTalk);
+    pushToTalkButton.addEventListener('touchstart', startPushToTalk);
+    pushToTalkButton.addEventListener('touchend', endPushToTalk);
   } else {
     pushToTalkButton.removeEventListener('mousedown', startPushToTalk);
     pushToTalkButton.removeEventListener('mouseup', endPushToTalk);
     pushToTalkButton.removeEventListener('mouseleave', endPushToTalk);
+    pushToTalkButton.removeEventListener('touchstart', startPushToTalk);
+    pushToTalkButton.removeEventListener('touchend', endPushToTalk);
   }
 }
 
-async function startPushToTalk() {
+
+async function startPushToTalk(event) {
+  event.preventDefault(); // Prevent default touch behavior
   if (!isPushToTalkEnabled) return;
-  isPushToTalkActive = true;
-  await startRecording(true);
+  clearTimeout(pushToTalkTimeout);
+  pushToTalkTimeout = setTimeout(() => {
+    isPushToTalkActive = true;
+    startRecording(true);
+  }, 200); // Small delay to prevent accidental clicks
 }
+
 
 async function endPushToTalk() {
-  if (!isPushToTalkEnabled || !isPushToTalkActive) return;
-  isPushToTalkActive = false;
-  await stopRecording(true);
-  if (currentUtterance.trim()) {
-    updateTranscript(currentUtterance.trim(), true);
-    chatHistory.push({
-      role: 'user',
-      content: currentUtterance.trim(),
+  if (!isPushToTalkEnabled) return;
+  clearTimeout(pushToTalkTimeout);
+  if (isPushToTalkActive) {
+    isPushToTalkActive = false;
+    stopRecording(true).then(() => {
+      if (currentUtterance.trim()) {
+        updateTranscript(currentUtterance.trim(), true);
+        chatHistory.push({
+          role: 'user',
+          content: currentUtterance.trim(),
+        });
+        sendChatToGroq();
+        currentUtterance = '';
+        interimMessageAdded = false;
+      }
     });
-    sendChatToGroq();
-    currentUtterance = '';
-    interimMessageAdded = false;
   }
 }
+
 
 
 
@@ -2156,14 +2173,14 @@ function handleTranscription(data, isPushToTalk) {
 }
 
 async function startRecording(isPushToTalk = false) {
-  if (isRecording && !isPushToTalk) {
-    logger.warn('Recording is already in progress. Stopping current recording.');
-    await stopRecording();
-    return;
-  }
-
-  if (isPushToTalk && isRecording) {
-    return; // Don't start a new recording if push-to-talk is already active
+  if (isRecording) {
+    if (isPushToTalk) {
+      return; // Don't start a new recording if push-to-talk is already active
+    } else {
+      logger.warn('Recording is already in progress. Stopping current recording.');
+      await stopRecording();
+      return;
+    }
   }
 
   logger.debug('Starting recording process...');
