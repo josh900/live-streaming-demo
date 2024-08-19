@@ -25,8 +25,6 @@ let keepAliveInterval;
 let socket;
 let isInitializing = false;
 let audioContext;
-let streamVideoElement;
-let idleVideoElement;
 let deepgramConnection;
 let isRecording = false;
 let audioWorkletNode;
@@ -194,7 +192,7 @@ async function saveContext(contextId = null) {
     }
 
     const savedContext = await response.json();
-    
+
     if (contextId) {
       const index = contexts.findIndex(c => c.id === contextId);
       if (index !== -1) {
@@ -1195,14 +1193,13 @@ function startPushToTalk() {
 
 
 
-
 async function initialize() {
   setLogLevel('DEBUG');
   connectionState = ConnectionState.DISCONNECTED;
 
-  const { idle, stream } = getVideoElements();
-  idleVideoElement = idle;
-  streamVideoElement = stream;
+  const videoElements = getVideoElements();
+  const idleVideoElement = videoElements.idle;
+  const streamVideoElement = videoElements.stream;
 
   if (idleVideoElement) idleVideoElement.setAttribute('playsinline', '');
   if (streamVideoElement) streamVideoElement.setAttribute('playsinline', '');
@@ -1321,6 +1318,34 @@ async function handleAvatarChange() {
   await initializePersistentStream();
 }
 
+
+
+const idleVideoElement = document.getElementById('idle-video-element');
+if (idleVideoElement) {
+  idleVideoElement.src = avatars[currentAvatar].silentVideoUrl;
+  try {
+    await idleVideoElement.load();
+    logger.debug(`Idle video loaded for ${currentAvatar}`);
+  } catch (error) {
+    logger.error(`Error loading idle video for ${currentAvatar}:`, error);
+  }
+}
+
+const streamVideoElement = document.getElementById('stream-video-element');
+if (streamVideoElement) {
+  streamVideoElement.srcObject = null;
+}
+
+await stopRecording();
+currentUtterance = '';
+interimMessageAdded = false;
+const msgHistory = document.getElementById('msgHistory');
+msgHistory.innerHTML = '';
+chatHistory = [];
+
+await destroyPersistentStream();
+await initializePersistentStream();
+}
 
 async function loadAvatars() {
   try {
