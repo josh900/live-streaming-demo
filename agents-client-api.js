@@ -804,11 +804,6 @@ function updateAssistantReply(text) {
 }
 
 async function initializePersistentStream() {
-  if (isPersistentStreamActive) {
-    logger.debug('Persistent stream already active. Skipping initialization.');
-    return;
-  }
-
   logger.info('Initializing persistent stream...');
   connectionState = ConnectionState.CONNECTING;
 
@@ -886,7 +881,7 @@ async function initializePersistentStream() {
     }
     isPersistentStreamActive = true;
     startKeepAlive();
-    lastConnectionTime = Date.now();
+    lastConnectionTime = Date.now(); // Update the last connection time
     logger.info('Persistent stream initialized successfully');
     connectionState = ConnectionState.CONNECTED;
   } catch (error) {
@@ -1212,8 +1207,8 @@ async function initialize() {
   connectionState = ConnectionState.DISCONNECTED;
 
   const { idle, stream } = getVideoElements();
-  const idleVideoElement = idle;
-  const streamVideoElement = stream;
+  idleVideoElement = idle;
+  streamVideoElement = stream;
 
   if (idleVideoElement) idleVideoElement.setAttribute('playsinline', '');
   if (streamVideoElement) streamVideoElement.setAttribute('playsinline', '');
@@ -1225,11 +1220,13 @@ async function initialize() {
 
   if (avatars.length > 0) {
     currentAvatarId = avatars[0].id;
+    await handleAvatarChange();
   } else {
     logger.error('No avatars available. Cannot initialize stream.');
     showErrorMessage('No avatars available. Please create an avatar first.');
     return;
   }
+
 
   await loadContexts();
   populateContextSelect();
@@ -1247,27 +1244,26 @@ async function initialize() {
   const editAvatarButton = document.getElementById('edit-avatar-button');
   const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
   const pushToTalkButton = document.getElementById('push-to-talk-button');
-  const avatarSelect = document.getElementById('avatar-select');
 
   sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
   textInput.addEventListener('keypress', (event) => {
     if (event.key === 'Enter') handleTextInput(textInput.value);
   });
   autoSpeakToggle.addEventListener('click', toggleAutoSpeak);
-  editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatarId));
+  editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatar));
   pushToTalkToggle.addEventListener('click', togglePushToTalk);
   pushToTalkButton.addEventListener('mousedown', startPushToTalk);
   pushToTalkButton.addEventListener('mouseup', endPushToTalk);
   pushToTalkButton.addEventListener('mouseleave', endPushToTalk);
   pushToTalkButton.addEventListener('touchstart', startPushToTalk);
   pushToTalkButton.addEventListener('touchend', endPushToTalk);
-  avatarSelect.addEventListener('change', handleAvatarChange);
 
   initializeWebSocket();
+  playIdleVideo();
 
   showLoadingSymbol();
   try {
-    await handleAvatarChange(); // This will set up the initial avatar and stream
+    await initializePersistentStream();
     startConnectionHealthCheck();
     hideLoadingSymbol();
   } catch (error) {
@@ -1300,7 +1296,7 @@ async function initialize() {
   logger.info('Initialization complete');
 }
 
-export async function handleAvatarChange() {
+async function handleAvatarChange() {
   const avatarSelect = document.getElementById('avatar-select');
   currentAvatarId = avatarSelect.value;
   if (currentAvatarId === 'create-new') {
@@ -1311,6 +1307,7 @@ export async function handleAvatarChange() {
   const currentAvatar = avatars.find(a => a.id === currentAvatarId);
   if (!currentAvatar) {
     logger.error(`Avatar with id ${currentAvatarId} not found`);
+    showErrorMessage('Selected avatar not found. Please try again.');
     return;
   }
 
@@ -1340,7 +1337,6 @@ export async function handleAvatarChange() {
   await destroyPersistentStream();
   await initializePersistentStream();
 }
-
 
 
 async function loadAvatars() {
@@ -2796,6 +2792,7 @@ avatarImageInput.onchange = (event) => {
 // Export functions and variables that need to be accessed from other modules
 export {
   initialize,
+  handleAvatarChange,
   openAvatarModal,
   closeAvatarModal,
   saveAvatar,
