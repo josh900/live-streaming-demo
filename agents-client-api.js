@@ -1031,19 +1031,18 @@ function togglePushToTalk() {
   }
 }
 
-
 function endPushToTalk() {
   if (!isPushToTalkEnabled || !isPushToTalkActive) return;
   isPushToTalkActive = false;
   stopRecording(true);
 }
 
+
 function startPushToTalk() {
   if (!isPushToTalkEnabled) return;
   isPushToTalkActive = true;
   startRecording(true);
 }
-
 
 
 
@@ -1078,9 +1077,6 @@ async function initialize() {
   const editAvatarButton = document.getElementById('edit-avatar-button');
   const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
   const pushToTalkButton = document.getElementById('push-to-talk-button');
-  pushToTalkButton.addEventListener('mousedown', startPushToTalk);
-  pushToTalkButton.addEventListener('mouseup', endPushToTalk);
-  pushToTalkButton.addEventListener('mouseleave', endPushToTalk);
 
   sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
   textInput.addEventListener('keypress', (event) => {
@@ -2185,7 +2181,7 @@ async function startRecording(isPushToTalk = false) {
     if (!isPushToTalk) {
       deepgramOptions.utterance_end_ms = 2500;
       deepgramOptions.vad_events = true;
-   }
+    }
 
     logger.debug('Creating Deepgram connection with options:', deepgramOptions);
 
@@ -2312,7 +2308,6 @@ async function stopRecording(isPushToTalk = false) {
     }
   }
 }
-
 
 async function sendChatToGroq() {
   if (chatHistory.length === 0 || chatHistory[chatHistory.length - 1].content.trim() === '') {
