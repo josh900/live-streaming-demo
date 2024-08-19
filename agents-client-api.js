@@ -9,11 +9,12 @@ function getUrlParameters() {
   return {
     avatarId: urlParams.get('avatar'),
     contextId: urlParams.get('context'),
-    interface: urlParams.get('interface'),
+    interfaceMode: urlParams.get('interface'),
     header: urlParams.get('header'),
     simple: urlParams.get('simple') === 'true'
   };
 }
+
 
 const deepgramClient = createClient(DID_API.deepgramKey);
 
@@ -894,7 +895,7 @@ async function initialize() {
   setLogLevel('INFO');
   connectionState = ConnectionState.DISCONNECTED;
 
-  const { avatarId, contextId, interface, header, simple } = getUrlParameters();
+  const { avatarId, contextId, interfaceMode, header, simple } = getUrlParameters();
 
   const { idle, stream } = getVideoElements();
   idleVideoElement = idle;
@@ -938,11 +939,11 @@ async function initialize() {
   pushToTalkButton.addEventListener('touchend', endPushToTalk);
 
   // Handle interface modes
-  if (interface === 'simple-push') {
+  if (interfaceMode === 'simple-push') {
     setupPushToTalk();
-  } else if (interface === 'simple-speak') {
+  } else if (interfaceMode === 'simple-speak') {
     setupSimpleSpeak();
-  } else if (interface === 'debug') {
+  } else if (interfaceMode === 'debug') {
     setupDebugMode();
   }
   
@@ -955,7 +956,7 @@ async function initialize() {
   if (simple) {
     toggleSimpleMode();
   }
-
+  
   initializeWebSocket();
   playIdleVideo();
 
