@@ -1,7 +1,6 @@
 'use strict';
 import DID_API from './api.js';
 import logger from './logger.js';
-import { v4 as uuidv4 } from 'uuid';
 
 const { createClient, LiveTranscriptionEvents } = deepgram;
 
@@ -1073,12 +1072,13 @@ function openAvatarModal(avatarId = null) {
     nameInput.value = '';
     voiceInput.value = 'en-US-GuyNeural';
     imagePreview.src = '';
-    idInput.value = uuidv4(); // Generate a new UUID for new avatars
+    idInput.value = crypto.randomUUID(); // Use the Web Crypto API to generate a UUID
     saveButton.textContent = 'Create Avatar';
   }
 
   modal.style.display = 'block';
 }
+
 
 
 function closeAvatarModal() {
