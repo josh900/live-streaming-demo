@@ -870,8 +870,6 @@ function startPushToTalk() {
 }
 
 
-
-
 async function initialize() {
   setLogLevel('DEBUG');
   connectionState = ConnectionState.DISCONNECTED;
@@ -921,7 +919,7 @@ async function initialize() {
   initializeWebSocket();
   playIdleVideo();
 
-  if (avatars.length > 0) {
+  if (avatars.length > 0 && currentAvatarId) {
     showLoadingSymbol();
     try {
       await initializePersistentStream();
@@ -934,20 +932,8 @@ async function initialize() {
       connectionState = ConnectionState.DISCONNECTED;
     }
   } else {
-    logger.warn('No avatars available. Skipping stream initialization.');
-    showErrorMessage('No avatars available. Please create an avatar before connecting.');
-  }
-
-  showLoadingSymbol();
-  try {
-    await initializePersistentStream();
-    startConnectionHealthCheck();
-    hideLoadingSymbol();
-  } catch (error) {
-    logger.error('Error during initialization:', error);
-    hideLoadingSymbol();
-    showErrorMessage('Failed to connect. Please try again.');
-    connectionState = ConnectionState.DISCONNECTED;
+    logger.warn('No avatars available or no current avatar selected. Skipping stream initialization.');
+    showErrorMessage('No avatars available or no avatar selected. Please create or select an avatar before connecting.');
   }
 
   window.addEventListener('online', async () => {
@@ -972,6 +958,7 @@ async function initialize() {
 
   logger.info('Initialization complete');
 }
+
 
 async function handleAvatarChange() {
   const avatarSelect = document.getElementById('avatar-select');
@@ -1023,11 +1010,17 @@ async function loadAvatars() {
     }
     avatars = await response.json();
     logger.debug('Avatars loaded:', avatars);
+    
+    // Set the current avatar ID if it's not set and there are avatars available
+    if (!currentAvatarId && avatars.length > 0) {
+      currentAvatarId = avatars[0].id;
+    }
   } catch (error) {
     logger.error('Error loading avatars:', error);
     showErrorMessage('Failed to load avatars. Please try again.');
   }
 }
+
 
 
 function populateAvatarSelect() {
@@ -1047,12 +1040,15 @@ function populateAvatarSelect() {
   }
 
   if (avatars.length > 0) {
-    currentAvatarId = avatars[0].id;
+    if (!currentAvatarId) {
+      currentAvatarId = avatars[0].id;
+    }
     avatarSelect.value = currentAvatarId;
   } else {
     avatarSelect.value = 'create-new';
   }
 }
+
 
 
 function openAvatarModal(avatarName = null) {
@@ -1754,7 +1750,8 @@ async function startStreaming(assistantReply) {
       await initializePersistentStream();
     }
 
-    if (!currentAvatar || !avatars[currentAvatar]) {
+    const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
+    if (!currentAvatar) {
       logger.error('No avatar selected or avatar not found. Cannot start streaming.');
       return;
     }
@@ -1792,11 +1789,11 @@ async function startStreaming(assistantReply) {
         body: JSON.stringify({
           script: {
             type: 'text',
-            input: chunk, // Send the chunk without additional <speak> tags
+            input: chunk,
             ssml: true,
             provider: {
               type: 'microsoft',
-              voice_id: avatars[currentAvatar].voiceId,
+              voice_id: currentAvatar.voiceId,
             },
           },
           session_id: persistentSessionId,
