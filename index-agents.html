@@ -70,7 +70,6 @@
             <button id="edit-avatar-button" type="button">Edit Avatar</button>
           </div>
         </div>
-
         <div id="video-wrapper">
           <video id="idle-video-element" width="400" height="400" autoplay loop muted></video>
           <video id="stream-video-element" width="400" height="400" autoplay></video>
@@ -78,7 +77,6 @@
           <div id="logo-wrapper"></div>
         </div>
       </div>
-
       <div id="right-column">
         <div id="context-wrapper">
           <h4>Context:</h4>
@@ -87,12 +85,12 @@
             <button id="replace-context-button" type="button">Replace</button>
           </div>
         </div>
-
         <div class="chat">
           <h4>Chat History</h4>
           <div id="msgHistory"></div>
         </div>
-
+        <button id="push-to-talk-button" disabled>Push to Talk</button
+        ><button id="push-to-talk-toggle">Push to Talk: Off</button>
         <div id="speak-controls">
           <button id="start-button" type="button">Speak</button>
           <button id="auto-speak-toggle" type="button">Auto-Speak: On</button>
@@ -103,7 +101,6 @@
         </div>
       </div>
     </div>
-
     <div id="avatar-modal" class="modal">
       <div class="modal-content">
         <h2>Create/Edit Avatar</h2>
@@ -115,18 +112,15 @@
         <button onclick="closeAvatarModal()">Cancel</button>
       </div>
     </div>
-
     <script>
       // AudioWorklet implementation
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-
       // AudioWorklet processor code
       const workletCode = `
             class AudioProcessor extends AudioWorkletProcessor {
                 process(inputs, outputs, parameters) {
                     const input = inputs[0];
                     const output = outputs[0];
-
                     for (let channel = 0; channel < input.length; channel++) {
                         const inputChannel = input[channel];
                         const outputChannel = output[channel];
@@ -134,17 +128,13 @@
                             outputChannel[i] = inputChannel[i];
                         }
                     }
-
                     return true;
                 }
             }
-
             registerProcessor('audio-processor', AudioProcessor);
         `;
-
       const blob = new Blob([workletCode], { type: 'application/javascript' });
       const workletUrl = URL.createObjectURL(blob);
-
       audioContext.audioWorklet
         .addModule(workletUrl)
         .then(() => {
@@ -154,7 +144,6 @@
         })
         .catch((err) => console.error('Error loading AudioWorklet:', err));
     </script>
-
     <script src="https://cdn.jsdelivr.net/npm/@deepgram/sdk"></script>
     <script type="module">
       import {
@@ -167,12 +156,10 @@
         handleTextInput,
         toggleAutoSpeak,
       } from './agents-client-api.js';
-
       // Make closeAvatarModal available globally
       window.closeAvatarModal = closeAvatarModal;
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dom-parser/0.1.5/dom-parser.min.js"></script>
-
     <script type="module">
       import { toggleSimpleMode } from './agents-client-api.js';
       document.getElementById('simple-mode-button').addEventListener('click', toggleSimpleMode);
