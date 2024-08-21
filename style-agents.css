@@ -1,5 +1,6 @@
 --fm--start-1--fm--
 --fm--start-1--fm--
+--fm--start-1--fm--
 .peerConnectionState-new {
   color: cornflowerblue;
 }
@@ -99,6 +100,8 @@ h4 {
 #msgHistory {
 --fm--end-1--fm--
 --fm--start-2--fm--
+--fm--end-1--fm--
+--fm--start-2--fm--
   height: 300px;
   overflow-y: auto;
   border: 1px solid #ccc;
@@ -193,6 +196,8 @@ select {
   margin-bottom: 20px;
 }
 #context-input {
+--fm--end-2--fm--
+--fm--start-3--fm--
 --fm--end-2--fm--
 --fm--start-3--fm--
   width: 100%;
@@ -292,6 +297,8 @@ body {
   border: 1px solid #ccc;
 }
 #simple-mode-button.simple-mode:hover {
+--fm--end-3--fm--
+--fm--start-4--fm--
   background-color: #e0e0e0;
 }
 #content {
@@ -392,6 +399,8 @@ body {
   background-color: #45a049;
 }
 #context-select {
+--fm--end-4--fm--
+--fm--start-5--fm--
   margin-bottom: 10px;
 }
 #edit-context-button {
@@ -426,4 +435,5 @@ body {
 --fm--end-5--fm--
 --fm--start-6--fm--
 --fm--end-6--fm--
+--fm--end-5--fm--
 --fm--end-5--fm--
