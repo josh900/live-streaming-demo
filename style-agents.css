@@ -1,4 +1,5 @@
 --fm--start-1--fm--
+--fm--start-1--fm--
 .peerConnectionState-new {
   color: cornflowerblue;
 }
@@ -96,6 +97,8 @@ h4 {
   display: inline-block;
 }
 #msgHistory {
+--fm--end-1--fm--
+--fm--start-2--fm--
   height: 300px;
   overflow-y: auto;
   border: 1px solid #ccc;
@@ -190,6 +193,8 @@ select {
   margin-bottom: 20px;
 }
 #context-input {
+--fm--end-2--fm--
+--fm--start-3--fm--
   width: 100%;
   height: 100px;
   margin-bottom: 10px;
@@ -290,6 +295,8 @@ body {
   background-color: #e0e0e0;
 }
 #content {
+--fm--end-3--fm--
+--fm--start-4--fm--
   flex: 1;
   display: flex;
   justify-content: space-between;
@@ -390,6 +397,8 @@ body {
 #edit-context-button {
   margin-left: 10px;
 }
+--fm--end-4--fm--
+--fm--start-5--fm--
 #context-modal .modal-content {
   display: flex;
   flex-direction: column;
@@ -417,3 +426,4 @@ body {
 --fm--end-5--fm--
 --fm--start-6--fm--
 --fm--end-6--fm--
+--fm--end-5--fm--
