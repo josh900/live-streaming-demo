@@ -1,5 +1,4 @@
 --fm--start-1--fm--
---fm--start-1--fm--
 'use strict';
 import DID_API from './api.js';
 import logger from './logger.js';
@@ -97,8 +96,6 @@ async function loadContexts(selectedContextId) {
       currentContextId = contexts[0].id;
     }
   } catch (error) {
---fm--end-1--fm--
---fm--start-2--fm--
     logger.error('Error loading contexts:', error);
     showErrorMessage('Failed to load contexts. Please try again.');
   }
@@ -198,8 +195,6 @@ async function saveContext(contextId = null) {
     } else {
       contexts.push(savedContext);
     }
---fm--end-2--fm--
---fm--start-3--fm--
     populateContextSelect();
     currentContextId = savedContext.id;
     updateContextDisplay();
@@ -299,8 +294,6 @@ function smoothTransition(toStreaming, duration = 250) {
       transitionCanvas.height,
     );
     // Draw the fading in video
---fm--end-3--fm--
---fm--start-4--fm--
     transitionCtx.globalAlpha = progress;
     transitionCtx.drawImage(
       toStreaming ? streamVideoElement : idleVideoElement,
@@ -400,8 +393,6 @@ function updateTranscript(text, isFinal) {
   msgHistory.scrollTop = msgHistory.scrollHeight;
 }
 function handleTextInput(text) {
---fm--end-4--fm--
---fm--start-5--fm--
   if (text.trim() === '') return;
   const textInput = document.getElementById('text-input');
   textInput.value = '';
@@ -499,8 +490,6 @@ async function initializePersistentStream() {
     logger.info('Persistent stream initialized successfully');
     connectionState = ConnectionState.CONNECTED;
   } catch (error) {
---fm--end-5--fm--
---fm--start-6--fm--
     logger.error('Failed to initialize persistent stream:', error);
     isPersistentStreamActive = false;
     persistentStreamId = null;
@@ -590,8 +579,6 @@ async function reinitializePersistentStream() {
   await initializePersistentStream();
 }
 async function createNewPersistentStream() {
---fm--end-6--fm--
---fm--start-7--fm--
 --fm--end-8--fm--
 --fm--start-9--fm--
   logger.debug('Creating new persistent stream...');
@@ -692,8 +679,6 @@ async function switchToNewStream(newStreamData) {
   try {
     connectionState = ConnectionState.RECONNECTING;
     // Quickly switch the video source to the new stream
---fm--end-7--fm--
---fm--start-8--fm--
     if (streamVideoElement) {
       // Instead of directly setting src, we need to update the WebRTC connection
       await updateWebRTCConnection(newStreamData);
@@ -794,8 +779,6 @@ async function initialize() {
   idleVideoElement = idle;
   streamVideoElement = stream;
   if (idleVideoElement) idleVideoElement.setAttribute('playsinline', '');
---fm--end-8--fm--
---fm--start-9--fm--
   if (streamVideoElement) streamVideoElement.setAttribute('playsinline', '');
   initializeTransitionCanvas();
   await loadAvatars(avatarId);
@@ -895,8 +878,6 @@ function setupPushToTalk() {
   pushToTalkButton.addEventListener('touchend', stopPushToTalk);
 }
 function setupSimpleSpeak() {
---fm--end-9--fm--
---fm--start-10--fm--
   toggleSimpleMode();
   toggleAutoSpeak();
 }
@@ -991,8 +972,6 @@ function populateAvatarSelect() {
   }
 }
 function openAvatarModal(avatarId = null) {
---fm--end-10--fm--
---fm--start-11--fm--
   const modal = document.getElementById('avatar-modal');
   const nameInput = document.getElementById('avatar-name');
   const voiceInput = document.getElementById('avatar-voice');
@@ -1090,8 +1069,6 @@ function updateContext(action) {
     } else if (action === 'replace') {
       context = newContext;
     }
---fm--end-11--fm--
---fm--start-12--fm--
     logger.debug('Context updated:', context);
     showToast('Context saved successfully');
     displayBothContexts(originalContext, context);
@@ -1189,8 +1166,6 @@ async function createPeerConnection(offer, iceServers) {
     };
     pcDataChannel.onmessage = onStreamEvent;
   }
---fm--end-12--fm--
---fm--start-13--fm--
 --fm--end-16--fm--
 --fm--start-17--fm--
   await peerConnection.setRemoteDescription(offer);
@@ -1291,8 +1266,6 @@ function startConnectionHealthCheck() {
   }, 30000); // Check every 30 seconds
 }
 function onSignalingStateChange() {
---fm--end-13--fm--
---fm--start-14--fm--
   const { signaling: signalingStatusLabel } = getStatusLabels();
   if (signalingStatusLabel) {
     signalingStatusLabel.innerText = peerConnection.signalingState;
@@ -1391,8 +1364,6 @@ function onStreamEvent(message) {
         }
       }, 1000);
     } else {
---fm--end-14--fm--
---fm--start-15--fm--
       console.log(event);
       const streamEventLabel = document.getElementById('stream-event-label');
       if (streamEventLabel) {
@@ -1490,8 +1461,6 @@ function stopAllStreams() {
   }
 }
 function closePC(pc = peerConnection) {
---fm--end-15--fm--
---fm--start-16--fm--
   if (!pc) return;
   logger.debug('Stopping peer connection');
   pc.close();
@@ -1592,8 +1561,6 @@ async function initializeConnection() {
     });
     const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
     if (!newStreamId || !newSessionId) {
---fm--end-16--fm--
---fm--start-17--fm--
       throw new Error('Failed to get valid stream ID or session ID from API');
     }
     streamId = newStreamId;
@@ -1661,8 +1628,6 @@ async function startStreaming(assistantReply) {
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i].trim();
       if (chunk.length === 0) continue;
---fm--end-17--fm--
---fm--start-18--fm--
 --fm--end-22--fm--
 --fm--start-23--fm--
       isAvatarSpeaking = true;
@@ -1759,8 +1724,6 @@ export function toggleSimpleMode() {
   const startButton = document.getElementById('start-button');
   const isEnteringSimpleMode = content.style.display !== 'none';
   if (isEnteringSimpleMode) {
---fm--end-18--fm--
---fm--start-19--fm--
     // Entering simple mode
     content.style.display = 'none';
     document.body.appendChild(videoWrapper);
@@ -1861,8 +1824,6 @@ function handleTranscription(data, isPushToTalk) {
         currentUtterance = '';
         interimMessageAdded = false;
       }
---fm--end-19--fm--
---fm--start-20--fm--
     }
   } else {
     logger.debug('Interim transcript:', transcript);
@@ -1962,8 +1923,6 @@ function handleDeepgramError(err) {
     try {
       deepgramConnection.finish();
     } catch (closeError) {
---fm--end-20--fm--
---fm--start-21--fm--
       logger.warn('Error while closing Deepgram connection:', closeError);
     }
   }
@@ -2062,8 +2021,6 @@ async function sendChatToGroq() {
       const { value, done: readerDone } = await reader.read();
       done = readerDone;
       if (value) {
---fm--end-21--fm--
---fm--start-22--fm--
         const chunk = new TextDecoder().decode(value);
         logger.debug('Received chunk:', chunk);
         const lines = chunk.split('\n');
@@ -2163,8 +2120,6 @@ async function reinitializeConnection() {
     await new Promise((resolve) => setTimeout(resolve, 2000));
     await initializePersistentStream();
     if (!persistentStreamId || !persistentSessionId) {
---fm--end-22--fm--
---fm--start-23--fm--
       throw new Error('Persistent Stream ID or Session ID is missing after initialization');
     }
     await prepareForStreaming();
@@ -2251,8 +2206,6 @@ avatarImageInput.onchange = (event) => {
   }
 };
 // Export functions and variables that need to be accessed from other modules
---fm--end-23--fm--
---fm--start-24--fm--
 --fm--end-30--fm--
 --fm--start-31--fm--
 export {
@@ -2268,4 +2221,3 @@ export {
   destroyPersistentStream,
 };
 --fm--end-31--fm--
---fm--end-24--fm--
