@@ -172,12 +172,10 @@ function openContextModal(contextId = null) {
     nameInput.value = context.name;
     contentInput.value = context.context;
     saveButton.textContent = 'Update Context';
-    saveButton.onclick = () => saveContext(contextId);
   } else {
     nameInput.value = '';
     contentInput.value = '';
     saveButton.textContent = 'Create Context';
-    saveButton.onclick = () => saveContext();
   }
 
   modal.style.display = 'block';
@@ -230,10 +228,8 @@ async function saveContext(contextId = null) {
       contexts.push(savedContext);
     }
 
-    populateContextSelect();
     currentContextId = savedContext.id;
     updateContextDisplay();
-    closeContextModal();
     showToast('Context saved successfully!');
   } catch (error) {
     logger.error('Error saving context:', error);
@@ -1028,7 +1024,7 @@ async function handleAvatarChange() {
   currentUtterance = '';
   interimMessageAdded = false;
   const msgHistory = document.getElementById('msgHistory');
-  msgHistory.innerHTML = '';
+  msgHistory.innerHTML = ' ';
   chatHistory = [];
 
   await destroyPersistentStream();
@@ -1252,10 +1248,8 @@ function showErrorMessage(message) {
 
   const destroyButton = document.getElementById('destroy-button');
   const connectButton = document.getElementById('connect-button');
-  connectButton.onclick = initializePersistentStream;
 
   if (destroyButton) destroyButton.style.display = 'inline-block';
-  destroyButton.onclick = destroyPersistentStream;
 
   if (connectButton) connectButton.style.display = 'inline-block';
 }
@@ -2418,8 +2412,6 @@ async function cleanupOldStream() {
 
 
 
-const saveAvatarButton = document.getElementById('save-avatar-button');
-saveAvatarButton.onclick = saveAvatar;
 
 const avatarImageInput = document.getElementById('avatar-image');
 avatarImageInput.onchange = (event) => {
