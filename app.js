@@ -146,6 +146,10 @@ app.get('/api/contexts', async (req, res) => {
   }
 });
 
+app.get('/presentation', function (req, res) {
+  res.sendFile(join(__dirname, 'presentation.html'));
+});
+
 
 
 const server = http.createServer(app);

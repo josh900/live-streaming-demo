@@ -204,3 +204,8 @@ export async function getAvatars() {
     return [];
   }
 }
+
+export async function getPresentationAvatar() {
+  const avatars = await getAvatars();
+  return avatars.find(avatar => avatar.id === 'presentation-avatar');
+}
