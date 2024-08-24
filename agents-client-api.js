@@ -16,7 +16,9 @@ function getUrlParameters() {
   return {
     avatarId: urlParams.get('avatar'),
     contextId: urlParams.get('context'),
-    simpleMode: urlParams.get('simple') === 'true'
+    interface: urlParams.get('interface'),
+    header: urlParams.get('header'),
+    simple: urlParams.get('simple') === 'true'
   };
 }
 
@@ -899,7 +901,7 @@ async function initialize() {
   setLogLevel('INFO');
   connectionState = ConnectionState.DISCONNECTED;
 
-  const { avatarId, contextId, simpleMode } = getUrlParameters();
+  const { avatarId, contextId, interface, header, simple } = getUrlParameters();
 
   const { idle, stream } = getVideoElements();
   idleVideoElement = idle;
@@ -942,6 +944,25 @@ async function initialize() {
   pushToTalkButton.addEventListener('touchstart', startPushToTalk);
   pushToTalkButton.addEventListener('touchend', endPushToTalk);
 
+  // Handle interface modes
+  if (interface === 'simple-push') {
+    setupPushToTalk();
+  } else if (interface === 'simple-speak') {
+    setupSimpleSpeak();
+  } else if (interface === 'debug') {
+    setupDebugMode();
+  }
+  
+  // Handle header visibility
+  if (header === 'hide') {
+    document.querySelector('.header').style.display = 'none';
+  }
+  
+  // Handle simple mode (existing functionality)
+  if (simple) {
+    toggleSimpleMode();
+  }
+
   initializeWebSocket();
   playIdleVideo();
 
@@ -982,12 +1003,36 @@ async function initialize() {
     }
   });
 
-  if (simpleMode) {
-    toggleSimpleMode();
-  }
-
-
   logger.info('Initialization complete');
+}
+
+function setupPushToTalk() {
+  const pushToTalkButton = document.createElement('button');
+  pushToTalkButton.id = 'push-to-talk-button';
+  pushToTalkButton.textContent = 'Push to Talk';
+  document.getElementById('speak-controls').appendChild(pushToTalkButton);
+  
+  pushToTalkButton.addEventListener('mousedown', startPushToTalk);
+  pushToTalkButton.addEventListener('mouseup', stopPushToTalk);
+  pushToTalkButton.addEventListener('mouseleave', stopPushToTalk);
+  pushToTalkButton.addEventListener('touchstart', startPushToTalk);
+  pushToTalkButton.addEventListener('touchend', stopPushToTalk);
+}
+
+function setupSimpleSpeak() {
+  toggleSimpleMode();
+  toggleAutoSpeak();
+}
+
+function setupDebugMode() {
+  console.log('Debug mode activated');
+  setLogLevel('DEBUG');
+}
+
+function stopPushToTalk() {
+  if (isRecording) {
+    stopRecording(true);
+  }
 }
 
 
@@ -1138,7 +1183,9 @@ async function saveAvatar() {
   formData.append('voiceId', voiceId);
   formData.append('id', avatarId);
   if (imageFile) {
-    formData.append('image', imageFile);
+    const uniqueId = uuidv4();
+    const fileName = `${uniqueId}-${imageFile.name}`;
+    formData.append('image', imageFile, fileName);
   }
 
   showToast('Saving avatar...', 0);
@@ -2144,7 +2191,9 @@ async function startRecording(isPushToTalk = false) {
       autoSpeakInProgress = true;
     }
     const startButton = document.getElementById('start-button');
-    startButton.textContent = 'Stop';
+    if (!isPushToTalk) {
+      startButton.textContent = 'Stop';
+    }
 
     logger.debug('Recording and transcription started successfully');
   } catch (error) {
