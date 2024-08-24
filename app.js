@@ -38,6 +38,14 @@ app.use(
   }),
 );
 
+app.use(express.static(__dirname, {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    }
+  }
+}));
+
 app.get('/', function (req, res) {
   res.sendFile(join(__dirname, 'index.html'));
 });
@@ -45,6 +53,8 @@ app.get('/', function (req, res) {
 app.get('/agents', function (req, res) {
   res.sendFile(join(__dirname, 'index-agents.html'));
 });
+
+app.use(express.static(__dirname));
 
 app.use(
   '/chat',
