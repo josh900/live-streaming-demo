@@ -1,119 +1,166 @@
-import { initializePersistentStream, startRecording, stopRecording, sendChatToGroq } from './agents-client-api.js';
-import { getDocument, GlobalWorkerOptions } from '/pdfjs/build/pdf.mjs';
-import { PDFViewerApplication } from '/pdfjs/web/viewer.mjs';
+import express from 'express';
+import http from 'http';
+import { WebSocketServer } from 'ws';
+import cors from 'cors';
+import { createProxyMiddleware } from 'http-proxy-middleware';
+import compression from 'compression';
+import multer from 'multer';
+import { createOrUpdateAvatar, getAvatars } from './avatar-manager.js';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import groqServer from './groqServer.js';
+import { readFile, writeFile } from 'fs/promises';
+import { v4 as uuidv4 } from 'uuid';
+import path from 'path';
 
-let pdfDoc = null;
-let pageNum = 1;
-let avatarIntroduced = false;
-const avatarPageNum = 3; // Set this to the page number where the avatar should appear
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-// PDF.js initialization
-GlobalWorkerOptions.workerSrc = '/pdfjs/build/pdf.worker.mjs';
+const port = 3000;
+const upload = multer({ storage: multer.memoryStorage() });
 
-async function loadPDF(url) {
-    try {
-        pdfDoc = await getDocument(url).promise;
-        renderPage(pageNum);
-    } catch (error) {
-        console.error('Error loading PDF:', error);
-    }
-}
+const app = express();
 
-async function renderPage(num) {
-    try {
-        const page = await pdfDoc.getPage(num);
-        const scale = 1.5;
-        const viewport = page.getViewport({ scale: scale });
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
+app.use(compression());
+app.use(cors());
+app.use(express.json());
 
-        const renderContext = {
-            canvasContext: ctx,
-            viewport: viewport
-        };
+// Serve static files
+app.use(express.static(__dirname));
 
-        await page.render(renderContext);
+// Serve PDF.js files
+app.use('/pdfjs', express.static(path.join(__dirname, 'pdfjs')));
 
-        document.getElementById('viewer').innerHTML = '';
-        document.getElementById('viewer').appendChild(canvas);
+app.get('/', function (req, res) {
+  res.sendFile(join(__dirname, 'index.html'));
+});
 
-        if (num === avatarPageNum && !avatarIntroduced) {
-            introduceAvatar();
-        }
-    } catch (error) {
-        console.error('Error rendering page:', error);
-    }
-}
+app.get('/agents', function (req, res) {
+  res.sendFile(join(__dirname, 'index-agents.html'));
+});
 
-async function introduceAvatar() {
-    avatarIntroduced = true;
-    const avatarContainer = document.getElementById('avatarContainer');
-    avatarContainer.style.display = 'block';
-    
-    // Initialize the avatar stream
-    try {
-        await initializePersistentStream();
-        document.getElementById('push-to-talk-button').style.display = 'block';
-        morphAvatarTransition();
-    } catch (error) {
-        console.error('Error initializing avatar stream:', error);
-    }
-}
+app.get('/presentation', function (req, res) {
+  res.sendFile(join(__dirname, 'presentation.html'));
+});
 
-function setupCustomControls() {
-    const nextButton = document.getElementById('next');
-    const prevButton = document.getElementById('previous');
+app.use(
+  '/chat',
+  createProxyMiddleware({
+    target: 'http://localhost:3001',
+    changeOrigin: true,
+  })
+);
 
-    nextButton.addEventListener('click', (e) => {
-        if (pageNum === avatarPageNum && !avatarIntroduced) {
-            e.preventDefault();
-            introduceAvatar();
-        } else if (pageNum < pdfDoc.numPages) {
-            pageNum++;
-            renderPage(pageNum);
-        }
+app.post('/avatar', upload.single('image'), async (req, res) => {
+  try {
+    const { name, voiceId, id } = req.body;
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
     });
+    res.write('data: {"status": "processing"}\n\n');
 
-    prevButton.addEventListener('click', () => {
-        if (pageNum > 1) {
-            pageNum--;
-            renderPage(pageNum);
-        }
-    });
-}
+    const avatar = await createOrUpdateAvatar(id, name, req.file, voiceId || 'en-US-GuyNeural');
 
-function morphAvatarTransition() {
-    const avatarContainer = document.getElementById('avatarContainer');
-    const idleVideo = document.getElementById('idle-video-element');
-    
-    // Start with the static image
-    idleVideo.style.opacity = '0';
-    avatarContainer.style.backgroundImage = 'url(image.png)';
-    avatarContainer.style.backgroundSize = 'cover';
-    
-    // Transition to the video
-    setTimeout(() => {
-        avatarContainer.style.backgroundImage = 'none';
-        idleVideo.style.opacity = '1';
-        avatarContainer.classList.add('introduced');
-    }, 1000);
-}
+    res.write('data: {"status": "completed", "avatar": ' + JSON.stringify(avatar) + '}\n\n');
+    res.end();
+  } catch (error) {
+    console.error('Error creating/updating avatar:', error);
+    res.write('data: {"status": "error", "message": "Failed to create/update avatar"}\n\n');
+    res.end();
+  }
+});
 
-// Event listeners
-document.getElementById('push-to-talk-button').addEventListener('mousedown', startRecording);
-document.getElementById('push-to-talk-button').addEventListener('mouseup', stopRecording);
-document.getElementById('push-to-talk-button').addEventListener('mouseleave', stopRecording);
+app.get('/avatars', async (req, res) => {
+  try {
+    const avatars = await getAvatars();
+    res.json(avatars);
+  } catch (error) {
+    console.error('Error getting avatars:', error);
+    res.status(500).json({ error: 'Failed to get avatars' });
+  }
+});
 
-// Initialize the presentation
-async function initPresentation() {
-    await loadPDF('presentation.pdf');
-    setupCustomControls();
-    PDFViewerApplication.initializedPromise.then(() => {
-        // Any additional setup after PDF.js is fully initialized
-    });
-}
+app.get('/contexts', async (req, res) => {
+  try {
+    const contexts = JSON.parse(await readFile('contexts.json', 'utf8'));
+    res.json(contexts);
+  } catch (error) {
+    console.error('Error reading contexts:', error);
+    res.status(500).json({ error: 'Failed to get contexts' });
+  }
+});
 
-// Start the presentation
-initPresentation();
+app.post('/context', async (req, res) => {
+  try {
+    const { id, name, context } = req.body;
+    const contexts = JSON.parse(await readFile('contexts.json', 'utf8'));
+
+    if (id) {
+      const index = contexts.findIndex(c => c.id === id);
+      if (index !== -1) {
+        contexts[index] = { id, name, context };
+      } else {
+        throw new Error('Context not found');
+      }
+    } else {
+      const newContext = { id: uuidv4(), name, context };
+      contexts.push(newContext);
+    }
+
+    await writeFile('contexts.json', JSON.stringify(contexts, null, 2));
+    res.json(id ? contexts.find(c => c.id === id) : contexts[contexts.length - 1]);
+  } catch (error) {
+    console.error('Error saving context:', error);
+    res.status(500).json({ error: 'Failed to save context' });
+  }
+});
+
+app.get('/api/avatars', async (req, res) => {
+  try {
+    const avatarsFile = path.join(__dirname, 'avatars.json');
+    const avatarsData = await readFile(avatarsFile, 'utf8');
+    const avatars = JSON.parse(avatarsData);
+    res.json(avatars);
+  } catch (error) {
+    console.error('Error reading avatars file:', error);
+    res.status(500).json({ error: 'Failed to retrieve avatars' });
+  }
+});
+
+app.get('/api/contexts', async (req, res) => {
+  try {
+    const contextsFile = path.join(__dirname, 'contexts.json');
+    const contextsData = await readFile(contextsFile, 'utf8');
+    const contexts = JSON.parse(contextsData);
+    const filteredContexts = contexts.map(({ id, name }) => ({ id, name }));
+    res.json(filteredContexts);
+  } catch (error) {
+    console.error('Error reading contexts file:', error);
+    res.status(500).json({ error: 'Failed to retrieve contexts' });
+  }
+});
+
+const server = http.createServer(app);
+
+const wss = new WebSocketServer({ server });
+
+wss.on('connection', (ws) => {
+  console.log('WebSocket client connected');
+
+  ws.on('message', (message) => {
+    console.log('Received message:', message);
+  });
+
+  ws.on('close', () => {
+    console.log('WebSocket client disconnected');
+  });
+});
+
+server.listen(port, () => {
+  console.log(`Server started on port localhost:${port}`);
+  console.log(`http://localhost:${port}`);
+  console.log(`http://localhost:${port}/agents`);
+  console.log(`http://localhost:${port}/presentation`);
+});
