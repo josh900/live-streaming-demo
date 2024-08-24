@@ -2553,4 +2553,7 @@ export {
   toggleAutoSpeak,
   initializePersistentStream,
   destroyPersistentStream,
+  startRecording,
+  stopRecording,
+  sendChatToGroq
 };
