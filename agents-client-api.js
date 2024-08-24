@@ -4,6 +4,13 @@ import logger from './logger.js';
 
 const { createClient, LiveTranscriptionEvents } = deepgram;
 
+export {
+  initializePersistentStream,
+  startRecording,
+    stopRecording,
+  sendChatToGroq
+};
+
 function getUrlParameters() {
   const urlParams = new URLSearchParams(window.location.search);
   return {
@@ -2551,9 +2558,5 @@ export {
   updateContext,
   handleTextInput,
   toggleAutoSpeak,
-  initializePersistentStream,
-  destroyPersistentStream,
-  startRecording,
-  stopRecording,
-  sendChatToGroq
+  destroyPersistentStream
 };
