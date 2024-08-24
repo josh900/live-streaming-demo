@@ -122,7 +122,7 @@ function getCurrentContext() {
 
 function populateContextSelect() {
   const contextSelect = document.getElementById('context-select');
-  contextSelect.innerHTML = '';
+  contextSelect.innerHTML = ' ';
 
   const createNewOption = document.createElement('option');
   createNewOption.value = 'create-new';
@@ -2351,7 +2351,7 @@ async function reinitializeConnection() {
     interimMessageAdded = false;
 
     const msgHistory = document.getElementById('msgHistory');
-    msgHistory.innerHTML = '';
+    msgHistory.innerHTML = ' ';
     chatHistory = [];
 
     // Reset video elements
@@ -2414,16 +2414,7 @@ async function cleanupOldStream() {
 
 
 const avatarImageInput = document.getElementById('avatar-image');
-avatarImageInput.onchange = (event) => {
-  const file = event.target.files[0];
-  if (file) {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      document.getElementById('avatar-image-preview').src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  }
-};
+
 
 // Export functions and variables that need to be accessed from other modules
 export {
