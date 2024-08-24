@@ -115,7 +115,7 @@ if (pushToTalkButton) {
 
 // Initialize the presentation
 async function initPresentation() {
-    await loadPDF('/path/to/your/presentation.pdf');
+    await loadPDF('presentation.pdf');
     setupCustomControls();
     PDFViewerApplication.initializedPromise.then(() => {
         // Any additional setup after PDF.js is fully initialized
