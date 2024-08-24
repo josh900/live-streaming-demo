@@ -11,6 +11,7 @@ import { dirname, join } from 'path';
 import groqServer from './groqServer.js';
 import { readFile, writeFile } from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
+import { readFile } from 'fs/promises';
 import path from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
