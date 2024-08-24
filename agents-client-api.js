@@ -911,7 +911,6 @@ async function initialize() {
 
   await loadAvatars(avatarId);
   await loadContexts(contextId);
-  populateAvatarSelect();
   populateContextSelect();
   updateContextDisplay();
 
@@ -1059,32 +1058,6 @@ async function loadAvatars(selectedAvatarId) {
 
 
 
-
-function populateAvatarSelect() {
-  const avatarSelect = document.getElementById('avatar-select');
-  avatarSelect.innerHTML = '';
-
-  const createNewOption = document.createElement('option');
-  createNewOption.value = 'create-new';
-  createNewOption.textContent = 'Create New Avatar';
-  avatarSelect.appendChild(createNewOption);
-
-  for (const avatar of avatars) {
-    const option = document.createElement('option');
-    option.value = avatar.id;
-    option.textContent = avatar.name;
-    avatarSelect.appendChild(option);
-  }
-
-  if (avatars.length > 0) {
-    if (!currentAvatarId) {
-      currentAvatarId = avatars[0].id;
-    }
-    avatarSelect.value = currentAvatarId;
-  } else {
-    avatarSelect.value = 'create-new';
-  }
-}
 
 
 
@@ -2443,45 +2416,7 @@ async function cleanupOldStream() {
   }
 }
 
-const connectButton = document.getElementById('connect-button');
-connectButton.onclick = initializeConnection;
 
-const destroyButton = document.getElementById('destroy-button');
-destroyButton.onclick = async () => {
-  try {
-    await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}`, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ session_id: sessionId }),
-    });
-
-    logger.debug('Stream destroyed successfully');
-  } catch (error) {
-    logger.error('Error destroying stream:', error);
-  } finally {
-    stopAllStreams();
-    closePC();
-  }
-};
-
-const startButton = document.getElementById('start-button');
-
-startButton.onclick = async () => {
-  logger.info('Start button clicked. Current state:', isRecording ? 'Recording' : 'Not recording');
-  if (!isRecording) {
-    try {
-      await startRecording();
-    } catch (error) {
-      logger.error('Failed to start recording:', error);
-      showErrorMessage('Failed to start recording. Please try again.');
-    }
-  } else {
-    await stopRecording();
-  }
-};
 
 const saveAvatarButton = document.getElementById('save-avatar-button');
 saveAvatarButton.onclick = saveAvatar;
