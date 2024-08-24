@@ -36,7 +36,7 @@ async function renderPage(num) {
 
         await page.render(renderContext);
 
-        document.getElementById('viewer').innerHTML = '';
+        document.getElementById('viewer').innerHTML = ' ';
         document.getElementById('viewer').appendChild(canvas);
 
         if (num === avatarPageNum && !avatarIntroduced) {
