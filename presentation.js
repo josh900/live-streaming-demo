@@ -94,7 +94,7 @@ function morphAvatarTransition() {
     
     // Start with the static image
     idleVideo.style.opacity = '0';
-    avatarContainer.style.backgroundImage = 'url(/path/to/static/avatar/image.png)';
+    avatarContainer.style.backgroundImage = 'url(image.png)';
     avatarContainer.style.backgroundSize = 'cover';
     
     // Transition to the video
