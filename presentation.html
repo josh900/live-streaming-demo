@@ -1,34 +1,65 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DTM Presentation</title>
     <link rel="stylesheet" href="/pdfjs/web/viewer.css">
     <link rel="stylesheet" href="/style-agents.css">
-    <script src="/pdfjs/build/pdf.mjs" type="module"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+        #pdf-viewer {
+            width: 100%;
+            height: 100%;
+        }
+        #avatarContainer {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            display: none;
+        }
+        #push-to-talk-button {
+            margin-top: 10px;
+            padding: 10px;
+            width: 100%;
+        }
+        .controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+        }
+        .controls button {
+            margin: 0 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+    </style>
 </head>
 <body>
-    <div id="outerContainer">
-        <div id="sidebarContainer">
-            <!-- PDF.js sidebar content -->
-        </div>
-        <div id="mainContainer">
-            <div id="toolbar">
-                <!-- PDF.js toolbar content -->
-            </div>
-            <div id="viewerContainer">
-                <div id="viewer" class="pdfViewer"></div>
-            </div>
-        </div>
-    </div>
-    <div id="avatarContainer" style="display: none; position: fixed; bottom: 20px; right: 20px; z-index: 1000;">
+    <div id="pdf-viewer"></div>
+
+    <div id="avatarContainer">
         <div id="video-wrapper">
             <video id="idle-video-element" width="200" height="200" autoplay loop muted></video>
             <video id="stream-video-element" width="200" height="200" autoplay></video>
         </div>
-        <button id="push-to-talk-button" style="display: none;">Push to Talk</button>
+        <button id="push-to-talk-button">Push to Talk</button>
     </div>
-    <script src="/pdfjs/web/viewer.mjs" type="module"></script>
+
+    <div class="controls">
+        <button id="prev-page">Previous</button>
+        <button id="next-page">Next</button>
+    </div>
+
+    <script src="/pdfjs/build/pdf.mjs" type="module"></script>
     <script src="/presentation.js" type="module"></script>
 </body>
 </html>
