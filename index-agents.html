@@ -70,7 +70,6 @@
           <button id="connect-button" type="button">Connect</button>
           <button id="destroy-button" type="button">Destroy</button>
           <button id="edit-avatar-button" type="button">Edit Avatar</button>
-          <button id="push-to-talk-button" style="display: none;">Push to Talk</button>
         </div>
       </div>
 
@@ -183,12 +182,10 @@
       updateContext,
       handleTextInput,
       toggleAutoSpeak,
-      toggleSimpleMode,
-      toggleSimplePushTalkMode,
-      startPushToTalk,
-      endPushToTalk
+      toggleSimpleMode
     } from './agents-client-api.js';
-  
+
+
     // Make closeAvatarModal available globally
     window.closeAvatarModal = closeAvatarModal;
     // Initialize the app when the DOM is ready
@@ -197,21 +194,14 @@
     } else {
       initialize();
     }
-  
-    const pushToTalkButton = document.getElementById('push-to-talk-button');
-    pushToTalkButton.addEventListener('mousedown', startPushToTalk);
-    pushToTalkButton.addEventListener('mouseup', endPushToTalk);
-    pushToTalkButton.addEventListener('mouseleave', endPushToTalk);
-    pushToTalkButton.addEventListener('touchstart', startPushToTalk);
-    pushToTalkButton.addEventListener('touchend', endPushToTalk);
   </script>
-  
   <script src="https://cdnjs.cloudflare.com/ajax/libs/dom-parser/0.1.5/dom-parser.min.js"></script>
 
   <script type="module">
     import { toggleSimpleMode } from './agents-client-api.js';
     document.getElementById('simple-mode-button').addEventListener('click', toggleSimpleMode);
   </script>
+
 
 </body>
 

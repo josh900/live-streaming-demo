@@ -9,67 +9,9 @@ function getUrlParameters() {
   return {
     avatarId: urlParams.get('avatar'),
     contextId: urlParams.get('context'),
-    interfaceMode: urlParams.get('interfaceMode')
+    simpleMode: urlParams.get('simple') === 'true'
   };
 }
-
-
-function toggleSimplePushTalkMode() {
-  const content = document.getElementById('content');
-  const videoWrapper = document.getElementById('video-wrapper');
-  const simpleModeButton = document.getElementById('simple-mode-button');
-  const header = document.querySelector('.header');
-  const pushToTalkButton = document.getElementById('push-to-talk-button');
-
-  const isEnteringSimplePushTalkMode = content.style.display !== 'none';
-
-  if (isEnteringSimplePushTalkMode) {
-    content.style.display = 'none';
-    document.body.appendChild(videoWrapper);
-    videoWrapper.style.position = 'fixed';
-    videoWrapper.style.top = '50%';
-    videoWrapper.style.left = '50%';
-    videoWrapper.style.transform = 'translate(-50%, -50%)';
-    simpleModeButton.textContent = 'Exit';
-    simpleModeButton.classList.add('simple-mode');
-    header.style.position = 'fixed';
-    header.style.width = '100%';
-    header.style.zIndex = '1000';
-
-    pushToTalkButton.style.display = 'block';
-    pushToTalkButton.style.position = 'fixed';
-    pushToTalkButton.style.bottom = '20px';
-    pushToTalkButton.style.left = '50%';
-    pushToTalkButton.style.transform = 'translateX(-50%)';
-
-    // Update URL
-    const url = new URL(window.location);
-    url.searchParams.set('interfaceMode', 'simplePushTalk');
-    window.history.pushState({}, '', url);
-  } else {
-    content.style.display = 'flex';
-    const leftColumn = document.getElementById('left-column');
-    leftColumn.appendChild(videoWrapper);
-    videoWrapper.style.position = 'relative';
-    videoWrapper.style.top = 'auto';
-    videoWrapper.style.left = 'auto';
-    videoWrapper.style.transform = 'none';
-    simpleModeButton.textContent = 'Simple Mode';
-    simpleModeButton.classList.remove('simple-mode');
-    header.style.position = 'static';
-    header.style.width = 'auto';
-
-    pushToTalkButton.style.display = 'none';
-
-    // Update URL
-    const url = new URL(window.location);
-    url.searchParams.delete('interfaceMode');
-    window.history.pushState({}, '', url);
-  }
-}
-
-
-
 
 const deepgramClient = createClient(DID_API.deepgramKey);
 
@@ -927,16 +869,22 @@ function togglePushToTalk() {
 
 
 function endPushToTalk() {
-  if (!isRecording) return;
-  stopRecording(true);
-  sendChatToGroq();
+  if (!isPushToTalkEnabled) return;
+  clearTimeout(pushToTalkTimer);
+  const duration = Date.now() - pushToTalkStartTime;
+  if (duration >= MIN_PUSH_TO_TALK_DURATION) {
+    stopRecording(true);
+  }
+  pushToTalkStartTime = 0;
 }
 
 
-
 function startPushToTalk() {
-  if (isRecording) return;
-  startRecording(true);
+  if (!isPushToTalkEnabled) return;
+  pushToTalkStartTime = Date.now();
+  pushToTalkTimer = setTimeout(() => {
+    startRecording(true);
+  }, MIN_PUSH_TO_TALK_DURATION);
 }
 
 
@@ -944,7 +892,7 @@ async function initialize() {
   setLogLevel('INFO');
   connectionState = ConnectionState.DISCONNECTED;
 
-  const { avatarId, contextId, interfaceMode } = getUrlParameters();
+  const { avatarId, contextId, simpleMode } = getUrlParameters();
 
   const { idle, stream } = getVideoElements();
   idleVideoElement = idle;
@@ -1027,11 +975,10 @@ async function initialize() {
     }
   });
 
-  if (interfaceMode === 'simpleVoice') {
+  if (simpleMode) {
     toggleSimpleMode();
-  } else if (interfaceMode === 'simplePushTalk') {
-    toggleSimplePushTalkMode();
   }
+
 
   logger.info('Initialization complete');
 }
@@ -1971,73 +1918,74 @@ async function startStreaming(assistantReply) {
   }
 }
 
-function toggleSimpleMode() {
-  const { interfaceMode } = getUrlParameters();
-  
-  if (interfaceMode === 'simplePushTalk') {
-    toggleSimplePushTalkMode();
-  } else {
-    const content = document.getElementById('content');
-    const videoWrapper = document.getElementById('video-wrapper');
-    const simpleModeButton = document.getElementById('simple-mode-button');
-    const header = document.querySelector('.header');
-    const autoSpeakToggle = document.getElementById('auto-speak-toggle');
-    const startButton = document.getElementById('start-button');
+export function toggleSimpleMode() {
+  const content = document.getElementById('content');
+  const videoWrapper = document.getElementById('video-wrapper');
+  const simpleModeButton = document.getElementById('simple-mode-button');
+  const header = document.querySelector('.header');
+  const autoSpeakToggle = document.getElementById('auto-speak-toggle');
+  const startButton = document.getElementById('start-button');
 
-    const isEnteringSimpleMode = content.style.display !== 'none';
+  const isEnteringSimpleMode = content.style.display !== 'none';
 
-    if (isEnteringSimpleMode) {
-      content.style.display = 'none';
-      document.body.appendChild(videoWrapper);
-      videoWrapper.style.position = 'fixed';
-      videoWrapper.style.top = '50%';
-      videoWrapper.style.left = '50%';
-      videoWrapper.style.transform = 'translate(-50%, -50%)';
-      simpleModeButton.textContent = 'Exit';
-      simpleModeButton.classList.add('simple-mode');
-      header.style.position = 'fixed';
-      header.style.width = '100%';
-      header.style.zIndex = '1000';
+  if (isEnteringSimpleMode) {
+    // Entering simple mode
+    content.style.display = 'none';
+    document.body.appendChild(videoWrapper);
+    videoWrapper.style.position = 'fixed';
+    videoWrapper.style.top = '50%';
+    videoWrapper.style.left = '50%';
+    videoWrapper.style.transform = 'translate(-50%, -50%)';
+    simpleModeButton.textContent = 'Exit';
+    simpleModeButton.classList.add('simple-mode');
+    header.style.position = 'fixed';
+    header.style.width = '100%';
+    header.style.zIndex = '1000';
 
-      if (autoSpeakToggle.textContent.includes('Off')) {
-        autoSpeakToggle.click();
-      }
-
-      if (startButton.textContent === 'Speak') {
-        startButton.click();
-      }
-
-      const url = new URL(window.location);
-      url.searchParams.set('interfaceMode', 'simpleVoice');
-      window.history.pushState({}, '', url);
-    } else {
-      content.style.display = 'flex';
-      const leftColumn = document.getElementById('left-column');
-      leftColumn.appendChild(videoWrapper);
-      videoWrapper.style.position = 'relative';
-      videoWrapper.style.top = 'auto';
-      videoWrapper.style.left = 'auto';
-      videoWrapper.style.transform = 'none';
-      simpleModeButton.textContent = 'Simple Mode';
-      simpleModeButton.classList.remove('simple-mode');
-      header.style.position = 'static';
-      header.style.width = 'auto';
-
-      if (autoSpeakToggle.textContent.includes('On')) {
-        autoSpeakToggle.click();
-      }
-
-      if (startButton.textContent === 'Stop') {
-        startButton.click();
-      }
-
-      const url = new URL(window.location);
-      url.searchParams.delete('interfaceMode');
-      window.history.pushState({}, '', url);
+    // Turn on auto-speak if it's not already on
+    if (autoSpeakToggle.textContent.includes('Off')) {
+      autoSpeakToggle.click();
     }
+
+    // Start recording if it's not already recording
+    if (startButton.textContent === 'Speak') {
+      startButton.click();
+    }
+
+    // Update URL
+    const url = new URL(window.location);
+    url.searchParams.set('simple', 'true');
+    window.history.pushState({}, '', url);
+  } else {
+    // Exiting simple mode
+    content.style.display = 'flex';
+    const leftColumn = document.getElementById('left-column');
+    leftColumn.appendChild(videoWrapper);
+    videoWrapper.style.position = 'relative';
+    videoWrapper.style.top = 'auto';
+    videoWrapper.style.left = 'auto';
+    videoWrapper.style.transform = 'none';
+    simpleModeButton.textContent = 'Simple Mode';
+    simpleModeButton.classList.remove('simple-mode');
+    header.style.position = 'static';
+    header.style.width = 'auto';
+
+    // Turn off auto-speak
+    if (autoSpeakToggle.textContent.includes('On')) {
+      autoSpeakToggle.click();
+    }
+
+    // Stop recording
+    if (startButton.textContent === 'Stop') {
+      startButton.click();
+    }
+
+    // Update URL
+    const url = new URL(window.location);
+    url.searchParams.delete('simple');
+    window.history.pushState({}, '', url);
   }
 }
-
 
 
 
@@ -2103,7 +2051,6 @@ function handleTranscription(data, isPushToTalk) {
     updateTranscript(currentUtterance + transcript, false);
   }
 }
-
 
 async function startRecording(isPushToTalk = false) {
   if (isRecording && !isPushToTalk) {
@@ -2557,8 +2504,4 @@ export {
   toggleAutoSpeak,
   initializePersistentStream,
   destroyPersistentStream,
-  toggleSimpleMode,
-  toggleSimplePushTalkMode,
-  startPushToTalk,
-  endPushToTalk,
 };
