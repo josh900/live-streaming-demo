@@ -43,12 +43,18 @@
     #content {
       padding: 20px;
     }
+
+    /* Add this new style for initialization */
+    body.initializing #content,
+    body.initializing #simple-mode-button {
+      display: none;
+    }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/8.3.2/uuid.min.js"></script>
 
 </head>
 
-<body>
+<body class="initializing">
   <div class="header">
     <img src="https://cdn.prod.website-files.com/6316d11d553f411d6f1fa732/633ac440413e418b480baaf8_skoop-logo-p-500.png"
       alt="SKOOP logo" />

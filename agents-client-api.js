@@ -987,9 +987,13 @@ async function initialize() {
     }
   });
 
+  // Apply simple mode after initialization is complete
   if (interfaceMode === 'simpleVoice' || interfaceMode === 'simplePushTalk') {
     toggleSimpleMode(interfaceMode);
   }
+
+  // Remove the initialization class to show the content
+  document.body.classList.remove('initializing');
 
   logger.info('Initialization complete');
 }
