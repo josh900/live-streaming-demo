@@ -872,23 +872,28 @@ function togglePushToTalk() {
 }
 
 
-function endPushToTalk() {
+function startPushToTalk(event) {
   if (!isPushToTalkEnabled) return;
+  event.preventDefault();
+  pushToTalkStartTime = Date.now();
+  const logoWrapper = document.getElementById('logo-wrapper');
+  logoWrapper.classList.add('active');
+  pushToTalkTimer = setTimeout(() => {
+    startRecording(true);
+  }, MIN_PUSH_TO_TALK_DURATION);
+}
+
+function endPushToTalk(event) {
+  if (!isPushToTalkEnabled) return;
+  event.preventDefault();
   clearTimeout(pushToTalkTimer);
+  const logoWrapper = document.getElementById('logo-wrapper');
+  logoWrapper.classList.remove('active');
   const duration = Date.now() - pushToTalkStartTime;
   if (duration >= MIN_PUSH_TO_TALK_DURATION) {
     stopRecording(true);
   }
   pushToTalkStartTime = 0;
-}
-
-
-function startPushToTalk() {
-  if (!isPushToTalkEnabled) return;
-  pushToTalkStartTime = Date.now();
-  pushToTalkTimer = setTimeout(() => {
-    startRecording(true);
-  }, MIN_PUSH_TO_TALK_DURATION);
 }
 
 
@@ -1014,7 +1019,7 @@ function applySimpleMode(mode) {
   const videoWrapper = document.getElementById('video-wrapper');
   const simpleModeButton = document.getElementById('simple-mode-button');
   const header = document.querySelector('.header');
-  let simplePushTalkButton = document.getElementById('simple-push-talk-button');
+  const logoWrapper = document.getElementById('logo-wrapper');
 
   content.style.display = 'none';
   document.body.appendChild(videoWrapper);
@@ -1039,10 +1044,14 @@ function applySimpleMode(mode) {
     if (!isPushToTalkEnabled) {
       togglePushToTalk();
     }
-    if (!simplePushTalkButton) {
-      simplePushTalkButton = createSimplePushTalkButton();
-    }
-    simplePushTalkButton.style.display = 'block';
+    document.body.classList.add('simple-push-talk');
+    logoWrapper.style.backgroundImage = "url('Slogo_PushTalk.svg')";
+    
+    document.body.addEventListener('mousedown', startPushToTalk);
+    document.body.addEventListener('mouseup', endPushToTalk);
+    document.body.addEventListener('mouseleave', endPushToTalk);
+    document.body.addEventListener('touchstart', startPushToTalk);
+    document.body.addEventListener('touchend', endPushToTalk);
   }
 
   currentInterfaceMode = mode;
@@ -1054,37 +1063,67 @@ function exitSimpleMode() {
   const videoWrapper = document.getElementById('video-wrapper');
   const simpleModeButton = document.getElementById('simple-mode-button');
   const header = document.querySelector('.header');
-  const simplePushTalkButton = document.getElementById('simple-push-talk-button');
-
-  content.style.display = 'flex';
+  const logoWrapper = document.getElementById('logo-wrapper');
   const leftColumn = document.getElementById('left-column');
+
+  // Reset content display
+  content.style.display = 'flex';
+  
+  // Move video wrapper back to its original position
   leftColumn.appendChild(videoWrapper);
   videoWrapper.style.position = 'relative';
   videoWrapper.style.top = 'auto';
   videoWrapper.style.left = 'auto';
   videoWrapper.style.transform = 'none';
+
+  // Reset button text and remove simple mode class
   simpleModeButton.textContent = 'Simple Mode';
   simpleModeButton.classList.remove('simple-mode');
+
+  // Reset header styles
   header.style.position = 'static';
   header.style.width = 'auto';
 
+  // Reset logo
+  logoWrapper.style.backgroundImage = "url('Slogo.svg')";
+  document.body.classList.remove('simple-push-talk');
+
+  // Remove push-to-talk event listeners
+  document.body.removeEventListener('mousedown', startPushToTalk);
+  document.body.removeEventListener('mouseup', endPushToTalk);
+  document.body.removeEventListener('mouseleave', endPushToTalk);
+  document.body.removeEventListener('touchstart', startPushToTalk);
+  document.body.removeEventListener('touchend', endPushToTalk);
+
+  // Disable auto-speak if it's on
   if (autoSpeakMode) {
     toggleAutoSpeak();
   }
+
+  // Disable push-to-talk if it's on
   if (isPushToTalkEnabled) {
     togglePushToTalk();
   }
+
+  // Stop recording if it's active
   if (isRecording) {
     stopRecording();
   }
-  if (simplePushTalkButton) {
-    simplePushTalkButton.style.display = 'none';
-  }
 
+  // Reset interface mode
   currentInterfaceMode = null;
+
+  // Re-enable any hidden controls
+  const speakControls = document.getElementById('speak-controls');
+  const textInputControls = document.getElementById('text-input-controls');
+  if (speakControls) speakControls.style.display = 'flex';
+  if (textInputControls) textInputControls.style.display = 'flex';
+
+  // Reset any custom styles applied to the body
+  document.body.style.cursor = 'default';
+
   logger.info('Exited simple mode');
 }
-
 
 
 async function handleAvatarChange() {
