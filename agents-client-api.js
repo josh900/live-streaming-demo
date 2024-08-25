@@ -1087,7 +1087,7 @@ function exitSimpleMode() {
 
   // Reset logo
   logoWrapper.style.backgroundImage = "url('Slogo.svg')";
-  logoWrapper.style.width = '50px'; // Reset to original width
+  logoWrapper.style.width = '15%'; // Reset to original width
 
   // Remove simple push talk class from body
   document.body.classList.remove('simple-push-talk');
