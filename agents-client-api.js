@@ -9,7 +9,7 @@ function getUrlParameters() {
   return {
     avatarId: urlParams.get('avatar'),
     contextId: urlParams.get('context'),
-    simpleMode: urlParams.get('simple') === 'true'
+    interfaceMode: urlParams.get('interfaceMode')
   };
 }
 
@@ -892,7 +892,7 @@ async function initialize() {
   setLogLevel('INFO');
   connectionState = ConnectionState.DISCONNECTED;
 
-  const { avatarId, contextId, simpleMode } = getUrlParameters();
+  const { avatarId, contextId, interfaceMode } = getUrlParameters();
 
   const { idle, stream } = getVideoElements();
   idleVideoElement = idle;
@@ -921,6 +921,7 @@ async function initialize() {
   const editAvatarButton = document.getElementById('edit-avatar-button');
   const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
   const pushToTalkButton = document.getElementById('push-to-talk-button');
+  const simplePushTalkButton = document.getElementById('simple-push-talk-button');
 
   sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
   textInput.addEventListener('keypress', (event) => {
@@ -934,6 +935,14 @@ async function initialize() {
   pushToTalkButton.addEventListener('mouseleave', endPushToTalk);
   pushToTalkButton.addEventListener('touchstart', startPushToTalk);
   pushToTalkButton.addEventListener('touchend', endPushToTalk);
+  
+  if (simplePushTalkButton) {
+    simplePushTalkButton.addEventListener('mousedown', startPushToTalk);
+    simplePushTalkButton.addEventListener('mouseup', endPushToTalk);
+    simplePushTalkButton.addEventListener('mouseleave', endPushToTalk);
+    simplePushTalkButton.addEventListener('touchstart', startPushToTalk);
+    simplePushTalkButton.addEventListener('touchend', endPushToTalk);
+  }
 
   initializeWebSocket();
   playIdleVideo();
@@ -975,10 +984,11 @@ async function initialize() {
     }
   });
 
-  if (simpleMode) {
-    toggleSimpleMode();
+  if (interfaceMode === 'simpleVoice') {
+    toggleSimpleMode('voice');
+  } else if (interfaceMode === 'simplePushTalk') {
+    toggleSimpleMode('pushTalk');
   }
-
 
   logger.info('Initialization complete');
 }
@@ -1918,13 +1928,16 @@ async function startStreaming(assistantReply) {
   }
 }
 
-export function toggleSimpleMode() {
+export function toggleSimpleMode(mode = 'voice') {
   const content = document.getElementById('content');
   const videoWrapper = document.getElementById('video-wrapper');
   const simpleModeButton = document.getElementById('simple-mode-button');
   const header = document.querySelector('.header');
   const autoSpeakToggle = document.getElementById('auto-speak-toggle');
   const startButton = document.getElementById('start-button');
+  const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
+  const pushToTalkButton = document.getElementById('push-to-talk-button');
+  let simplePushTalkButton = document.getElementById('simple-push-talk-button');
 
   const isEnteringSimpleMode = content.style.display !== 'none';
 
@@ -1942,19 +1955,45 @@ export function toggleSimpleMode() {
     header.style.width = '100%';
     header.style.zIndex = '1000';
 
-    // Turn on auto-speak if it's not already on
-    if (autoSpeakToggle.textContent.includes('Off')) {
-      autoSpeakToggle.click();
-    }
+    if (mode === 'voice') {
+      // Turn on auto-speak if it's not already on
+      if (autoSpeakToggle.textContent.includes('Off')) {
+        autoSpeakToggle.click();
+      }
 
-    // Start recording if it's not already recording
-    if (startButton.textContent === 'Speak') {
-      startButton.click();
+      // Start recording if it's not already recording
+      if (startButton.textContent === 'Speak') {
+        startButton.click();
+      }
+    } else if (mode === 'pushTalk') {
+      // Turn on push-to-talk if it's not already on
+      if (pushToTalkToggle.textContent.includes('Off')) {
+        pushToTalkToggle.click();
+      }
+
+      // Create and add the simple push-to-talk button if it doesn't exist
+      if (!simplePushTalkButton) {
+        simplePushTalkButton = document.createElement('button');
+        simplePushTalkButton.id = 'simple-push-talk-button';
+        simplePushTalkButton.textContent = 'Push to Talk';
+        simplePushTalkButton.style.position = 'fixed';
+        simplePushTalkButton.style.bottom = '20px';
+        simplePushTalkButton.style.left = '50%';
+        simplePushTalkButton.style.transform = 'translateX(-50%)';
+        simplePushTalkButton.style.zIndex = '1001';
+        simplePushTalkButton.addEventListener('mousedown', startPushToTalk);
+        simplePushTalkButton.addEventListener('mouseup', endPushToTalk);
+        simplePushTalkButton.addEventListener('mouseleave', endPushToTalk);
+        simplePushTalkButton.addEventListener('touchstart', startPushToTalk);
+        simplePushTalkButton.addEventListener('touchend', endPushToTalk);
+        document.body.appendChild(simplePushTalkButton);
+      }
+      simplePushTalkButton.style.display = 'block';
     }
 
     // Update URL
     const url = new URL(window.location);
-    url.searchParams.set('simple', 'true');
+    url.searchParams.set('interfaceMode', mode === 'voice' ? 'simpleVoice' : 'simplePushTalk');
     window.history.pushState({}, '', url);
   } else {
     // Exiting simple mode
@@ -1975,14 +2014,24 @@ export function toggleSimpleMode() {
       autoSpeakToggle.click();
     }
 
+    // Turn off push-to-talk
+    if (pushToTalkToggle.textContent.includes('On')) {
+      pushToTalkToggle.click();
+    }
+
     // Stop recording
     if (startButton.textContent === 'Stop') {
       startButton.click();
     }
 
+    // Remove or hide the simple push-to-talk button
+    if (simplePushTalkButton) {
+      simplePushTalkButton.style.display = 'none';
+    }
+
     // Update URL
     const url = new URL(window.location);
-    url.searchParams.delete('simple');
+    url.searchParams.delete('interfaceMode');
     window.history.pushState({}, '', url);
   }
 }
