@@ -139,16 +139,17 @@ function populateContextSelect() {
 }
 
 function handleIncomingMessage(event) {
-  // In a production environment, you should validate the origin to prevent potential security risks.
-  console.log('Received message from origin:', event.origin);
 
   const { action, text } = event.data;
 
   if (action === 'speak') {
     // Trigger the avatar to speak the received text
-    handleTextInput(text);
+    speakDirectly(text);
   }
 }
+
+
+
 window.addEventListener('message', handleIncomingMessage, false);
 
 function notifyParentWindowReady() {
@@ -479,6 +480,25 @@ function updateTranscript(text, isFinal) {
     }
   }
   msgHistory.scrollTop = msgHistory.scrollHeight;
+}
+
+async function speakDirectly(text) {
+  if (!text.trim()) {
+    console.warn('Received empty text for direct speech');
+    return;
+  }
+
+  try {
+    // Update the chat history UI
+    const msgHistory = document.getElementById('msgHistory');
+    msgHistory.innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
+    msgHistory.scrollTop = msgHistory.scrollHeight;
+
+    // Trigger the avatar to speak
+    await startStreaming(text);
+  } catch (error) {
+    console.error('Error in direct speech:', error);
+  }
 }
 
 function handleTextInput(text) {
@@ -2658,4 +2678,5 @@ export {
   toggleAutoSpeak,
   initializePersistentStream,
   destroyPersistentStream,
+  speakDirectly
 };
