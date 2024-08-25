@@ -1031,21 +1031,6 @@ if (headerBar && header) {
    // Check if the application is running in an iframe
    if (window.self !== window.top) {
     console.log('Running in iframe mode');
-    // Hide unnecessary UI elements when in iframe mode
-    document.getElementById('header-bar').style.display = 'none';
-    document.getElementById('left-column').style.display = 'none';
-    document.getElementById('right-column').style.display = 'none';
-    
-    // Show only the video wrapper
-    const videoWrapper = document.getElementById('video-wrapper');
-    videoWrapper.style.position = 'fixed';
-    videoWrapper.style.top = '0';
-    videoWrapper.style.left = '0';
-    videoWrapper.style.width = '100%';
-    videoWrapper.style.height = '100%';
-    
-    // Automatically initialize the persistent stream
-    initializePersistentStream();
   }
 
   // Remove the initialization class to show the content
