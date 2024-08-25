@@ -458,3 +458,49 @@ body {
 #context-modal button {
   margin-right: 10px;
 }
+
+#push-to-talk-button {
+  display: none;
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 15px 30px;
+  font-size: 18px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  z-index: 1002;
+}
+
+#push-to-talk-button:active {
+  background-color: #45a049;
+}
+
+#simple-mode-button {
+  margin-left: auto;
+  padding: 10px 20px;
+  font-size: 16px;
+  background-color: #7459fe;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+#simple-mode-button:hover {
+  background-color: #5a3dd3;
+}
+
+#simple-mode-button.simple-mode {
+  background-color: #f0f0f0;
+  color: #333;
+  border: 1px solid #ccc;
+}
+
+#simple-mode-button.simple-mode:hover {
+  background-color: #e0e0e0;
+}

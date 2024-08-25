@@ -9,9 +9,96 @@ function getUrlParameters() {
   return {
     avatarId: urlParams.get('avatar'),
     contextId: urlParams.get('context'),
-    simpleMode: urlParams.get('simple') === 'true'
+    interfaceMode: urlParams.get('interfaceMode')
   };
 }
+
+export function toggleInterfaceMode() {
+  const content = document.getElementById('content');
+  const videoWrapper = document.getElementById('video-wrapper');
+  const simpleModeButton = document.getElementById('simple-mode-button');
+  const header = document.querySelector('.header');
+  const autoSpeakToggle = document.getElementById('auto-speak-toggle');
+  const startButton = document.getElementById('start-button');
+  const pushToTalkButton = document.getElementById('push-to-talk-button');
+
+  const currentMode = content.style.display === 'none' ? 'simple' : 'full';
+  let newMode;
+
+  if (currentMode === 'full') {
+    newMode = 'simpleVoice';
+  } else if (currentMode === 'simpleVoice') {
+    newMode = 'simplePushTalk';
+  } else {
+    newMode = 'full';
+  }
+
+  if (newMode !== 'full') {
+    content.style.display = 'none';
+    document.body.appendChild(videoWrapper);
+    videoWrapper.style.position = 'fixed';
+    videoWrapper.style.top = '50%';
+    videoWrapper.style.left = '50%';
+    videoWrapper.style.transform = 'translate(-50%, -50%)';
+    simpleModeButton.textContent = 'Exit Simple Mode';
+    simpleModeButton.classList.add('simple-mode');
+    header.style.position = 'fixed';
+    header.style.width = '100%';
+    header.style.zIndex = '1000';
+
+    if (newMode === 'simpleVoice') {
+      if (autoSpeakToggle.textContent.includes('Off')) {
+        autoSpeakToggle.click();
+      }
+      if (startButton.textContent === 'Speak') {
+        startButton.click();
+      }
+      pushToTalkButton.style.display = 'none';
+    } else if (newMode === 'simplePushTalk') {
+      if (autoSpeakToggle.textContent.includes('On')) {
+        autoSpeakToggle.click();
+      }
+      pushToTalkButton.style.display = 'block';
+    }
+  } else {
+    content.style.display = 'flex';
+    const leftColumn = document.getElementById('left-column');
+    leftColumn.appendChild(videoWrapper);
+    videoWrapper.style.position = 'relative';
+    videoWrapper.style.top = 'auto';
+    videoWrapper.style.left = 'auto';
+    videoWrapper.style.transform = 'none';
+    simpleModeButton.textContent = 'Simple Mode';
+    simpleModeButton.classList.remove('simple-mode');
+    header.style.position = 'static';
+    header.style.width = 'auto';
+
+    if (autoSpeakToggle.textContent.includes('On')) {
+      autoSpeakToggle.click();
+    }
+    if (startButton.textContent === 'Stop') {
+      startButton.click();
+    }
+    pushToTalkButton.style.display = 'none';
+  }
+
+  // Update URL
+  const url = new URL(window.location);
+  url.searchParams.set('interfaceMode', newMode);
+  window.history.pushState({}, '', url);
+}
+
+function setupPushToTalk() {
+  const pushToTalkButton = document.getElementById('push-to-talk-button');
+  
+  pushToTalkButton.addEventListener('mousedown', startPushToTalk);
+  pushToTalkButton.addEventListener('mouseup', endPushToTalk);
+  pushToTalkButton.addEventListener('mouseleave', endPushToTalk);
+  pushToTalkButton.addEventListener('touchstart', startPushToTalk);
+  pushToTalkButton.addEventListener('touchend', endPushToTalk);
+}
+
+
 
 const deepgramClient = createClient(DID_API.deepgramKey);
 
@@ -869,22 +956,15 @@ function togglePushToTalk() {
 
 
 function endPushToTalk() {
-  if (!isPushToTalkEnabled) return;
-  clearTimeout(pushToTalkTimer);
-  const duration = Date.now() - pushToTalkStartTime;
-  if (duration >= MIN_PUSH_TO_TALK_DURATION) {
+  if (isRecording) {
     stopRecording(true);
   }
-  pushToTalkStartTime = 0;
 }
 
-
 function startPushToTalk() {
-  if (!isPushToTalkEnabled) return;
-  pushToTalkStartTime = Date.now();
-  pushToTalkTimer = setTimeout(() => {
+  if (!isRecording) {
     startRecording(true);
-  }, MIN_PUSH_TO_TALK_DURATION);
+  }
 }
 
 
@@ -892,7 +972,7 @@ async function initialize() {
   setLogLevel('INFO');
   connectionState = ConnectionState.DISCONNECTED;
 
-  const { avatarId, contextId, simpleMode } = getUrlParameters();
+  const { avatarId, contextId, interfaceMode } = getUrlParameters();
 
   const { idle, stream } = getVideoElements();
   idleVideoElement = idle;
@@ -975,10 +1055,11 @@ async function initialize() {
     }
   });
 
-  if (simpleMode) {
-    toggleSimpleMode();
+  if (interfaceMode === 'simpleVoice' || interfaceMode === 'simplePushTalk') {
+    toggleInterfaceMode();
   }
 
+  setupPushToTalk();
 
   logger.info('Initialization complete');
 }
