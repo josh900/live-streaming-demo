@@ -143,7 +143,9 @@ h4 {
   background-size: cover;
   background-repeat: no-repeat;
   background-position: center;
+  transition: transform 0.1s ease-in-out;
 }
+
 
 #status div {
   padding-bottom: 10px;
@@ -457,4 +459,22 @@ body {
 
 #context-modal button {
   margin-right: 10px;
+}
+
+body.simple-push-talk #logo-wrapper {
+  background-image: url('Slogo_PushTalk.svg');
+  cursor: pointer;
+}
+
+body.simple-push-talk #logo-wrapper.active {
+  transform: scale(0.9);
+}
+
+
+body.simple-push-talk {
+  cursor: pointer;
+}
+
+#push-to-talk-button {
+  display: none;
 }
