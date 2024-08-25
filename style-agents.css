@@ -458,3 +458,52 @@ body {
 #context-modal button {
   margin-right: 10px;
 }
+
+
+#logo-wrapper {
+  position: absolute;
+  left: 5.5%;
+  bottom: 5.5%;
+  width: 50px;
+  height: 50px;
+  z-index: 10;
+  background-image: url('Slogo.svg');
+  background-size: 50px 50px;
+  background-repeat: no-repeat;
+  background-position: left center;
+  transition: width 0.3s ease;
+  display: flex;
+  align-items: center;
+  padding-right: 10px;
+  border-radius: 25px;
+  background-color: rgba(255, 255, 255, 0.8);
+}
+
+#logo-wrapper.push-to-talk {
+  width: auto;
+  padding-right: 20px;
+}
+
+#logo-wrapper::after {
+  content: '';
+  display: none;
+  font-family: 'Mulish', sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  color: #333;
+  margin-left: 60px;
+  white-space: nowrap;
+}
+
+#logo-wrapper.push-to-talk::after {
+  content: 'Push to Talk';
+  display: inline;
+}
+
+#logo-wrapper:active {
+  background-color: rgba(200, 200, 200, 0.8);
+}
+
+#simple-push-talk-button {
+  display: none;
+}

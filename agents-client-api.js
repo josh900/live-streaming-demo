@@ -872,7 +872,8 @@ function togglePushToTalk() {
 }
 
 
-function endPushToTalk() {
+function endPushToTalk(event) {
+  event.preventDefault(); // Prevent default touch behavior
   if (!isPushToTalkEnabled) return;
   clearTimeout(pushToTalkTimer);
   const duration = Date.now() - pushToTalkStartTime;
@@ -883,7 +884,9 @@ function endPushToTalk() {
 }
 
 
-function startPushToTalk() {
+
+function startPushToTalk(event) {
+  event.preventDefault(); // Prevent default touch behavior
   if (!isPushToTalkEnabled) return;
   pushToTalkStartTime = Date.now();
   pushToTalkTimer = setTimeout(() => {
@@ -932,7 +935,6 @@ if (headerBar && header) {
   const editAvatarButton = document.getElementById('edit-avatar-button');
   const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
   const pushToTalkButton = document.getElementById('push-to-talk-button');
-  const simplePushTalkButton = document.getElementById('simple-push-talk-button');
   const startButton = document.getElementById('start-button');
 
   sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
@@ -948,13 +950,6 @@ if (headerBar && header) {
   pushToTalkButton.addEventListener('touchstart', startPushToTalk);
   pushToTalkButton.addEventListener('touchend', endPushToTalk);
   
-  if (simplePushTalkButton) {
-    simplePushTalkButton.addEventListener('mousedown', startPushToTalk);
-    simplePushTalkButton.addEventListener('mouseup', endPushToTalk);
-    simplePushTalkButton.addEventListener('mouseleave', endPushToTalk);
-    simplePushTalkButton.addEventListener('touchstart', startPushToTalk);
-    simplePushTalkButton.addEventListener('touchend', endPushToTalk);
-  }
 
   startButton.addEventListener('click', toggleRecording);
 
@@ -1014,7 +1009,7 @@ function applySimpleMode(mode) {
   const videoWrapper = document.getElementById('video-wrapper');
   const simpleModeButton = document.getElementById('simple-mode-button');
   const header = document.querySelector('.header');
-  let simplePushTalkButton = document.getElementById('simple-push-talk-button');
+  const logoWrapper = document.getElementById('logo-wrapper');
 
   content.style.display = 'none';
   document.body.appendChild(videoWrapper);
@@ -1039,10 +1034,13 @@ function applySimpleMode(mode) {
     if (!isPushToTalkEnabled) {
       togglePushToTalk();
     }
-    if (!simplePushTalkButton) {
-      simplePushTalkButton = createSimplePushTalkButton();
-    }
-    simplePushTalkButton.style.display = 'block';
+    const logoWrapper = document.getElementById('logo-wrapper');
+    logoWrapper.classList.add('push-to-talk');
+    logoWrapper.addEventListener('mousedown', startPushToTalk);
+    logoWrapper.addEventListener('mouseup', endPushToTalk);
+    logoWrapper.addEventListener('mouseleave', endPushToTalk);
+    logoWrapper.addEventListener('touchstart', startPushToTalk);
+    logoWrapper.addEventListener('touchend', endPushToTalk);
   }
 
   currentInterfaceMode = mode;
@@ -1050,11 +1048,14 @@ function applySimpleMode(mode) {
 }
 
 function exitSimpleMode() {
-  const content = document.getElementById('content');
-  const videoWrapper = document.getElementById('video-wrapper');
-  const simpleModeButton = document.getElementById('simple-mode-button');
-  const header = document.querySelector('.header');
-  const simplePushTalkButton = document.getElementById('simple-push-talk-button');
+  const logoWrapper = document.getElementById('logo-wrapper');
+  logoWrapper.classList.remove('push-to-talk');
+  logoWrapper.removeEventListener('mousedown', startPushToTalk);
+  logoWrapper.removeEventListener('mouseup', endPushToTalk);
+  logoWrapper.removeEventListener('mouseleave', endPushToTalk);
+  logoWrapper.removeEventListener('touchstart', startPushToTalk);
+  logoWrapper.removeEventListener('touchend', endPushToTalk);
+
 
   content.style.display = 'flex';
   const leftColumn = document.getElementById('left-column');
@@ -1077,9 +1078,13 @@ function exitSimpleMode() {
   if (isRecording) {
     stopRecording();
   }
-  if (simplePushTalkButton) {
-    simplePushTalkButton.style.display = 'none';
-  }
+  
+  logoWrapper.classList.remove('push-to-talk');
+  logoWrapper.removeEventListener('mousedown', startPushToTalk);
+  logoWrapper.removeEventListener('mouseup', endPushToTalk);
+  logoWrapper.removeEventListener('mouseleave', endPushToTalk);
+  logoWrapper.removeEventListener('touchstart', startPushToTalk);
+  logoWrapper.removeEventListener('touchend', endPushToTalk);
 
   currentInterfaceMode = null;
   logger.info('Exited simple mode');
@@ -2048,23 +2053,6 @@ export function toggleSimpleMode() {
 
 
 
-function createSimplePushTalkButton() {
-  const button = document.createElement('button');
-  button.id = 'simple-push-talk-button';
-  button.textContent = 'Push to Talk';
-  button.style.position = 'fixed';
-  button.style.bottom = '20px';
-  button.style.left = '50%';
-  button.style.transform = 'translateX(-50%)';
-  button.style.zIndex = '1001';
-  button.addEventListener('mousedown', startPushToTalk);
-  button.addEventListener('mouseup', endPushToTalk);
-  button.addEventListener('mouseleave', endPushToTalk);
-  button.addEventListener('touchstart', startPushToTalk);
-  button.addEventListener('touchend', endPushToTalk);
-  document.body.appendChild(button);
-  return button;
-}
 
 
 
