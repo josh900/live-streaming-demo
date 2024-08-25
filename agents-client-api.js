@@ -138,6 +138,26 @@ function populateContextSelect() {
   }
 }
 
+function handleIncomingMessage(event) {
+  // In a production environment, you should validate the origin to prevent potential security risks.
+  console.log('Received message from origin:', event.origin);
+
+  const { action, text } = event.data;
+
+  if (action === 'speak') {
+    // Trigger the avatar to speak the received text
+    handleTextInput(text);
+  }
+}
+window.addEventListener('message', handleIncomingMessage, false);
+
+function notifyParentWindowReady() {
+  // In a production environment, you should specify the exact origin of the parent window.
+  window.parent.postMessage({ action: 'avatarReady' }, '*');
+}
+
+
+
 function handleContextChange() {
   currentContextId = document.getElementById('context-select').value;
   if (currentContextId === 'create-new') {
@@ -1008,10 +1028,35 @@ if (headerBar && header) {
     applySimpleMode(currentInterfaceMode);
   }
 
+   // Check if the application is running in an iframe
+   if (window.self !== window.top) {
+    console.log('Running in iframe mode');
+    // Hide unnecessary UI elements when in iframe mode
+    document.getElementById('header-bar').style.display = 'none';
+    document.getElementById('left-column').style.display = 'none';
+    document.getElementById('right-column').style.display = 'none';
+    
+    // Show only the video wrapper
+    const videoWrapper = document.getElementById('video-wrapper');
+    videoWrapper.style.position = 'fixed';
+    videoWrapper.style.top = '0';
+    videoWrapper.style.left = '0';
+    videoWrapper.style.width = '100%';
+    videoWrapper.style.height = '100%';
+    
+    // Automatically initialize the persistent stream
+    initializePersistentStream();
+  }
+
   // Remove the initialization class to show the content
   document.body.classList.remove('initializing');
 
+  document.addEventListener('DOMContentLoaded', notifyParentWindowReady);
+
+
   logger.info('Initialization complete');
+
+
 }
 
 function applySimpleMode(mode) {
