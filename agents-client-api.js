@@ -1064,19 +1064,20 @@ function exitSimpleMode() {
   const simpleModeButton = document.getElementById('simple-mode-button');
   const header = document.querySelector('.header');
   const logoWrapper = document.getElementById('logo-wrapper');
-  const leftColumn = document.getElementById('left-column');
+  const simplePushTalkButton = document.getElementById('simple-push-talk-button');
 
-  // Reset content display
+  // Restore content display
   content.style.display = 'flex';
-  
-  // Move video wrapper back to its original position
+  const leftColumn = document.getElementById('left-column');
   leftColumn.appendChild(videoWrapper);
+
+  // Reset video wrapper styles
   videoWrapper.style.position = 'relative';
   videoWrapper.style.top = 'auto';
   videoWrapper.style.left = 'auto';
   videoWrapper.style.transform = 'none';
 
-  // Reset button text and remove simple mode class
+  // Reset simple mode button
   simpleModeButton.textContent = 'Simple Mode';
   simpleModeButton.classList.remove('simple-mode');
 
@@ -1086,21 +1087,24 @@ function exitSimpleMode() {
 
   // Reset logo
   logoWrapper.style.backgroundImage = "url('Slogo.svg')";
+  logoWrapper.style.width = '50px'; // Reset to original width
+
+  // Remove simple push talk class from body
   document.body.classList.remove('simple-push-talk');
 
-  // Remove push-to-talk event listeners
+  // Remove event listeners for push-to-talk
   document.body.removeEventListener('mousedown', startPushToTalk);
   document.body.removeEventListener('mouseup', endPushToTalk);
   document.body.removeEventListener('mouseleave', endPushToTalk);
   document.body.removeEventListener('touchstart', startPushToTalk);
   document.body.removeEventListener('touchend', endPushToTalk);
 
-  // Disable auto-speak if it's on
+  // Turn off auto-speak if it's on
   if (autoSpeakMode) {
     toggleAutoSpeak();
   }
 
-  // Disable push-to-talk if it's on
+  // Turn off push-to-talk if it's on
   if (isPushToTalkEnabled) {
     togglePushToTalk();
   }
@@ -1110,21 +1114,21 @@ function exitSimpleMode() {
     stopRecording();
   }
 
+  // Hide simple push talk button if it exists
+  if (simplePushTalkButton) {
+    simplePushTalkButton.style.display = 'none';
+  }
+
   // Reset interface mode
   currentInterfaceMode = null;
 
-  // Re-enable any hidden controls
-  const speakControls = document.getElementById('speak-controls');
-  const textInputControls = document.getElementById('text-input-controls');
-  if (speakControls) speakControls.style.display = 'flex';
-  if (textInputControls) textInputControls.style.display = 'flex';
-
-  // Reset any custom styles applied to the body
-  document.body.style.cursor = 'default';
+  // Update URL to remove interface mode parameter
+  const url = new URL(window.location);
+  url.searchParams.delete('interfaceMode');
+  window.history.pushState({}, '', url);
 
   logger.info('Exited simple mode');
 }
-
 
 async function handleAvatarChange() {
   const avatarSelect = document.getElementById('avatar-select');
