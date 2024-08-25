@@ -14,6 +14,7 @@ function getUrlParameters() {
   };
 }
 
+
 const deepgramClient = createClient(DID_API.deepgramKey);
 
 const RTCPeerConnection = (
@@ -898,15 +899,11 @@ async function initialize() {
   const { avatarId, contextId, interfaceMode, header } = getUrlParameters();
   currentInterfaceMode = interfaceMode; // Store the interface mode
 
-  // Handle header visibility
-  const headerBar = document.getElementById('header-bar');
-  if (headerBar) {
-    if (!header) {
-      headerBar.classList.add('hidden');
-    } else {
-      headerBar.classList.remove('hidden');
-    }
-  }
+// Handle header visibility
+const headerBar = document.getElementById('header-bar');
+if (headerBar && header) {
+  headerBar.classList.add('visible');
+}
   
   const { idle, stream } = getVideoElements();
   idleVideoElement = idle;

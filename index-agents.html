@@ -19,7 +19,7 @@
     }
 
     .header {
-      display: flex;
+      display: none;
       align-items: flex-end;
       padding: 15px;
       background-color: #f5f5f5;
@@ -52,8 +52,23 @@
     .header.hidden {
       display: none;
     }
+    .header.visible {
+      display: flex;
+    }
 
   </style>
+  <script>
+    // Immediately-invoked function expression to avoid polluting global scope
+    (function() {
+      var urlParams = new URLSearchParams(window.location.search);
+      var showHeader = urlParams.get('header') !== 'false';
+      if (showHeader) {
+        document.addEventListener('DOMContentLoaded', function() {
+          document.getElementById('header-bar').classList.add('visible');
+        });
+      }
+    })();
+  </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/8.3.2/uuid.min.js"></script>
 
 </head>
@@ -61,7 +76,7 @@
 <body class="initializing">
   <div class="header" id="header-bar">
     <img src="https://cdn.prod.website-files.com/6316d11d553f411d6f1fa732/633ac440413e418b480baaf8_skoop-logo-p-500.png"
-    alt="SKOOP logo" />
+      alt="SKOOP logo" />
     <h1>Avatar Demo</h1>
     <button id="simple-mode-button">Simple Mode</button>
   </div>
