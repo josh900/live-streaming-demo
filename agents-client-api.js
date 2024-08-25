@@ -922,6 +922,7 @@ async function initialize() {
   const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
   const pushToTalkButton = document.getElementById('push-to-talk-button');
   const simplePushTalkButton = document.getElementById('simple-push-talk-button');
+  const startButton = document.getElementById('start-button');
 
   sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
   textInput.addEventListener('keypress', (event) => {
@@ -943,6 +944,8 @@ async function initialize() {
     simplePushTalkButton.addEventListener('touchstart', startPushToTalk);
     simplePushTalkButton.addEventListener('touchend', endPushToTalk);
   }
+
+  startButton.addEventListener('click', toggleRecording);
 
   initializeWebSocket();
   playIdleVideo();
@@ -984,15 +987,12 @@ async function initialize() {
     }
   });
 
-  if (interfaceMode === 'simpleVoice') {
-    toggleSimpleMode('voice');
-  } else if (interfaceMode === 'simplePushTalk') {
-    toggleSimpleMode('pushTalk');
+  if (interfaceMode === 'simpleVoice' || interfaceMode === 'simplePushTalk') {
+    toggleSimpleMode(interfaceMode);
   }
 
   logger.info('Initialization complete');
 }
-
 
 async function handleAvatarChange() {
   const avatarSelect = document.getElementById('avatar-select');
@@ -1062,7 +1062,13 @@ async function loadAvatars(selectedAvatarId) {
 }
 
 
-
+function toggleRecording() {
+  if (isRecording) {
+    stopRecording();
+  } else {
+    startRecording();
+  }
+}
 
 function populateAvatarSelect() {
   const avatarSelect = document.getElementById('avatar-select');
@@ -1928,7 +1934,7 @@ async function startStreaming(assistantReply) {
   }
 }
 
-export function toggleSimpleMode(mode = 'voice') {
+export function toggleSimpleMode(mode) {
   const content = document.getElementById('content');
   const videoWrapper = document.getElementById('video-wrapper');
   const simpleModeButton = document.getElementById('simple-mode-button');
@@ -1955,20 +1961,20 @@ export function toggleSimpleMode(mode = 'voice') {
     header.style.width = '100%';
     header.style.zIndex = '1000';
 
-    if (mode === 'voice') {
+    if (mode === 'simpleVoice') {
       // Turn on auto-speak if it's not already on
-      if (autoSpeakToggle.textContent.includes('Off')) {
-        autoSpeakToggle.click();
+      if (!autoSpeakMode) {
+        toggleAutoSpeak();
       }
 
       // Start recording if it's not already recording
-      if (startButton.textContent === 'Speak') {
-        startButton.click();
+      if (!isRecording) {
+        startRecording();
       }
-    } else if (mode === 'pushTalk') {
+    } else if (mode === 'simplePushTalk') {
       // Turn on push-to-talk if it's not already on
-      if (pushToTalkToggle.textContent.includes('Off')) {
-        pushToTalkToggle.click();
+      if (!isPushToTalkEnabled) {
+        togglePushToTalk();
       }
 
       // Create and add the simple push-to-talk button if it doesn't exist
@@ -1993,7 +1999,7 @@ export function toggleSimpleMode(mode = 'voice') {
 
     // Update URL
     const url = new URL(window.location);
-    url.searchParams.set('interfaceMode', mode === 'voice' ? 'simpleVoice' : 'simplePushTalk');
+    url.searchParams.set('interfaceMode', mode);
     window.history.pushState({}, '', url);
   } else {
     // Exiting simple mode
@@ -2010,18 +2016,18 @@ export function toggleSimpleMode(mode = 'voice') {
     header.style.width = 'auto';
 
     // Turn off auto-speak
-    if (autoSpeakToggle.textContent.includes('On')) {
-      autoSpeakToggle.click();
+    if (autoSpeakMode) {
+      toggleAutoSpeak();
     }
 
     // Turn off push-to-talk
-    if (pushToTalkToggle.textContent.includes('On')) {
-      pushToTalkToggle.click();
+    if (isPushToTalkEnabled) {
+      togglePushToTalk();
     }
 
     // Stop recording
-    if (startButton.textContent === 'Stop') {
-      startButton.click();
+    if (isRecording) {
+      stopRecording();
     }
 
     // Remove or hide the simple push-to-talk button
@@ -2035,6 +2041,7 @@ export function toggleSimpleMode(mode = 'voice') {
     window.history.pushState({}, '', url);
   }
 }
+
 
 
 
