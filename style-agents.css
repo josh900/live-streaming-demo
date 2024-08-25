@@ -458,3 +458,19 @@ body {
 #context-modal button {
   margin-right: 10px;
 }
+
+#push-to-talk-button {
+  display: none;
+  padding: 15px 30px;
+  font-size: 18px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 50px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+#push-to-talk-button:active {
+  background-color: #45a049;
+}
