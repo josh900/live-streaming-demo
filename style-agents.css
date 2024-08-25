@@ -134,10 +134,10 @@ h4 {
 
 #logo-wrapper {
   position: absolute;
-  left: 5.5%;
-  bottom: 5.5%;
-  width: 50px;
-  height: 50px;
+  left: 5%;
+  bottom: 5%;
+  width: 20%; /* Increased from 50px to 20% of the video wrapper */
+  height: 20%; /* Added height to maintain aspect ratio */
   z-index: 10;
   background-image: url('Slogo.svg');
   background-size: contain;
@@ -145,6 +145,7 @@ h4 {
   background-position: left center;
   transition: width 0.3s ease-in-out, transform 0.1s ease-in-out;
 }
+
 
 #status div {
   padding-bottom: 10px;
@@ -381,6 +382,7 @@ body {
   padding-top: 100%;
 }
 
+
 #preload-video-element {
   visibility: hidden;
   background: transparent;
@@ -462,10 +464,12 @@ body {
 
 
 body.simple-push-talk #logo-wrapper {
-  width: 150px; /* Adjust this value as needed for the expanded width */
+  width: 30%; /* Increased from 150px to 30% of the video wrapper */
+  height: 30%; /* Added height to maintain aspect ratio */
   background-image: url('Slogo_PushTalk.svg');
   cursor: pointer;
 }
+
 
 body.simple-push-talk #logo-wrapper.active {
   transform: scale(0.95);
