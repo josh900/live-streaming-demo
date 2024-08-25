@@ -9,7 +9,8 @@ function getUrlParameters() {
   return {
     avatarId: urlParams.get('avatar'),
     contextId: urlParams.get('context'),
-    interfaceMode: urlParams.get('interfaceMode')
+    interfaceMode: urlParams.get('interfaceMode'),
+    header: urlParams.get('header') !== 'false' // true by default, false only if explicitly set to 'false'
   };
 }
 
@@ -894,9 +895,19 @@ async function initialize() {
   setLogLevel('INFO');
   connectionState = ConnectionState.DISCONNECTED;
 
-  const { avatarId, contextId, interfaceMode } = getUrlParameters();
+  const { avatarId, contextId, interfaceMode, header } = getUrlParameters();
   currentInterfaceMode = interfaceMode; // Store the interface mode
 
+  // Handle header visibility
+  const headerBar = document.getElementById('header-bar');
+  if (headerBar) {
+    if (!header) {
+      headerBar.classList.add('hidden');
+    } else {
+      headerBar.classList.remove('hidden');
+    }
+  }
+  
   const { idle, stream } = getVideoElements();
   idleVideoElement = idle;
   streamVideoElement = stream;

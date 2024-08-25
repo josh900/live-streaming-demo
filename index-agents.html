@@ -49,15 +49,19 @@
     body.initializing #simple-mode-button {
       display: none;
     }
+    .header.hidden {
+      display: none;
+    }
+
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/8.3.2/uuid.min.js"></script>
 
 </head>
 
 <body class="initializing">
-  <div class="header">
+  <div class="header" id="header-bar">
     <img src="https://cdn.prod.website-files.com/6316d11d553f411d6f1fa732/633ac440413e418b480baaf8_skoop-logo-p-500.png"
-      alt="SKOOP logo" />
+    alt="SKOOP logo" />
     <h1>Avatar Demo</h1>
     <button id="simple-mode-button">Simple Mode</button>
   </div>
