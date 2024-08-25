@@ -136,7 +136,7 @@ h4 {
   position: absolute;
   left: 3%;
   bottom: 4%;
-  width: 15%; /* Increased from 50px to 20% of the video wrapper */
+  width: 100%; /* Increased from 50px to 20% of the video wrapper */
   height: 15%; /* Added height to maintain aspect ratio */
   z-index: 10;
   background-image: url('Slogo.svg');
@@ -464,8 +464,8 @@ body {
 
 
 body.simple-push-talk #logo-wrapper {
-  width: 20%; /* Increased from 150px to 30% of the video wrapper */
-  height: 20%; /* Added height to maintain aspect ratio */
+  width: 100%; /* Increased from 150px to 30% of the video wrapper */
+  height: 15%; /* Added height to maintain aspect ratio */
   background-image: url('Slogo_PushTalk.svg');
   cursor: pointer;
 }
