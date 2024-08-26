@@ -1007,14 +1007,14 @@ if (headerBar && header) {
   playIdleVideo();
 
   if (avatars.length > 0 && currentAvatarId) {
-    showLoadingSymbol();
+    // showLoadingSymbol();
     try {
       await initializePersistentStream();
       startConnectionHealthCheck();
-      hideLoadingSymbol();
+      // hideLoadingSymbol();
     } catch (error) {
       logger.error('Error during initialization:', error);
-      hideLoadingSymbol();
+      // hideLoadingSymbol();
       showErrorMessage('Failed to connect. Please try again.');
       connectionState = ConnectionState.DISCONNECTED;
     }
