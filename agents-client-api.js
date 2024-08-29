@@ -74,6 +74,9 @@ let currentContextId = '';
 let currentAvatarId = '';
 let isInitializingStream = false;
 let currentInterfaceMode = null;
+let isPushToTalkActive = false;
+let autoSpeakInProgress = false;
+
 
 
 
@@ -1933,7 +1936,7 @@ async function startStreaming(assistantReply) {
             normalization_factor: 0.1,
             align_expand_factor: 0.3,
             motion_factor: 0.55,
-            result_format: 'mov',
+            result_format: 'mp4',
             driver_expressions: {
               expressions: [
                 {
