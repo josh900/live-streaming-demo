@@ -643,7 +643,11 @@ async function warmUpStream() {
         logger.debug('warming 6');
 
         streamVideoElement.onended = resolve;
+        logger.debug('warming 7');
+
       });
+
+      logger.debug('warming 8');
 
       logger.debug('Warm-up stream completed');
     } else {
@@ -661,7 +665,8 @@ async function warmUpStream() {
     streamVideoElement.style.display = originalStreamDisplay;
     idleVideoElement.style.display = originalIdleDisplay;
     logger.debug('Warm-up process finished, restored original video element states');
-  
+    logger.debug('warming 9');
+
   }
 }
 
