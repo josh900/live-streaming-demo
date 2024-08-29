@@ -85,7 +85,6 @@ const STREAMING_HYSTERESIS = 500;
 let lastActivityTime = 0;
 const IDLE_TIMEOUT = 1000; // 2 seconds of inactivity before transitioning to idle
 let isWaitingForStream = false;
-let isWarmingUp = false;
 
 
 function debouncedVideoStatusChange(isPlaying, stream) {
@@ -1103,7 +1102,6 @@ async function warmUpStream() {
   }
 
   try {
-    isWarmingUp = true;
     logger.debug('Starting warm-up stream');
     const warmUpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
       method: 'POST',
@@ -1144,12 +1142,19 @@ async function warmUpStream() {
     logger.debug('Warm-up stream response:', warmUpData);
 
     if (warmUpData.status === 'started') {
+      const streamVideoElement = document.getElementById('stream-video-element');
+      const idleVideoElement = document.getElementById('idle-video-element');
+
       // Create a temporary video element for the warm-up stream
       const tempVideoElement = document.createElement('video');
       tempVideoElement.style.display = 'none'; // Hide the temporary video element
       tempVideoElement.muted = true;
       tempVideoElement.src = warmUpData.result_url;
       document.body.appendChild(tempVideoElement);
+
+      // Ensure the idle video is visible and playing
+      idleVideoElement.style.display = 'block';
+      idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e));
 
       // Play the warm-up stream in the background
       await new Promise((resolve) => {
@@ -1166,10 +1171,7 @@ async function warmUpStream() {
     }
   } catch (error) {
     logger.error('Error during warm-up stream:', error);
-  } finally {
-    isWarmingUp = false;
   }
-
 }
 
 async function handleAvatarChange() {
@@ -1656,11 +1658,6 @@ function onStreamEvent(message) {
     let status;
     const [event, _] = message.data.split(':');
 
-    if (isWarmingUp) {
-      // Ignore stream events during warm-up
-      return;
-    }
-
     switch (event) {
       case 'stream/started':
         status = 'started';
@@ -1687,7 +1684,6 @@ function onStreamEvent(message) {
     updateStreamEventLabel(status);
   }
 }
-
 
 function handleStreamStarted() {
   logger.debug('Stream started');
