@@ -918,7 +918,9 @@ if (headerBar && header) {
     try {
       await initializePersistentStream();
       startConnectionHealthCheck();
+      isWarmingUp = true;
       await warmUpStream();
+      isWarmingUp = false;
       // hideLoadingSymbol();
     } catch (error) {
       logger.error('Error during initialization:', error);
@@ -1103,7 +1105,6 @@ async function warmUpStream() {
   }
 
   try {
-    isWarmingUp = true;
     logger.debug('Starting warm-up stream');
     const warmUpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
       method: 'POST',
@@ -1143,22 +1144,18 @@ async function warmUpStream() {
     const warmUpData = await warmUpResponse.json();
     logger.debug('Warm-up stream response:', warmUpData);
 
-    if (warmUpData.status === 'started') {
-      // Create a temporary video element for the warm-up stream
-      const tempVideoElement = document.createElement('video');
-      tempVideoElement.style.display = 'none'; // Hide the temporary video element
-      tempVideoElement.muted = true;
-      tempVideoElement.src = warmUpData.result_url;
-      document.body.appendChild(tempVideoElement);
+    if (warmUpData.status === 'started' && warmUpData.result_url) {
+      // Create a temporary audio element for the warm-up stream
+      const tempAudioElement = new Audio(warmUpData.result_url);
+      tempAudioElement.muted = true;
 
-      // Play the warm-up stream in the background
+      // Play the warm-up audio in the background
+      await tempAudioElement.play();
+
+      // Wait for the audio to finish
       await new Promise((resolve) => {
-        tempVideoElement.onended = resolve;
-        tempVideoElement.play().catch(e => logger.error('Error playing warm-up video:', e));
+        tempAudioElement.onended = resolve;
       });
-
-      // Remove the temporary video element
-      document.body.removeChild(tempVideoElement);
 
       logger.debug('Warm-up stream completed');
     } else {
@@ -1166,11 +1163,9 @@ async function warmUpStream() {
     }
   } catch (error) {
     logger.error('Error during warm-up stream:', error);
-  } finally {
-    isWarmingUp = false;
   }
-
 }
+
 
 async function handleAvatarChange() {
   const avatarSelect = document.getElementById('avatar-select');
@@ -1217,8 +1212,9 @@ async function handleAvatarChange() {
   await destroyPersistentStream();
   await initializePersistentStream();
 
-  // Add warm-up stream after initializing the persistent stream
+  isWarmingUp = true;
   await warmUpStream();
+  isWarmingUp = false;
 }
 
 
@@ -1603,6 +1599,12 @@ function onSignalingStateChange() {
 }
 
 function onVideoStatusChange(videoIsPlaying) {
+  
+  if (isWarmingUp) {
+    // Ignore video status changes during warm-up
+    return;
+  }
+  
   if (videoIsPlaying === lastVideoStatus) {
     return; // No change, ignore
   }
@@ -1652,14 +1654,14 @@ function onStreamingComplete() {
 
 
 function onStreamEvent(message) {
+  if (isWarmingUp) {
+    // Ignore all stream events during warm-up
+    return;
+  }
+
   if (pcDataChannel.readyState === 'open') {
     let status;
     const [event, _] = message.data.split(':');
-
-    if (isWarmingUp) {
-      // Ignore stream events during warm-up
-      return;
-    }
 
     switch (event) {
       case 'stream/started':
@@ -1687,6 +1689,8 @@ function onStreamEvent(message) {
     updateStreamEventLabel(status);
   }
 }
+
+
 
 
 function handleStreamStarted() {
