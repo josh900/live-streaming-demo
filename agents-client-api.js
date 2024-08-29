@@ -165,7 +165,7 @@ function handleContextChange() {
     openContextModal();
   } else {
     updateContextDisplay();
-    
+
     // Update URL with new context ID
     const url = new URL(window.location);
     url.searchParams.set('context', currentContextId);
@@ -238,7 +238,7 @@ async function saveContext(contextId = null) {
     }
 
     const savedContext = await response.json();
-    
+
     if (contextId) {
       const index = contexts.findIndex(c => c.id === contextId);
       if (index !== -1) {
@@ -944,12 +944,12 @@ async function initialize() {
   const { avatarId, contextId, interfaceMode, header } = getUrlParameters();
   currentInterfaceMode = interfaceMode; // Store the interface mode
 
-// Handle header visibility
-const headerBar = document.getElementById('header-bar');
-if (headerBar && header) {
-  headerBar.classList.add('visible');
-}
-  
+  // Handle header visibility
+  const headerBar = document.getElementById('header-bar');
+  if (headerBar && header) {
+    headerBar.classList.add('visible');
+  }
+
   const { idle, stream } = getVideoElements();
   idleVideoElement = idle;
   streamVideoElement = stream;
@@ -992,7 +992,7 @@ if (headerBar && header) {
   pushToTalkButton.addEventListener('mouseleave', endPushToTalk);
   pushToTalkButton.addEventListener('touchstart', startPushToTalk);
   pushToTalkButton.addEventListener('touchend', endPushToTalk);
-  
+
   if (simplePushTalkButton) {
     simplePushTalkButton.addEventListener('mousedown', startPushToTalk);
     simplePushTalkButton.addEventListener('mouseup', endPushToTalk);
@@ -1048,8 +1048,8 @@ if (headerBar && header) {
     applySimpleMode(currentInterfaceMode);
   }
 
-   // Check if the application is running in an iframe
-   if (window.self !== window.top) {
+  // Check if the application is running in an iframe
+  if (window.self !== window.top) {
     console.log('Running in iframe mode');
   }
 
@@ -1096,7 +1096,7 @@ function applySimpleMode(mode) {
     }
     document.body.classList.add('simple-push-talk');
     logoWrapper.style.backgroundImage = "url('Slogo_PushTalk.svg')";
-    
+
     document.body.addEventListener('mousedown', startPushToTalk);
     document.body.addEventListener('mouseup', endPushToTalk);
     document.body.addEventListener('mouseleave', endPushToTalk);
@@ -1237,7 +1237,7 @@ async function loadAvatars(selectedAvatarId) {
     }
     avatars = await response.json();
     logger.debug('Avatars loaded:', avatars);
-    
+
     if (selectedAvatarId && avatars.some(avatar => avatar.id === selectedAvatarId)) {
       currentAvatarId = selectedAvatarId;
     } else if (!currentAvatarId && avatars.length > 0) {
@@ -2060,7 +2060,7 @@ async function startStreaming(assistantReply) {
             normalization_factor: 0.1,
             align_expand_factor: 0.3,
             motion_factor: 0.55,
-            result_format: 'mp4',
+            result_format: 'webm',
             driver_expressions: {
               expressions: [
                 {
@@ -2070,6 +2070,9 @@ async function startStreaming(assistantReply) {
                 },
               ],
             },
+            "background": {
+              "color": false
+            }
           },
         }),
       });
@@ -2137,7 +2140,7 @@ export function toggleSimpleMode() {
     url.searchParams.delete('interfaceMode');
   }
   window.history.pushState({}, '', url);
-  
+
   logger.info(`Toggled simple mode. Current mode: ${currentInterfaceMode || 'full'}`);
 }
 
