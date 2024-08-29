@@ -87,7 +87,7 @@ const IDLE_TIMEOUT = 1000; // 2 seconds of inactivity before transitioning to id
 let isWaitingForStream = false;
 let isWarmingUp = false;
 let transitionDebounceTimer;
-
+let pendingTransition = null;
 
 function debouncedVideoStatusChange(isPlaying, stream) {
   clearTimeout(videoStatusDebounceTimer);
@@ -348,8 +348,14 @@ function initializeTransitionCanvas() {
 }
 
 function smoothTransition(toStreaming, duration = 300) {
-  if (isTransitioning || isWarmingUp) {
-    logger.debug('Transition already in progress or warming up, skipping');
+  if (isTransitioning) {
+    pendingTransition = { toStreaming, duration };
+    logger.debug('Transition already in progress, queueing next transition');
+    return;
+  }
+
+  if (isWarmingUp) {
+    logger.debug('Warming up, skipping transition');
     return;
   }
 
@@ -362,6 +368,7 @@ function smoothTransition(toStreaming, duration = 300) {
   if (!idleVideoElement || !streamVideoElement) {
     logger.warn('Video elements not found for transition');
     isTransitioning = false;
+    checkPendingTransition();
     return;
   }
 
@@ -410,6 +417,7 @@ function smoothTransition(toStreaming, duration = 300) {
       isCurrentlyStreaming = toStreaming;
       transitionCanvas.style.display = 'none';
       logger.debug('Smooth transition completed');
+      checkPendingTransition();
     }
   }
 
@@ -419,6 +427,15 @@ function smoothTransition(toStreaming, duration = 300) {
   // Start the animation
   requestAnimationFrame(animate);
 }
+
+function checkPendingTransition() {
+  if (pendingTransition) {
+    const { toStreaming, duration } = pendingTransition;
+    pendingTransition = null;
+    smoothTransition(toStreaming, duration);
+  }
+}
+
 
 
 function getVideoElements() {
@@ -560,6 +577,7 @@ async function warmUpStream() {
   try {
     logger.debug('Warming up stream...');
 
+
     const warmUpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
       method: 'POST',
       headers: {
@@ -628,8 +646,10 @@ async function warmUpStream() {
     streamVideoElement.style.display = originalStreamDisplay;
     idleVideoElement.style.display = originalIdleDisplay;
     logger.debug('Warm-up process finished, restored original video element states');
+    checkPendingTransition(); // Check if there's a pending transition after warm-up
   }
 }
+
 
 
 async function initializePersistentStream() {
@@ -1711,6 +1731,7 @@ function handleStreamStarted() {
 
 
 
+
 function handleStreamDone() {
   clearTimeout(transitionDebounceTimer);
   transitionDebounceTimer = setTimeout(() => {
@@ -1719,6 +1740,7 @@ function handleStreamDone() {
     smoothTransition(false);
   }, 100);
 }
+
 
 
 function handleStreamReady() {
