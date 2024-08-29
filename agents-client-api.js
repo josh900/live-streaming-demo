@@ -352,18 +352,18 @@ function initializeTransitionCanvas() {
 
 async function smoothTransition(toStreaming, duration = 300) {
   if (isTransitioning) {
-    pendingTransition = { toStreaming, duration };
-    logger.debug('Transition already in progress, queueing next transition');
+    logger.debug('Transition already in progress, ignoring new transition request');
     return;
   }
 
-  if (isWarmingUp || warmUpPromise) {
-    logger.debug('Warming up or waiting for warm-up to complete, skipping transition');
+  if (currentAvatarState === AvatarState.WARMING_UP) {
+    logger.debug('Warming up, skipping transition');
     return;
   }
 
   isTransitioning = true;
   logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
+
 
 
   const idleVideoElement = document.getElementById('idle-video-element');
@@ -430,25 +430,37 @@ async function smoothTransition(toStreaming, duration = 300) {
 
   // Start the animation
   requestAnimationFrame(animate);
+
+  currentAvatarState = toStreaming ? AvatarState.STREAMING : AvatarState.IDLE;
+  logger.debug(`Transition complete. New state: ${currentAvatarState}`);
+
 }
 
 
-async function handleVideoStatusChange(isPlaying) {
-  if (isWarmingUp) {
-    logger.debug('Warming up, ignoring video status change');
-    return;
-  }
+function handleVideoStatusChange(isPlaying) {
+  logger.debug(`Handling video status change. Current state: ${currentAvatarState}, isPlaying: ${isPlaying}`);
 
-  if (warmUpPromise) {
-    logger.debug('Waiting for warm-up to complete before handling video status change');
-    await warmUpPromise;
-  }
-
-  if (isPlaying !== isCurrentlyStreaming) {
-    logger.debug(`Video status changing from ${isCurrentlyStreaming} to ${isPlaying}`);
-    smoothTransition(isPlaying);
+  switch (currentAvatarState) {
+    case AvatarState.WARMING_UP:
+      logger.debug('Ignoring video status change during warm-up');
+      break;
+    case AvatarState.IDLE:
+      if (isPlaying) {
+        currentAvatarState = AvatarState.STREAMING;
+        smoothTransition(true);
+      }
+      break;
+    case AvatarState.STREAMING:
+      if (!isPlaying) {
+        currentAvatarState = AvatarState.IDLE;
+        smoothTransition(false);
+      }
+      break;
+    default:
+      logger.warn(`Unexpected state ${currentAvatarState} during video status change`);
   }
 }
+
 
 
 
@@ -580,117 +592,123 @@ function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
 }
 
+const AvatarState = {
+  INITIALIZING: 'initializing',
+  WARMING_UP: 'warming_up',
+  IDLE: 'idle',
+  STREAMING: 'streaming',
+};
+
+let currentAvatarState = AvatarState.INITIALIZING;
 
 async function warmUpStream() {
-  if (warmUpPromise) {
-    logger.debug('Warm-up already in progress, waiting for it to complete');
-    return warmUpPromise;
+  if (currentAvatarState !== AvatarState.INITIALIZING) {
+    logger.debug('Warm-up can only be performed during initialization');
+    return;
   }
 
-  warmUpPromise = new Promise(async (resolve) => {
-    if (!persistentStreamId || !persistentSessionId) {
-      logger.error('Persistent stream not initialized. Cannot warm up stream.');
-      resolve();
-      return;
-    }
+  currentAvatarState = AvatarState.WARMING_UP;
+  logger.debug('Entering warm-up state');
 
-    const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
-    if (!currentAvatar) {
-      logger.error('No avatar selected or avatar not found. Cannot warm up stream.');
-      resolve();
-      return;
-    }
+  if (!persistentStreamId || !persistentSessionId) {
+    logger.error('Persistent stream not initialized. Cannot warm up stream.');
+    currentAvatarState = AvatarState.IDLE;
+    return;
+  }
 
-    isWarmingUp = true;
-    const streamVideoElement = document.getElementById('stream-video-element');
-    const idleVideoElement = document.getElementById('idle-video-element');
-    const originalStreamDisplay = streamVideoElement.style.display;
-    const originalIdleDisplay = idleVideoElement.style.display;
+  const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
+  if (!currentAvatar) {
+    logger.error('No avatar selected or avatar not found. Cannot warm up stream.');
+    currentAvatarState = AvatarState.IDLE;
+    return;
+  }
 
-    try {
-      logger.debug('Warming up stream...');
+  const streamVideoElement = document.getElementById('stream-video-element');
+  const idleVideoElement = document.getElementById('idle-video-element');
+  const originalStreamDisplay = streamVideoElement.style.display;
+  const originalIdleDisplay = idleVideoElement.style.display;
 
-      const warmUpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${DID_API.key}`,
-          'Content-Type': 'application/json',
+  try {
+    logger.debug('Warming up stream...');
+
+    const warmUpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: '<break time="1500ms"/>',
+          ssml: true,
+          provider: {
+            type: 'microsoft',
+            voice_id: currentAvatar.voiceId,
+          },
         },
-        body: JSON.stringify({
-          script: {
-            type: 'text',
-            input: '<break time="1500ms"/>',
-            ssml: true,
-            provider: {
-              type: 'microsoft',
-              voice_id: currentAvatar.voiceId,
-            },
-          },
-          session_id: persistentSessionId,
-          driver_url: 'bank://lively/driver-06',
-          config: {
-            fluent: true,
-            stitch: true,
-            pad_audio: 0,
-            auto_match: true,
-            align_driver: true,
-            normalization_factor: 0.1,
-            align_expand_factor: 0.3,
-            motion_factor: 0.55,
-          },
-        }),
+        session_id: persistentSessionId,
+        driver_url: 'bank://lively/driver-06',
+        config: {
+          fluent: true,
+          stitch: true,
+          pad_audio: 0,
+          auto_match: true,
+          align_driver: true,
+          normalization_factor: 0.1,
+          align_expand_factor: 0.3,
+          motion_factor: 0.55,
+        },
+      }),
+    });
+
+    if (!warmUpResponse.ok) {
+      throw new Error(`HTTP error! status: ${warmUpResponse.status}`);
+    }
+
+    const warmUpData = await warmUpResponse.json();
+    logger.debug('Warm-up stream response:', warmUpData);
+
+    if (warmUpData.status === 'started') {
+      streamVideoElement.style.display = 'none';
+      streamVideoElement.muted = true;
+      streamVideoElement.src = warmUpData.result_url;
+
+      await new Promise((resolve) => {
+        streamVideoElement.oncanplay = () => {
+          streamVideoElement.play().then(resolve).catch(error => {
+            logger.error('Error playing warm-up video:', error);
+            resolve();
+          });
+        };
       });
 
-      if (!warmUpResponse.ok) {
-        throw new Error(`HTTP error! status: ${warmUpResponse.status}`);
-      }
+      await new Promise((resolve) => {
+        streamVideoElement.onended = resolve;
+      });
 
-      const warmUpData = await warmUpResponse.json();
-      logger.debug('Warm-up stream response:', warmUpData);
-
-      if (warmUpData.status === 'started') {
-        streamVideoElement.style.display = 'none';
-        streamVideoElement.muted = true;
-        streamVideoElement.src = warmUpData.result_url;
-
-        await new Promise((resolvePlay) => {
-          streamVideoElement.oncanplay = () => {
-            streamVideoElement.play().then(resolvePlay).catch(error => {
-              logger.error('Error playing warm-up video:', error);
-              resolvePlay();
-            });
-          };
-        });
-
-        await new Promise((resolveEnd) => {
-          streamVideoElement.onended = resolveEnd;
-        });
-
-        logger.debug('Warm-up stream completed');
-      } else {
-        logger.warn('Unexpected response status for warm-up stream:', warmUpData.status);
-      }
-    } catch (error) {
-      logger.error('Error during stream warm-up:', error);
-    } finally {
-      isWarmingUp = false;
-      streamVideoElement.muted = false;
-      streamVideoElement.style.display = originalStreamDisplay;
-      idleVideoElement.style.display = originalIdleDisplay;
-      logger.debug('Warm-up process finished, restored original video element states');
-      
-      // Force a transition to idle state after warm-up
-      setTimeout(() => {
-        smoothTransition(false);
-      }, 100);
-
-      warmUpPromise = null;
-      resolve();
+      logger.debug('Warm-up stream completed');
+    } else {
+      logger.warn('Unexpected response status for warm-up stream:', warmUpData.status);
     }
-  });
-
-  return warmUpPromise;
+  } catch (error) {
+    logger.error('Error during stream warm-up:', error);
+  } finally {
+    streamVideoElement.muted = false;
+    streamVideoElement.style.display = originalStreamDisplay;
+    idleVideoElement.style.display = originalIdleDisplay;
+    logger.debug('Warm-up process finished, restored original video element states');
+    
+    currentAvatarState = AvatarState.IDLE;
+    logger.debug('Exiting warm-up state, entering idle state');
+    
+    // Force a transition to idle state after warm-up
+    setTimeout(() => {
+      smoothTransition(false);
+    }, 100);
+  }
 }
+
 
 
 
@@ -793,6 +811,8 @@ async function initializePersistentStream() {
 
     // Warm up the stream
     await warmUpStream();
+    logger.debug('Initialization and warm-up complete');
+
   } catch (error) {
     logger.error('Failed to initialize persistent stream:', error);
     isPersistentStreamActive = false;
