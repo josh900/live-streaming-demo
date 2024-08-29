@@ -84,7 +84,7 @@ let streamingStartTime = 0;
 const STREAMING_HYSTERESIS = 500;
 let lastActivityTime = 0;
 const IDLE_TIMEOUT = 1000; // 2 seconds of inactivity before transitioning to idle
-
+let isWaitingForStream = false;
 
 
 function debouncedVideoStatusChange(isPlaying, stream) {
@@ -345,7 +345,7 @@ function initializeTransitionCanvas() {
   });
 }
 
-function smoothTransition(toStreaming, duration = 300) {
+function smoothTransition(toStreaming, duration = 500) {
   if (isTransitioning) {
     logger.debug('Transition already in progress, skipping');
     return;
@@ -1514,7 +1514,7 @@ function onSignalingStateChange() {
   logger.debug('Signaling state changed:', peerConnection.signalingState);
 }
 
-function onVideoStatusChange(videoIsPlaying, stream) {
+function onVideoStatusChange(videoIsPlaying) {
   if (videoIsPlaying === lastVideoStatus) {
     return; // No change, ignore
   }
@@ -1531,12 +1531,7 @@ function onVideoStatusChange(videoIsPlaying, stream) {
     return;
   }
 
-  if (videoIsPlaying) {
-    setStreamVideoElement(stream);
-    smoothTransition(true);
-  } else {
-    smoothTransition(false);
-  }
+  smoothTransition(videoIsPlaying);
 
   const streamingStatusLabel = document.getElementById('streaming-status-label');
   if (streamingStatusLabel) {
@@ -1573,11 +1568,10 @@ function onStreamEvent(message) {
     let status;
     const [event, _] = message.data.split(':');
 
-    logger.debug('Stream event received:', event);
-
     switch (event) {
       case 'stream/started':
         status = 'started';
+        handleStreamStarted();
         break;
       case 'stream/done':
         status = 'done';
@@ -1585,6 +1579,7 @@ function onStreamEvent(message) {
         break;
       case 'stream/ready':
         status = 'ready';
+        handleStreamReady();
         break;
       case 'stream/error':
         status = 'error';
@@ -1595,41 +1590,53 @@ function onStreamEvent(message) {
         break;
     }
 
-    // Set stream ready after a short delay, adjusting for potential timing differences between data and stream channels
-    if (status === 'ready') {
-      setTimeout(() => {
-        logger.debug('stream/ready');
-        isStreamReady = true;
-        updateStreamEventLabel('ready');
-      }, 300);
-    } else {
-      logger.debug('Stream status:', status);
-      updateStreamEventLabel(status);
-    }
+    console.log(event);
+    updateStreamEventLabel(status);
   }
 }
 
-function handleStreamDone() {
-  logger.debug('Stream finished, transitioning to idle state');
-  isAvatarSpeaking = false;
-  smoothTransition(false);
+function handleStreamStarted() {
+  logger.debug('Stream started');
+  isWaitingForStream = false;
+  if (!isCurrentlyStreaming) {
+    isCurrentlyStreaming = true;
+    onVideoStatusChange(true);
+  }
 }
 
+
+function handleStreamDone() {
+  logger.debug('Stream done');
+  isCurrentlyStreaming = false;
+  onVideoStatusChange(false);
+}
+
+function handleStreamReady() {
+  logger.debug('Stream ready');
+  isStreamReady = true;
+  if (isWaitingForStream) {
+    isWaitingForStream = false;
+    startStreaming();
+  }
+}
+
+
 function handleStreamError() {
-  logger.error('Stream encountered an error');
-  isAvatarSpeaking = false;
-  smoothTransition(false);
-  // You might want to add additional error handling here
+  logger.error('Stream error occurred');
+  isCurrentlyStreaming = false;
+  isWaitingForStream = false;
+  onVideoStatusChange(false);
 }
 
 
 function updateStreamEventLabel(status) {
   const streamEventLabel = document.getElementById('stream-event-label');
   if (streamEventLabel) {
-    streamEventLabel.innerText = status;
+    streamEventLabel.innerText = status === 'dont-care' ? event : status;
     streamEventLabel.className = 'streamEvent-' + status;
   }
 }
+
 
 
 
@@ -1998,8 +2005,9 @@ async function startStreaming(assistantReply) {
       }
     }
 
-    // isAvatarSpeaking = false;
-    // smoothTransition(false);
+    // After all chunks have been processed, transition back to idle
+    isAvatarSpeaking = false;
+    smoothTransition(false);
 
     // Check if we need to reconnect
     if (shouldReconnect()) {
@@ -2008,6 +2016,8 @@ async function startStreaming(assistantReply) {
     }
   } catch (error) {
     logger.error('Error during streaming:', error);
+    isAvatarSpeaking = false;
+    smoothTransition(false);
     if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
       logger.warn('Stream not found or invalid session. Attempting to reinitialize persistent stream.');
       await reinitializePersistentStream();
