@@ -65,9 +65,7 @@ let isAvatarSpeaking = false;
 const MAX_RECONNECT_ATTEMPTS = 10;
 const INITIAL_RECONNECT_DELAY = 500; // 1 second
 const MAX_RECONNECT_DELAY = 90000; // 30 seconds
-let autoSpeakInProgress = false;
 let isPushToTalkEnabled = false;
-let isPushToTalkActive = false;
 let pushToTalkStartTime = 0;
 const MIN_PUSH_TO_TALK_DURATION = 300;
 let pushToTalkTimer = null;
@@ -711,74 +709,6 @@ async function reinitializePersistentStream() {
   await initializePersistentStream();
 }
 
-async function createNewPersistentStream() {
-  logger.debug('Creating new persistent stream...');
-
-  try {
-    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        source_url: avatars[currentAvatar].imageUrl,
-        driver_url: 'bank://lively/driver-06',
-        output_resolution: 512,
-        stream_warmup: true,
-        config: {
-          stitch: true,
-          fluent: true,
-          auto_match: true,
-          pad_audio: 0.5,
-          normalization_factor: 0.1,
-          align_driver: true,
-          motion_factor: 0.55,
-          align_expand_factor: 0.3,
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: 'neutral',
-                intensity: 0.5,
-              },
-            ],
-          },
-        },
-      }),
-    });
-
-    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
-
-    logger.debug('New stream created:', { newStreamId, newSessionId });
-
-    const newSessionClientAnswer = await createPeerConnection(offer, iceServers);
-
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${newStreamId}/sdp`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        answer: newSessionClientAnswer,
-        session_id: newSessionId,
-      }),
-    });
-
-    if (!sdpResponse.ok) {
-      throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
-    }
-
-    return { streamId: newStreamId, sessionId: newSessionId };
-  } catch (error) {
-    logger.error('Error creating new persistent stream:', error);
-    return null;
-  }
-}
-
 async function backgroundReconnect() {
   if (connectionState === ConnectionState.RECONNECTING) {
     logger.debug('Background reconnection already in progress. Skipping.');
@@ -790,7 +720,7 @@ async function backgroundReconnect() {
 
   try {
     await destroyPersistentStream();
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 300));
     await initializePersistentStream();
     lastConnectionTime = Date.now();
     logger.info('Background reconnection completed successfully');
@@ -803,46 +733,6 @@ async function backgroundReconnect() {
   }
 }
 
-function waitForIdleState() {
-  return new Promise((resolve) => {
-    const checkIdleState = () => {
-      if (!isAvatarSpeaking) {
-        resolve();
-      } else {
-        setTimeout(checkIdleState, 500); // Check every 500ms
-      }
-    };
-    checkIdleState();
-  });
-}
-
-async function switchToNewStream(newStreamData) {
-  logger.debug('Switching to new stream...');
-
-  try {
-    connectionState = ConnectionState.RECONNECTING;
-
-    // Quickly switch the video source to the new stream
-    if (streamVideoElement) {
-      // Instead of directly setting src, we need to update the WebRTC connection
-      await updateWebRTCConnection(newStreamData);
-    }
-
-    // Update global variables
-    persistentStreamId = newStreamData.streamId;
-    persistentSessionId = newStreamData.sessionId;
-
-    // Clean up the old stream
-    await cleanupOldStream();
-
-    connectionState = ConnectionState.CONNECTED;
-    logger.debug('Successfully switched to new stream');
-  } catch (error) {
-    logger.error('Error switching to new stream:', error);
-    connectionState = ConnectionState.DISCONNECTED;
-    throw error;
-  }
-}
 
 async function updateWebRTCConnection(newStreamData) {
   logger.debug('Updating WebRTC connection...');
@@ -1461,12 +1351,6 @@ function showLoadingSymbol() {
   document.body.appendChild(loadingSymbol);
 }
 
-function hideLoadingSymbol() {
-  const loadingSymbol = document.getElementById('loading-symbol');
-  if (loadingSymbol) {
-    document.body.removeChild(loadingSymbol);
-  }
-}
 
 function showErrorMessage(message) {
   const errorMessage = document.createElement('div');
@@ -1567,17 +1451,6 @@ function onIceConnectionStateChange() {
   }
 }
 
-async function attemptReconnect() {
-  logger.debug('Attempting to reconnect...');
-  try {
-    await reinitializeConnection();
-    logger.debug('Reconnection successful');
-    reconnectAttempts = 0;
-  } catch (error) {
-    logger.error('Reconnection attempt failed:', error);
-    scheduleReconnect();
-  }
-}
 
 function onConnectionStateChange() {
   const { peer: peerStatusLabel } = getStatusLabels();
@@ -2143,25 +2016,6 @@ export function toggleSimpleMode() {
 
 
 
-function createSimplePushTalkButton() {
-  const button = document.createElement('button');
-  button.id = 'simple-push-talk-button';
-  button.textContent = 'Push to Talk';
-  button.style.position = 'fixed';
-  button.style.bottom = '20px';
-  button.style.left = '50%';
-  button.style.transform = 'translateX(-50%)';
-  button.style.zIndex = '1001';
-  button.addEventListener('mousedown', startPushToTalk);
-  button.addEventListener('mouseup', endPushToTalk);
-  button.addEventListener('mouseleave', endPushToTalk);
-  button.addEventListener('touchstart', startPushToTalk);
-  button.addEventListener('touchend', endPushToTalk);
-  document.body.appendChild(button);
-  return button;
-}
-
-
 
 
 function startSendingAudioData() {
@@ -2522,94 +2376,6 @@ function toggleAutoSpeak() {
   }
 }
 
-async function reinitializeConnection() {
-  if (connectionState === ConnectionState.RECONNECTING) {
-    logger.warn('Connection reinitialization already in progress. Skipping reinitialize.');
-    return;
-  }
-
-  connectionState = ConnectionState.RECONNECTING;
-  logger.debug('Reinitializing connection...');
-
-  try {
-    await destroyPersistentStream();
-    await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait for 1 second
-
-    stopAllStreams();
-    closePC();
-
-    clearInterval(statsIntervalId);
-    clearTimeout(inactivityTimeout);
-    clearInterval(keepAliveInterval);
-
-    streamId = null;
-    sessionId = null;
-    peerConnection = null;
-    lastBytesReceived = 0;
-    videoIsPlaying = false;
-
-    currentUtterance = '';
-    interimMessageAdded = false;
-
-    const msgHistory = document.getElementById('msgHistory');
-    msgHistory.innerHTML = '';
-    chatHistory = [];
-
-    // Reset video elements
-    const streamVideoElement = document.getElementById('stream-video-element');
-    const idleVideoElement = document.getElementById('idle-video-element');
-    if (streamVideoElement) streamVideoElement.srcObject = null;
-    if (idleVideoElement) idleVideoElement.style.display = 'block';
-
-    // Add a delay before initializing to avoid rapid successive calls
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    await initializePersistentStream();
-
-    if (!persistentStreamId || !persistentSessionId) {
-      throw new Error('Persistent Stream ID or Session ID is missing after initialization');
-    }
-
-    await prepareForStreaming();
-
-    logger.info('Connection reinitialized successfully');
-    logger.debug(`New Persistent Stream ID: ${persistentStreamId}, New Persistent Session ID: ${persistentSessionId}`);
-    reconnectAttempts = 0; // Reset reconnect attempts on successful connection
-    connectionState = ConnectionState.CONNECTED;
-  } catch (error) {
-    logger.error('Error during reinitialization:', error);
-    showErrorMessage('Failed to reconnect. Please refresh the page.');
-    connectionState = ConnectionState.DISCONNECTED;
-  }
-}
-
-async function cleanupOldStream() {
-  logger.debug('Cleaning up old stream...');
-
-  try {
-    if (peerConnection) {
-      peerConnection.close();
-    }
-
-    if (pcDataChannel) {
-      pcDataChannel.close();
-    }
-
-    // Stop all tracks in the streamVideoElement
-    if (streamVideoElement && streamVideoElement.srcObject) {
-      streamVideoElement.srcObject.getTracks().forEach((track) => track.stop());
-    }
-
-    // Clear any ongoing intervals or timeouts
-    clearInterval(statsIntervalId);
-    clearTimeout(inactivityTimeout);
-    clearInterval(keepAliveInterval);
-
-    logger.debug('Old stream cleaned up successfully');
-  } catch (error) {
-    logger.error('Error cleaning up old stream:', error);
-  }
-}
 
 const connectButton = document.getElementById('connect-button');
 connectButton.onclick = initializeConnection;
