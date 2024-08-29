@@ -85,6 +85,82 @@ const STREAMING_HYSTERESIS = 500;
 let lastActivityTime = 0;
 const IDLE_TIMEOUT = 1000; // 2 seconds of inactivity before transitioning to idle
 let isWaitingForStream = false;
+let isWarmupNeeded = true;
+
+
+async function warmupStream() {
+  if (!isWarmupNeeded) {
+    logger.debug('Warm-up not needed, skipping');
+    return;
+  }
+
+  logger.debug('Warming up the stream');
+  try {
+    if (!persistentStreamId || !persistentSessionId) {
+      logger.error('Persistent stream not initialized. Cannot warm up.');
+      return;
+    }
+
+    const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
+    if (!currentAvatar) {
+      logger.error('No avatar selected or avatar not found. Cannot warm up.');
+      return;
+    }
+
+    const warmupResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: '<speak><break time="1500ms"/></speak>',
+          ssml: true,
+          provider: {
+            type: 'microsoft',
+            voice_id: currentAvatar.voiceId,
+          },
+        },
+        session_id: persistentSessionId,
+        driver_url: 'bank://lively/driver-06',
+        output_resolution: 512,
+        stream_warmup: true,
+        config: {
+          fluent: true,
+          stitch: true,
+          pad_audio: 0.5,
+          auto_match: true,
+          align_driver: true,
+          normalization_factor: 0.1,
+          align_expand_factor: 0.3,
+          motion_factor: 0.55,
+          result_format: 'mp4',
+        },
+      }),
+    });
+
+    if (!warmupResponse.ok) {
+      throw new Error(`HTTP error! status: ${warmupResponse.status}`);
+    }
+
+    const warmupData = await warmupResponse.json();
+    logger.debug('Warm-up response:', warmupData);
+
+    if (warmupData.status === 'started') {
+      logger.debug('Warm-up stream started successfully');
+      // Wait for the warm-up to complete
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    } else {
+      logger.warn('Unexpected warm-up response status:', warmupData.status);
+    }
+
+    isWarmupNeeded = false;
+  } catch (error) {
+    logger.error('Error during stream warm-up:', error);
+  }
+}
 
 
 function debouncedVideoStatusChange(isPlaying, stream) {
@@ -916,6 +992,7 @@ if (headerBar && header) {
     // showLoadingSymbol();
     try {
       await initializePersistentStream();
+      await warmupStream(); // Warm up the stream after initialization
       startConnectionHealthCheck();
       // hideLoadingSymbol();
     } catch (error) {
@@ -1132,6 +1209,10 @@ async function handleAvatarChange() {
 
   await destroyPersistentStream();
   await initializePersistentStream();
+  
+  // Set warm-up flag to true when avatar changes
+  isWarmupNeeded = true;
+  await warmupStream();
 }
 
 
@@ -1894,6 +1975,10 @@ async function initializeConnection() {
 }
 
 async function startStreaming(assistantReply) {
+  if (isWarmupNeeded) {
+    await warmupStream();
+  }
+
   try {
     logger.debug('Starting streaming with reply:', assistantReply);
     if (!persistentStreamId || !persistentSessionId) {
