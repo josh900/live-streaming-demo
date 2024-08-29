@@ -916,7 +916,6 @@ if (headerBar && header) {
     // showLoadingSymbol();
     try {
       await initializePersistentStream();
-      await warmUpStream();
       startConnectionHealthCheck();
       // hideLoadingSymbol();
     } catch (error) {
@@ -1089,84 +1088,6 @@ function exitSimpleMode() {
   logger.info('Exited simple mode');
 }
 
-async function warmUpStream() {
-  if (!persistentStreamId || !persistentSessionId) {
-    logger.error('Persistent stream not initialized. Cannot warm up stream.');
-    return;
-  }
-
-  const silentSSML = '<break time="1500ms"/>';
-
-  try {
-    const warmUpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: silentSSML,
-          ssml: true,
-        },
-        session_id: persistentSessionId,
-        driver_url: 'bank://lively/driver-06',
-        config: {
-          stitch: true,
-          fluent: true,
-          pad_audio: 0,
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: 'neutral',
-                intensity: 0.5
-              }
-            ]
-          }
-        },
-      }),
-    });
-
-    if (!warmUpResponse.ok) {
-      throw new Error(`HTTP error! status: ${warmUpResponse.status}`);
-    }
-
-    const warmUpResponseData = await warmUpResponse.json();
-    logger.debug('Warm-up stream response:', warmUpResponseData);
-
-    if (warmUpResponseData.status === 'started') {
-      logger.debug('Warm-up stream started successfully');
-      
-      // Create a hidden video element for the warm-up stream
-      const warmUpVideoElement = document.createElement('video');
-      warmUpVideoElement.style.display = 'none';
-      warmUpVideoElement.muted = true;
-      warmUpVideoElement.src = warmUpResponseData.result_url;
-      document.body.appendChild(warmUpVideoElement);
-
-      // Play the warm-up video
-      await warmUpVideoElement.play();
-
-      // Wait for the video to finish
-      await new Promise((resolve) => {
-        warmUpVideoElement.onended = resolve;
-      });
-
-      // Remove the warm-up video element
-      document.body.removeChild(warmUpVideoElement);
-
-      logger.debug('Warm-up stream completed');
-    } else {
-      logger.warn('Unexpected response status for warm-up stream:', warmUpResponseData.status);
-    }
-  } catch (error) {
-    logger.error('Error during stream warm-up:', error);
-  }
-}
-
-
 async function handleAvatarChange() {
   const avatarSelect = document.getElementById('avatar-select');
   currentAvatarId = avatarSelect.value;
@@ -1211,9 +1132,6 @@ async function handleAvatarChange() {
 
   await destroyPersistentStream();
   await initializePersistentStream();
-
-  // Warm up the stream after initializing
-  await warmUpStream();
 }
 
 
@@ -2032,6 +1950,7 @@ async function startStreaming(assistantReply) {
           session_id: persistentSessionId,
           driver_url: 'bank://lively/driver-06',
           output_resolution: 512,
+          stream_warmup: true,
           config: {
             fluent: true,
             stitch: true,
