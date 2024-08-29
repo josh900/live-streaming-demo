@@ -346,14 +346,6 @@ function initializeTransitionCanvas() {
 }
 
 function smoothTransition(toStreaming, duration = 300) {
-  const idleVideoElement = document.getElementById('idle-video-element');
-  const streamVideoElement = document.getElementById('stream-video-element');
-
-  if (!idleVideoElement || !streamVideoElement) {
-    logger.warn('Video elements not found for transition');
-    return;
-  }
-
   if (isTransitioning) {
     logger.debug('Transition already in progress, skipping');
     return;
@@ -361,6 +353,15 @@ function smoothTransition(toStreaming, duration = 300) {
 
   isTransitioning = true;
   logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
+
+  const idleVideoElement = document.getElementById('idle-video-element');
+  const streamVideoElement = document.getElementById('stream-video-element');
+
+  if (!idleVideoElement || !streamVideoElement) {
+    logger.warn('Video elements not found for transition');
+    isTransitioning = false;
+    return;
+  }
 
   let startTime = null;
 
@@ -1607,6 +1608,31 @@ function onStreamEvent(message) {
     }
   }
 }
+
+function handleStreamDone() {
+  logger.debug('Stream finished, transitioning to idle state');
+  isAvatarSpeaking = false;
+  smoothTransition(false);
+}
+
+function handleStreamError() {
+  logger.error('Stream encountered an error');
+  isAvatarSpeaking = false;
+  smoothTransition(false);
+  // You might want to add additional error handling here
+}
+
+
+function updateStreamEventLabel(status) {
+  const streamEventLabel = document.getElementById('stream-event-label');
+  if (streamEventLabel) {
+    streamEventLabel.innerText = status;
+    streamEventLabel.className = 'streamEvent-' + status;
+  }
+}
+
+
+
 
 function onTrack(event) {
   logger.debug('onTrack event:', event);
