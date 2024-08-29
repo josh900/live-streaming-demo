@@ -85,6 +85,7 @@ const STREAMING_HYSTERESIS = 500;
 let lastActivityTime = 0;
 const IDLE_TIMEOUT = 1000; // 2 seconds of inactivity before transitioning to idle
 let isWaitingForStream = false;
+let isWarmingUp = false;
 
 
 function debouncedVideoStatusChange(isPlaying, stream) {
@@ -548,6 +549,11 @@ async function warmUpStream() {
     return;
   }
 
+  isWarmingUp = true;
+  const streamVideoElement = document.getElementById('stream-video-element');
+  const originalDisplay = streamVideoElement.style.display;
+  const originalMuted = streamVideoElement.muted;
+
   try {
     logger.debug('Warming up stream...');
 
@@ -590,7 +596,6 @@ async function warmUpStream() {
     logger.debug('Warm-up stream response:', warmUpData);
 
     if (warmUpData.status === 'started') {
-      const streamVideoElement = document.getElementById('stream-video-element');
       streamVideoElement.src = warmUpData.result_url;
       streamVideoElement.muted = true;
       streamVideoElement.style.display = 'none';
@@ -615,12 +620,12 @@ async function warmUpStream() {
   } catch (error) {
     logger.error('Error during stream warm-up:', error);
   } finally {
-    const streamVideoElement = document.getElementById('stream-video-element');
-    streamVideoElement.muted = false;
-    streamVideoElement.style.display = '';
+    isWarmingUp = false;
+    streamVideoElement.muted = originalMuted;
+    streamVideoElement.style.display = originalDisplay;
+    logger.debug('Warm-up process finished, restored original video element state');
   }
 }
-
 
 async function initializePersistentStream() {
   if (isInitializingStream) {
@@ -1661,19 +1666,19 @@ function onStreamEvent(message) {
     switch (event) {
       case 'stream/started':
         status = 'started';
-        handleStreamStarted();
+        if (!isWarmingUp) handleStreamStarted();
         break;
       case 'stream/done':
         status = 'done';
-        handleStreamDone();
+        if (!isWarmingUp) handleStreamDone();
         break;
       case 'stream/ready':
         status = 'ready';
-        handleStreamReady();
+        if (!isWarmingUp) handleStreamReady();
         break;
       case 'stream/error':
         status = 'error';
-        handleStreamError();
+        if (!isWarmingUp) handleStreamError();
         break;
       default:
         status = 'dont-care';
@@ -1681,7 +1686,7 @@ function onStreamEvent(message) {
     }
 
     console.log(event);
-    updateStreamEventLabel(status);
+    if (!isWarmingUp) updateStreamEventLabel(status);
   }
 }
 
