@@ -1658,7 +1658,7 @@ function onTrack(event) {
     } else {
       logger.debug('Peer connection not ready for stats.');
     }
-  }, 1000); // Check every 500ms
+  }, 300); // Check every 500ms
 
   if (event.streams && event.streams.length > 0) {
     const stream = event.streams[0];
@@ -1978,8 +1978,8 @@ async function startStreaming(assistantReply) {
       }
     }
 
-    isAvatarSpeaking = false;
-    smoothTransition(false);
+    // isAvatarSpeaking = false;
+    // smoothTransition(false);
 
     // Check if we need to reconnect
     if (shouldReconnect()) {
