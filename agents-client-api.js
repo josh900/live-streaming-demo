@@ -916,7 +916,6 @@ if (headerBar && header) {
     // showLoadingSymbol();
     try {
       await initializePersistentStream();
-      await playInitialSilentVideo(); 
       startConnectionHealthCheck();
       // hideLoadingSymbol();
     } catch (error) {
@@ -970,85 +969,6 @@ if (headerBar && header) {
 
 
 }
-
-
-async function playInitialSilentVideo() {
-  if (!persistentStreamId || !persistentSessionId) {
-    logger.warn('Persistent stream not initialized. Cannot play initial silent video.');
-    return;
-  }
-
-  const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
-  if (!currentAvatar) {
-    logger.error('No avatar selected or avatar not found. Cannot play initial silent video.');
-    return;
-  }
-
-  const hiddenVideoElement = document.createElement('video');
-  hiddenVideoElement.muted = true;
-  hiddenVideoElement.style.display = 'none';
-  document.body.appendChild(hiddenVideoElement);
-
-  try {
-    const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: '<break time="1500ms"/>',
-          ssml: true,
-          provider: {
-            type: 'microsoft',
-            voice_id: currentAvatar.voiceId,
-          },
-        },
-        session_id: persistentSessionId,
-        driver_url: 'bank://lively/driver-06',
-        output_resolution: 512,
-        stream_warmup: true,
-        config: {
-          fluent: true,
-          stitch: true,
-          pad_audio: 0.5,
-          auto_match: true,
-          align_driver: true,
-          normalization_factor: 0.1,
-          align_expand_factor: 0.3,
-          motion_factor: 0.55,
-          result_format: 'mp4',
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: 'neutral',
-                intensity: 0.5
-              }
-            ]
-          }
-        },
-      }),
-    });
-
-    if (playResponse.ok) {
-      const playResponseData = await playResponse.json();
-      if (playResponseData.status === 'started' && playResponseData.result_url) {
-        hiddenVideoElement.src = playResponseData.result_url;
-        await new Promise((resolve) => {
-          hiddenVideoElement.onended = resolve;
-        });
-      }
-    }
-  } catch (error) {
-    logger.error('Error playing initial silent video:', error);
-  } finally {
-    document.body.removeChild(hiddenVideoElement);
-  }
-}
-
 
 function applySimpleMode(mode) {
   const content = document.getElementById('content');
@@ -1212,7 +1132,6 @@ async function handleAvatarChange() {
 
   await destroyPersistentStream();
   await initializePersistentStream();
-  await playInitialSilentVideo();
 }
 
 
