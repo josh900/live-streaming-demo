@@ -78,9 +78,21 @@ let isPushToTalkActive = false;
 let autoSpeakInProgress = false;
 let streamStartTime = 0;
 const STREAM_DURATION_THRESHOLD = 300; // 300ms threshold to consider a stream stable
+let videoStatusDebounceTimer;
+const MIN_BYTES_THRESHOLD = 1000;
+let streamingStartTime = 0;
+const STREAMING_HYSTERESIS = 500;
 
 
-
+function debouncedVideoStatusChange(isPlaying, stream) {
+  clearTimeout(videoStatusDebounceTimer);
+  videoStatusDebounceTimer = setTimeout(() => {
+    if (isPlaying !== lastVideoStatus) {
+      onVideoStatusChange(isPlaying, stream);
+      lastVideoStatus = isPlaying;
+    }
+  }, 200);
+}
 
 
 const ConnectionState = {
@@ -331,21 +343,22 @@ function initializeTransitionCanvas() {
 }
 
 function smoothTransition(toStreaming, duration = 300) {
-  const idleVideoElement = document.getElementById('idle-video-element');
-  const streamVideoElement = document.getElementById('stream-video-element');
-
-  if (!idleVideoElement || !streamVideoElement) {
-    logger.warn('Video elements not found for transition');
-    return;
-  }
-
-  if (isTransitioning) {
-    logger.debug('Transition already in progress, skipping');
+  if (isTransitioning || (toStreaming === isCurrentlyStreaming)) {
+    logger.debug('Transition already in progress or unnecessary, skipping');
     return;
   }
 
   isTransitioning = true;
   logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
+
+  const idleVideoElement = document.getElementById('idle-video-element');
+  const streamVideoElement = document.getElementById('stream-video-element');
+
+  if (!idleVideoElement || !streamVideoElement) {
+    logger.warn('Video elements not found for transition');
+    isTransitioning = false;
+    return;
+  }
 
   let startTime = null;
 
@@ -356,7 +369,6 @@ function smoothTransition(toStreaming, duration = 300) {
 
     transitionCtx.clearRect(0, 0, transitionCanvas.width, transitionCanvas.height);
 
-    // Draw the fading out video
     transitionCtx.globalAlpha = 1 - progress;
     transitionCtx.drawImage(
       toStreaming ? idleVideoElement : streamVideoElement,
@@ -366,7 +378,6 @@ function smoothTransition(toStreaming, duration = 300) {
       transitionCanvas.height,
     );
 
-    // Draw the fading in video
     transitionCtx.globalAlpha = progress;
     transitionCtx.drawImage(
       toStreaming ? streamVideoElement : idleVideoElement,
@@ -379,7 +390,6 @@ function smoothTransition(toStreaming, duration = 300) {
     if (progress < 1) {
       requestAnimationFrame(animate);
     } else {
-      // Ensure final state is set correctly
       if (toStreaming) {
         streamVideoElement.style.display = 'block';
         idleVideoElement.style.display = 'none';
@@ -394,10 +404,7 @@ function smoothTransition(toStreaming, duration = 300) {
     }
   }
 
-  // Show the transition canvas
   transitionCanvas.style.display = 'block';
-
-  // Start the animation
   requestAnimationFrame(animate);
 }
 
@@ -1498,13 +1505,8 @@ function onSignalingStateChange() {
 }
 
 function onVideoStatusChange(videoIsPlaying, stream) {
-  if (videoIsPlaying === lastVideoStatus) {
-    return; // No change, ignore
-  }
-
-  logger.debug(`Video status changing from ${lastVideoStatus} to ${videoIsPlaying ? 'streaming' : 'empty'}`);
-
-  lastVideoStatus = videoIsPlaying;
+  let status = videoIsPlaying ? 'streaming' : 'empty';
+  logger.debug('Video status changing from', lastVideoStatus, 'to', status);
 
   const streamVideoElement = document.getElementById('stream-video-element');
   const idleVideoElement = document.getElementById('idle-video-element');
@@ -1514,18 +1516,19 @@ function onVideoStatusChange(videoIsPlaying, stream) {
     return;
   }
 
-  if (videoIsPlaying) {
+  if (status === 'streaming') {
     setStreamVideoElement(stream);
-    smoothTransition(true);
-  } else {
-    smoothTransition(false);
   }
+  
+  smoothTransition(status === 'streaming');
 
   const streamingStatusLabel = document.getElementById('streaming-status-label');
   if (streamingStatusLabel) {
-    streamingStatusLabel.innerText = videoIsPlaying ? 'streaming' : 'empty';
-    streamingStatusLabel.className = 'streamingState-' + (videoIsPlaying ? 'streaming' : 'empty');
+    streamingStatusLabel.innerText = status;
+    streamingStatusLabel.className = 'streamingState-' + status;
   }
+
+  logger.debug('Video status changed:', status);
 }
 
 function setStreamVideoElement(stream) {
@@ -1545,11 +1548,9 @@ function setStreamVideoElement(stream) {
 
   streamVideoElement.onloadedmetadata = () => {
     logger.debug('Stream video metadata loaded');
-    streamVideoElement
-      .play()
+    streamVideoElement.play()
       .then(() => {
         logger.debug('Stream video playback started');
-        smoothTransition(true);
       })
       .catch((e) => logger.error('Error playing stream video:', e));
   };
@@ -1562,6 +1563,7 @@ function setStreamVideoElement(stream) {
     logger.error('Error with stream video:', e);
   };
 }
+
 
 function onStreamEvent(message) {
   if (pcDataChannel.readyState === 'open') {
@@ -1627,31 +1629,17 @@ function onTrack(event) {
         stats.forEach((report) => {
           if (report.type === 'inbound-rtp' && report.kind === 'video') {
             videoStatsFound = true;
-            const currentTime = Date.now();
-            const isReceivingVideo = report.bytesReceived > lastBytesReceived;
+            const bytesReceived = report.bytesReceived || 0;
+            const videoIsPlaying = bytesReceived > lastBytesReceived + MIN_BYTES_THRESHOLD;
 
-            if (isReceivingVideo && !isCurrentlyStreaming) {
-              // Start of a new stream
-              isCurrentlyStreaming = true;
-              streamStartTime = currentTime;
-            } else if (!isReceivingVideo && isCurrentlyStreaming) {
-              // Potential end of stream
-              if (currentTime - streamStartTime > STREAM_DURATION_THRESHOLD) {
-                // Stream was stable, now it's ending
-                isCurrentlyStreaming = false;
-                onVideoStatusChange(false, event.streams[0]);
-              }
-              // If the stream duration was less than the threshold, we ignore it to avoid flickering
+            if (videoIsPlaying) {
+              streamingStartTime = Date.now();
+              debouncedVideoStatusChange(true, event.streams[0]);
+            } else if (Date.now() - streamingStartTime > STREAMING_HYSTERESIS) {
+              debouncedVideoStatusChange(false, event.streams[0]);
             }
-
-            if (isCurrentlyStreaming && currentTime - streamStartTime > STREAM_DURATION_THRESHOLD) {
-              // Stream has been stable for long enough, update status if needed
-              if (lastVideoStatus !== true) {
-                onVideoStatusChange(true, event.streams[0]);
-              }
-            }
-
-            lastBytesReceived = report.bytesReceived;
+            
+            lastBytesReceived = bytesReceived;
           }
         });
         if (!videoStatsFound) {
@@ -1663,7 +1651,7 @@ function onTrack(event) {
     } else {
       logger.debug('Peer connection not ready for stats.');
     }
-  }, 100); // Check every 100ms instead of 50ms to reduce unnecessary checks
+  }, 200); // Check every 200ms
 
   if (event.streams && event.streams.length > 0) {
     const stream = event.streams[0];
