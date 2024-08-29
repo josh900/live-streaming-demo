@@ -2060,7 +2060,7 @@ async function startStreaming(assistantReply) {
             normalization_factor: 0.1,
             align_expand_factor: 0.3,
             motion_factor: 0.55,
-            result_format: 'webm',
+            result_format: 'mp4',
             driver_expressions: {
               expressions: [
                 {
