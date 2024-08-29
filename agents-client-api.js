@@ -1658,7 +1658,7 @@ function onTrack(event) {
     } else {
       logger.debug('Peer connection not ready for stats.');
     }
-  }, 250); // Check every 500ms
+  }, 1000); // Check every 500ms
 
   if (event.streams && event.streams.length > 0) {
     const stream = event.streams[0];
