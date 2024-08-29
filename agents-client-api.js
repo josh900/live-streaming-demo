@@ -616,13 +616,20 @@ async function warmUpStream() {
     const warmUpData = await warmUpResponse.json();
     logger.debug('Warm-up stream response:', warmUpData);
 
+    logger.debug('warming 1');
+
+
     if (warmUpData.status === 'started') {
+      logger.debug('warming 2');
       streamVideoElement.style.display = 'none';
       streamVideoElement.muted = true;
       streamVideoElement.src = warmUpData.result_url;
+      logger.debug('warming 3');
 
       await new Promise((resolve) => {
+        logger.debug('warming 4');
         streamVideoElement.oncanplay = () => {
+          
           streamVideoElement.play().then(resolve).catch(error => {
             logger.error('Error playing warm-up video:', error);
             resolve();
@@ -630,7 +637,11 @@ async function warmUpStream() {
         };
       });
 
+      logger.debug('warming 5');
+
       await new Promise((resolve) => {
+        logger.debug('warming 6');
+
         streamVideoElement.onended = resolve;
       });
 
