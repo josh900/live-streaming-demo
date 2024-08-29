@@ -182,7 +182,7 @@ async function generateSilentVideo(imageUrl, voiceId, name) {
   }
 
   // Upload to S3
-  const s3Key = `avatars/${name}/silent_video.mp4`;
+  const s3Key = `avatars/${name}/silent_video.webm`;
   await uploadToS3(s3Key, await videoResponse.buffer());
 
   const s3Url = `https://${DID_API.awsConfig.bucketName}.s3.${DID_API.awsConfig.region}.amazonaws.com/${s3Key}`;
