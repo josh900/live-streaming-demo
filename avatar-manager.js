@@ -124,12 +124,9 @@ async function generateSilentVideo(imageUrl, voiceId, name) {
         output_resolution: 512,
         stitch: true,
         fluent: true,
-        result_format: 'webm',
+        result_format: 'mp4',
         normalization_factor: 0.1,
         align_driver: true,
-        "background": {
-          "color": false
-        }
       },
     }),
   });
