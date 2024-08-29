@@ -535,6 +535,93 @@ function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
 }
 
+
+async function warmUpStream() {
+  if (!persistentStreamId || !persistentSessionId) {
+    logger.error('Persistent stream not initialized. Cannot warm up stream.');
+    return;
+  }
+
+  const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
+  if (!currentAvatar) {
+    logger.error('No avatar selected or avatar not found. Cannot warm up stream.');
+    return;
+  }
+
+  try {
+    logger.debug('Warming up stream...');
+
+    const warmUpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: '<break time="1500ms"/>',
+          ssml: true,
+          provider: {
+            type: 'microsoft',
+            voice_id: currentAvatar.voiceId,
+          },
+        },
+        session_id: persistentSessionId,
+        driver_url: 'bank://lively/driver-06',
+        config: {
+          fluent: true,
+          stitch: true,
+          pad_audio: 0,
+          auto_match: true,
+          align_driver: true,
+          normalization_factor: 0.1,
+          align_expand_factor: 0.3,
+          motion_factor: 0.55,
+        },
+      }),
+    });
+
+    if (!warmUpResponse.ok) {
+      throw new Error(`HTTP error! status: ${warmUpResponse.status}`);
+    }
+
+    const warmUpData = await warmUpResponse.json();
+    logger.debug('Warm-up stream response:', warmUpData);
+
+    if (warmUpData.status === 'started') {
+      const streamVideoElement = document.getElementById('stream-video-element');
+      streamVideoElement.src = warmUpData.result_url;
+      streamVideoElement.muted = true;
+      streamVideoElement.style.display = 'none';
+
+      await new Promise((resolve) => {
+        streamVideoElement.oncanplay = () => {
+          streamVideoElement.play().then(resolve).catch(error => {
+            logger.error('Error playing warm-up video:', error);
+            resolve();
+          });
+        };
+      });
+
+      await new Promise((resolve) => {
+        streamVideoElement.onended = resolve;
+      });
+
+      logger.debug('Warm-up stream completed');
+    } else {
+      logger.warn('Unexpected response status for warm-up stream:', warmUpData.status);
+    }
+  } catch (error) {
+    logger.error('Error during stream warm-up:', error);
+  } finally {
+    const streamVideoElement = document.getElementById('stream-video-element');
+    streamVideoElement.muted = false;
+    streamVideoElement.style.display = '';
+  }
+}
+
+
 async function initializePersistentStream() {
   if (isInitializingStream) {
     logger.warn('Stream initialization already in progress. Skipping.');
@@ -627,6 +714,9 @@ async function initializePersistentStream() {
     lastConnectionTime = Date.now();
     logger.info('Persistent stream initialized successfully');
     connectionState = ConnectionState.CONNECTED;
+
+    // Warm up the stream
+    await warmUpStream();
   } catch (error) {
     logger.error('Failed to initialize persistent stream:', error);
     isPersistentStreamActive = false;
@@ -638,7 +728,6 @@ async function initializePersistentStream() {
     isInitializingStream = false;
   }
 }
-
 
 function shouldReconnect() {
   const timeSinceLastConnection = Date.now() - lastConnectionTime;
@@ -1132,6 +1221,7 @@ async function handleAvatarChange() {
 
   await destroyPersistentStream();
   await initializePersistentStream();
+  await warmUpStream();
 }
 
 
@@ -1988,6 +2078,8 @@ async function startStreaming(assistantReply) {
           // Wait for the video to be ready before transitioning
           await new Promise((resolve) => {
             streamVideoElement.src = playResponseData.result_url;
+            streamVideoElement.muted = false; // Ensure it's not muted
+            streamVideoElement.style.display = ''; // Ensure it's visible
             streamVideoElement.oncanplay = resolve;
           });
 
