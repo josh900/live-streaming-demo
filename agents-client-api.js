@@ -428,20 +428,6 @@ function smoothTransition(toStreaming, duration = 300) {
   requestAnimationFrame(animate);
 }
 
-function handleVideoStatusChange(isPlaying) {
-  if (isWarmingUp) {
-    logger.debug('Warming up, ignoring video status change');
-    return;
-  }
-
-  if (isPlaying !== isCurrentlyStreaming) {
-    logger.debug(`Video status changing from ${isCurrentlyStreaming} to ${isPlaying}`);
-    smoothTransition(isPlaying);
-  }
-}
-
-
-
 
 function checkPendingTransition() {
   if (pendingTransition) {
@@ -662,12 +648,9 @@ async function warmUpStream() {
     logger.debug('Warm-up process finished, restored original video element states');
     
     // Force a transition to idle state after warm-up
-    setTimeout(() => {
-      smoothTransition(false);
-    }, 100);
+    smoothTransition(false);
   }
 }
-
 
 
 
@@ -1705,28 +1688,35 @@ function onStreamingComplete() {
 
 function onStreamEvent(message) {
   if (pcDataChannel.readyState === 'open' && !isWarmingUp) {
+    let status;
     const [event, _] = message.data.split(':');
 
     switch (event) {
       case 'stream/started':
-        handleVideoStatusChange(true);
+        status = 'started';
+        handleStreamStarted();
         break;
       case 'stream/done':
-        handleVideoStatusChange(false);
+        status = 'done';
+        handleStreamDone();
         break;
       case 'stream/ready':
+        status = 'ready';
         handleStreamReady();
         break;
       case 'stream/error':
+        status = 'error';
         handleStreamError();
+        break;
+      default:
+        status = 'dont-care';
         break;
     }
 
     console.log(event);
-    updateStreamEventLabel(event);
+    updateStreamEventLabel(status);
   }
 }
-
 
 
 
