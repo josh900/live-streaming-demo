@@ -428,6 +428,7 @@ function smoothTransition(toStreaming, duration = 300) {
   requestAnimationFrame(animate);
 }
 
+
 function checkPendingTransition() {
   if (pendingTransition) {
     const { toStreaming, duration } = pendingTransition;
@@ -577,7 +578,6 @@ async function warmUpStream() {
   try {
     logger.debug('Warming up stream...');
 
-
     const warmUpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
       method: 'POST',
       headers: {
@@ -646,9 +646,12 @@ async function warmUpStream() {
     streamVideoElement.style.display = originalStreamDisplay;
     idleVideoElement.style.display = originalIdleDisplay;
     logger.debug('Warm-up process finished, restored original video element states');
-    checkPendingTransition(); // Check if there's a pending transition after warm-up
+    
+    // Force a transition to idle state after warm-up
+    smoothTransition(false);
   }
 }
+
 
 
 
