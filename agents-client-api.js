@@ -638,6 +638,8 @@ async function warmUpStream() {
     } else {
       logger.warn('Unexpected response status for warm-up stream:', warmUpData.status);
     }
+
+    
   } catch (error) {
     logger.error('Error during stream warm-up:', error);
   } finally {
@@ -648,6 +650,8 @@ async function warmUpStream() {
     logger.debug('Warm-up process finished, restored original video element states');
     
     // Force a transition to idle state after warm-up
+    smoothTransition(false);
+    isAvatarSpeaking = false;
     smoothTransition(false);
   }
 }
