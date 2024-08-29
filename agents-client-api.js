@@ -56,14 +56,14 @@ let persistentStreamId = null;
 let persistentSessionId = null;
 let isPersistentStreamActive = false;
 const API_RATE_LIMIT = 80; // Maximum number of calls per minute
-const API_CALL_INTERVAL = 10000 / API_RATE_LIMIT; // Minimum time between API calls in milliseconds
+const API_CALL_INTERVAL = 5000 / API_RATE_LIMIT; // Minimum time between API calls in milliseconds
 let lastApiCallTime = 0;
 const maxRetryCount = 10;
 const maxDelaySec = 100;
 const RECONNECTION_INTERVAL = 100000; // 25 seconds for testing, adjust as needed
 let isAvatarSpeaking = false;
 const MAX_RECONNECT_ATTEMPTS = 10;
-const INITIAL_RECONNECT_DELAY = 500; // 1 second
+const INITIAL_RECONNECT_DELAY = 300; // 1 second
 const MAX_RECONNECT_DELAY = 90000; // 30 seconds
 let isPushToTalkEnabled = false;
 let pushToTalkStartTime = 0;
@@ -1601,7 +1601,7 @@ function onStreamEvent(message) {
           streamEventLabel.innerText = 'ready';
           streamEventLabel.className = 'streamEvent-ready';
         }
-      }, 1000);
+      }, 300);
     } else {
       console.log(event);
       const streamEventLabel = document.getElementById('stream-event-label');
@@ -1839,7 +1839,7 @@ async function initializeConnection() {
       throw e;
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 6000));
+    await new Promise((resolve) => setTimeout(resolve, 3000));
 
     const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
       method: 'POST',
