@@ -1143,14 +1143,27 @@ async function warmUpStream() {
 
     if (warmUpData.status === 'started') {
       const streamVideoElement = document.getElementById('stream-video-element');
-      streamVideoElement.src = warmUpData.result_url;
-      streamVideoElement.muted = true;
-      streamVideoElement.style.display = 'none';
+      const idleVideoElement = document.getElementById('idle-video-element');
 
+      // Create a temporary video element for the warm-up stream
+      const tempVideoElement = document.createElement('video');
+      tempVideoElement.style.display = 'none'; // Hide the temporary video element
+      tempVideoElement.muted = true;
+      tempVideoElement.src = warmUpData.result_url;
+      document.body.appendChild(tempVideoElement);
+
+      // Ensure the idle video is visible and playing
+      idleVideoElement.style.display = 'block';
+      idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e));
+
+      // Play the warm-up stream in the background
       await new Promise((resolve) => {
-        streamVideoElement.onended = resolve;
-        streamVideoElement.play().catch(e => logger.error('Error playing warm-up video:', e));
+        tempVideoElement.onended = resolve;
+        tempVideoElement.play().catch(e => logger.error('Error playing warm-up video:', e));
       });
+
+      // Remove the temporary video element
+      document.body.removeChild(tempVideoElement);
 
       logger.debug('Warm-up stream completed');
     } else {
