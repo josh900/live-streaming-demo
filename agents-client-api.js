@@ -2070,10 +2070,10 @@ async function startStreaming(assistantReply) {
                 },
               ],
             },
-            "background": {
-              "color": false
-            }
           },
+          background: {
+            color: false
+          }
         }),
       });
 
