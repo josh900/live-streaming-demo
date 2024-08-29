@@ -126,8 +126,8 @@ async function generateSilentVideo(imageUrl, voiceId, name) {
         fluent: true,
         result_format: 'webm',
         normalization_factor: 0.1,
-        align_driver: true,
-      },
+        align_driver: true
+      }
     }),
   });
 
