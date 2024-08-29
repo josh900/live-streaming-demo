@@ -1132,7 +1132,75 @@ async function handleAvatarChange() {
 
   await destroyPersistentStream();
   await initializePersistentStream();
+  
+  // Warm up the stream after initializing
+  await warmUpStream();
 }
+
+async function warmUpStream() {
+  if (!persistentStreamId || !persistentSessionId) {
+    logger.error('Persistent stream not initialized. Cannot warm up stream.');
+    return;
+  }
+
+  const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
+  if (!currentAvatar) {
+    logger.error('No avatar selected or avatar not found. Cannot warm up stream.');
+    return;
+  }
+
+  try {
+    logger.debug('Warming up stream...');
+    const warmupResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: '<break time="1500ms"/>',
+          ssml: true,
+          provider: {
+            type: 'microsoft',
+            voice_id: currentAvatar.voiceId,
+          },
+        },
+        session_id: persistentSessionId,
+        driver_url: 'bank://lively/driver-06',
+        output_resolution: 512,
+        config: {
+          fluent: true,
+          stitch: true,
+          pad_audio: 0.5,
+          auto_match: true,
+          align_driver: true,
+          normalization_factor: 0.1,
+          align_expand_factor: 0.3,
+          motion_factor: 0.55,
+          result_format: 'mp4',
+        },
+      }),
+    });
+
+    if (!warmupResponse.ok) {
+      throw new Error(`HTTP error! status: ${warmupResponse.status}`);
+    }
+
+    const warmupData = await warmupResponse.json();
+    logger.debug('Warmup stream response:', warmupData);
+
+    if (warmupData.status === 'started') {
+      logger.debug('Stream warmed up successfully');
+    } else {
+      logger.warn('Unexpected response status during warmup:', warmupData.status);
+    }
+  } catch (error) {
+    logger.error('Error during stream warmup:', error);
+  }
+}
+
 
 
 async function loadAvatars(selectedAvatarId) {
