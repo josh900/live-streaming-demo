@@ -1862,7 +1862,7 @@ function closePC(pc = peerConnection) {
   }
 }
 
-async function fetchWithRetries(url, options, retries = 0, delayMs = 1000) {
+async function fetchWithRetries(url, options, retries = 0, delayMs = 300) {
   try {
     const now = Date.now();
     const timeSinceLastCall = now - lastApiCallTime;
@@ -1879,7 +1879,7 @@ async function fetchWithRetries(url, options, retries = 0, delayMs = 1000) {
         // If rate limited, wait for a longer time before retrying
         const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
         logger.warn(`Rate limited. Retrying after ${retryAfter} seconds.`);
-        await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
+        await new Promise((resolve) => setTimeout(resolve, retryAfter * 500));
         return fetchWithRetries(url, options, retries, delayMs);
       }
       throw new Error(`HTTP error ${response.status}: ${await response.text()}`);
@@ -1887,7 +1887,7 @@ async function fetchWithRetries(url, options, retries = 0, delayMs = 1000) {
     return response;
   } catch (err) {
     if (retries < maxRetryCount) {
-      const delay = Math.min(Math.pow(2, retries) * delayMs + Math.random() * 1000, maxDelaySec * 1000);
+      const delay = Math.min(Math.pow(2, retries) * delayMs + Math.random() * 500, maxDelaySec * 500);
       logger.warn(`Request failed, retrying ${retries + 1}/${maxRetryCount} in ${delay}ms. Error: ${err.message}`);
       await new Promise((resolve) => setTimeout(resolve, delay));
       return fetchWithRetries(url, options, retries + 1, delayMs);
