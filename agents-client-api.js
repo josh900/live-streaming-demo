@@ -917,6 +917,7 @@ if (headerBar && header) {
     try {
       await initializePersistentStream();
       startConnectionHealthCheck();
+      await warmUpStream();
       // hideLoadingSymbol();
     } catch (error) {
       logger.error('Error during initialization:', error);
@@ -1088,6 +1089,78 @@ function exitSimpleMode() {
   logger.info('Exited simple mode');
 }
 
+async function warmUpStream() {
+  if (!persistentStreamId || !persistentSessionId) {
+    logger.error('Persistent stream not initialized. Cannot warm up stream.');
+    return;
+  }
+
+  const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
+  if (!currentAvatar) {
+    logger.error('No avatar selected or avatar not found. Cannot warm up stream.');
+    return;
+  }
+
+  try {
+    logger.debug('Starting warm-up stream');
+    const warmUpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: '<break time="1500ms"/>',
+          ssml: true,
+          provider: {
+            type: 'microsoft',
+            voice_id: currentAvatar.voiceId,
+          },
+        },
+        session_id: persistentSessionId,
+        driver_url: 'bank://lively/driver-06',
+        config: {
+          fluent: true,
+          stitch: true,
+          pad_audio: 0.5,
+          auto_match: true,
+          align_driver: true,
+          normalization_factor: 0.1,
+          align_expand_factor: 0.3,
+          motion_factor: 0.55,
+        },
+      }),
+    });
+
+    if (!warmUpResponse.ok) {
+      throw new Error(`HTTP error! status: ${warmUpResponse.status}`);
+    }
+
+    const warmUpData = await warmUpResponse.json();
+    logger.debug('Warm-up stream response:', warmUpData);
+
+    if (warmUpData.status === 'started') {
+      const streamVideoElement = document.getElementById('stream-video-element');
+      streamVideoElement.src = warmUpData.result_url;
+      streamVideoElement.muted = true;
+      streamVideoElement.style.display = 'none';
+
+      await new Promise((resolve) => {
+        streamVideoElement.onended = resolve;
+        streamVideoElement.play().catch(e => logger.error('Error playing warm-up video:', e));
+      });
+
+      logger.debug('Warm-up stream completed');
+    } else {
+      logger.warn('Unexpected response status for warm-up stream:', warmUpData.status);
+    }
+  } catch (error) {
+    logger.error('Error during warm-up stream:', error);
+  }
+}
+
 async function handleAvatarChange() {
   const avatarSelect = document.getElementById('avatar-select');
   currentAvatarId = avatarSelect.value;
@@ -1132,7 +1205,11 @@ async function handleAvatarChange() {
 
   await destroyPersistentStream();
   await initializePersistentStream();
+
+  // Add warm-up stream after initializing the persistent stream
+  await warmUpStream();
 }
+
 
 
 async function loadAvatars(selectedAvatarId) {
