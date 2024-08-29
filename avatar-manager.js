@@ -127,10 +127,10 @@ async function generateSilentVideo(imageUrl, voiceId, name) {
         result_format: 'webm',
         normalization_factor: 0.1,
         align_driver: true,
+        "background": {
+          "color": false
+        }
       },
-      background: {
-        color: false
-      }
     }),
   });
 
