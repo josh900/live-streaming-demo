@@ -454,7 +454,7 @@ function initializeWebSocket() {
 
   socket.onclose = () => {
     logger.info('WebSocket connection closed');
-    setTimeout(initializeWebSocket, 10000);
+    setTimeout(initializeWebSocket, 5000);
   };
 }
 
@@ -591,7 +591,7 @@ async function initializePersistentStream() {
       throw e;
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 300));
 
     const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/sdp`, {
       method: 'POST',
