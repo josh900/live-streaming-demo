@@ -124,7 +124,7 @@ async function generateSilentVideo(imageUrl, voiceId, name) {
         output_resolution: 512,
         stitch: true,
         fluent: true,
-        result_format: 'webm',
+        result_format: 'mov',
         normalization_factor: 0.1,
         align_driver: true
       }
@@ -182,7 +182,7 @@ async function generateSilentVideo(imageUrl, voiceId, name) {
   }
 
   // Upload to S3
-  const s3Key = `avatars/${name}/silent_video.webm`;
+  const s3Key = `avatars/${name}/silent_video.mp4`;
   await uploadToS3(s3Key, await videoResponse.buffer());
 
   const s3Url = `https://${DID_API.awsConfig.bucketName}.s3.${DID_API.awsConfig.region}.amazonaws.com/${s3Key}`;
