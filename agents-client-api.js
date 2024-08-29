@@ -616,60 +616,56 @@ async function warmUpStream() {
     const warmUpData = await warmUpResponse.json();
     logger.debug('Warm-up stream response:', warmUpData);
 
-    logger.debug('warming 1');
-
-
     if (warmUpData.status === 'started') {
-      logger.debug('warming 2');
       streamVideoElement.style.display = 'none';
       streamVideoElement.muted = true;
       streamVideoElement.src = warmUpData.result_url;
-      logger.debug('warming 3');
 
-      await new Promise((resolve) => {
-        logger.debug('warming 4');
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Timeout waiting for video to be ready to play'));
+        }, 10000); // 10 seconds timeout
+
         streamVideoElement.oncanplay = () => {
-          
-          streamVideoElement.play().then(resolve).catch(error => {
-            logger.error('Error playing warm-up video:', error);
-            resolve();
-          });
+          clearTimeout(timeout);
+          streamVideoElement.play().then(resolve).catch(reject);
+        };
+
+        streamVideoElement.onerror = () => {
+          clearTimeout(timeout);
+          reject(new Error('Error loading warm-up video'));
         };
       });
 
-      logger.debug('warming 5');
-
       await new Promise((resolve) => {
-        logger.debug('warming 6');
+        const timeout = setTimeout(() => {
+          logger.warn('Warm-up video did not end naturally, forcing completion');
+          resolve();
+        }, 5000); // 5 seconds timeout
 
-        streamVideoElement.onended = resolve;
-        logger.debug('warming 7');
-
+        streamVideoElement.onended = () => {
+          clearTimeout(timeout);
+          resolve();
+        };
       });
-
-      logger.debug('warming 8');
 
       logger.debug('Warm-up stream completed');
     } else {
       logger.warn('Unexpected response status for warm-up stream:', warmUpData.status);
     }
-    isWarmingUp = false;
-    isCurrentlyStreaming = false;
-    isAvatarSpeaking = false;
-    smoothTransition(false);
-
   } catch (error) {
     logger.error('Error during stream warm-up:', error);
   } finally {
+    isWarmingUp = false;
+    isCurrentlyStreaming = false;
+    isAvatarSpeaking = false;
     streamVideoElement.muted = false;
     streamVideoElement.style.display = originalStreamDisplay;
     idleVideoElement.style.display = originalIdleDisplay;
+    smoothTransition(false);
     logger.debug('Warm-up process finished, restored original video element states');
-    logger.debug('warming 9');
-
   }
 }
-
 
 
 
