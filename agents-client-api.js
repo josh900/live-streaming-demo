@@ -1132,98 +1132,7 @@ async function handleAvatarChange() {
 
   await destroyPersistentStream();
   await initializePersistentStream();
-
-  // Warm up the stream after initializing
-  await warmUpStream();
 }
-
-
-async function warmUpStream() {
-  logger.debug('Warming up the stream...');
-  try {
-    if (!persistentStreamId || !persistentSessionId) {
-      logger.error('Persistent stream not initialized. Cannot warm up.');
-      return;
-    }
-
-    const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
-    if (!currentAvatar) {
-      logger.error('No avatar selected or avatar not found. Cannot warm up stream.');
-      return;
-    }
-
-    const warmupResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: '<speak><break time="1500ms"/></speak>',
-          ssml: true,
-          provider: {
-            type: 'microsoft',
-            voice_id: currentAvatar.voiceId,
-          },
-        },
-        session_id: persistentSessionId,
-        driver_url: 'bank://lively/driver-06',
-        config: {
-          fluent: true,
-          stitch: true,
-          pad_audio: 0.5,
-          auto_match: true,
-          align_driver: true,
-          normalization_factor: 0.1,
-          align_expand_factor: 0.3,
-          motion_factor: 0.55,
-          result_format: 'mp4',
-        },
-      }),
-    });
-
-    if (!warmupResponse.ok) {
-      throw new Error(`HTTP error! status: ${warmupResponse.status}`);
-    }
-
-    const warmupData = await warmupResponse.json();
-    logger.debug('Warm-up response:', warmupData);
-
-    if (warmupData.status === 'started') {
-      logger.debug('Stream warm-up started successfully');
-      
-      // Wait for the warm-up video to be ready
-      if (warmupData.result_url) {
-        const streamVideoElement = document.getElementById('stream-video-element');
-        await new Promise((resolve) => {
-          streamVideoElement.src = warmupData.result_url;
-          streamVideoElement.oncanplay = resolve;
-        });
-
-        // Play the warm-up video silently
-        streamVideoElement.muted = true;
-        await streamVideoElement.play();
-
-        // Wait for the video to finish
-        await new Promise((resolve) => {
-          streamVideoElement.onended = resolve;
-        });
-
-        logger.debug('Warm-up video played successfully');
-      }
-    } else {
-      logger.warn('Unexpected response status for warm-up:', warmupData.status);
-    }
-
-    logger.debug('Stream warm-up completed');
-  } catch (error) {
-    logger.error('Error during stream warm-up:', error);
-  }
-}
-
-
 
 
 async function loadAvatars(selectedAvatarId) {
@@ -2040,6 +1949,8 @@ async function startStreaming(assistantReply) {
           },
           session_id: persistentSessionId,
           driver_url: 'bank://lively/driver-06',
+          output_resolution: 512,
+          stream_warmup: true,
           config: {
             fluent: true,
             stitch: true,
@@ -2050,6 +1961,15 @@ async function startStreaming(assistantReply) {
             align_expand_factor: 0.3,
             motion_factor: 0.55,
             result_format: 'mp4',
+            driver_expressions: {
+              expressions: [
+                {
+                  start_frame: 0,
+                  expression: 'neutral',
+                  intensity: 0.5
+                }
+              ]
+            }
           },
         }),
       });
@@ -2073,9 +1993,6 @@ async function startStreaming(assistantReply) {
 
           // Perform the transition
           smoothTransition(true);
-
-          // Unmute the video (in case it was muted from warm-up)
-          streamVideoElement.muted = false;
 
           await new Promise((resolve) => {
             streamVideoElement.onended = resolve;
@@ -2107,7 +2024,6 @@ async function startStreaming(assistantReply) {
     }
   }
 }
-
 
 export function toggleSimpleMode() {
   if (currentInterfaceMode) {
