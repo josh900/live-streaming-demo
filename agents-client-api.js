@@ -535,74 +535,6 @@ function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
 }
 
-async function initializeWarmUpStream() {
-  if (!persistentStreamId || !persistentSessionId) {
-    logger.error('Persistent stream not initialized. Cannot start warm-up stream.');
-    return;
-  }
-
-  logger.debug('Initializing warm-up stream...');
-
-  try {
-    const warmUpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: '<break time="1500ms"/>',
-          ssml: true,
-        },
-        session_id: persistentSessionId,
-        driver_url: 'bank://lively/driver-06',
-        output_resolution: 512,
-        config: {
-          stitch: true,
-          fluent: true,
-          auto_match: true,
-          pad_audio: 0,
-          align_driver: true,
-          align_expand_factor: 0.3,
-          motion_factor: 0.55,
-        },
-      }),
-    });
-
-    if (!warmUpResponse.ok) {
-      throw new Error(`HTTP error! status: ${warmUpResponse.status}`);
-    }
-
-    const warmUpData = await warmUpResponse.json();
-    logger.debug('Warm-up stream response:', warmUpData);
-
-    if (warmUpData.status === 'started') {
-      const streamVideoElement = document.getElementById('stream-video-element');
-      streamVideoElement.src = warmUpData.result_url;
-      streamVideoElement.muted = true;
-      streamVideoElement.style.display = 'none';
-
-      await new Promise((resolve) => {
-        streamVideoElement.oncanplay = () => {
-          streamVideoElement.play().then(resolve);
-        };
-      });
-
-      logger.debug('Warm-up stream played successfully');
-    } else {
-      logger.warn('Unexpected response status for warm-up stream:', warmUpData.status);
-    }
-  } catch (error) {
-    logger.error('Error during warm-up stream:', error);
-  } finally {
-    const streamVideoElement = document.getElementById('stream-video-element');
-    streamVideoElement.muted = false;
-    streamVideoElement.style.display = 'block';
-  }
-}
-
 async function initializePersistentStream() {
   if (isInitializingStream) {
     logger.warn('Stream initialization already in progress. Skipping.');
@@ -695,10 +627,6 @@ async function initializePersistentStream() {
     lastConnectionTime = Date.now();
     logger.info('Persistent stream initialized successfully');
     connectionState = ConnectionState.CONNECTED;
-
-    // Initialize warm-up stream
-    await initializeWarmUpStream();
-
   } catch (error) {
     logger.error('Failed to initialize persistent stream:', error);
     isPersistentStreamActive = false;
@@ -710,6 +638,7 @@ async function initializePersistentStream() {
     isInitializingStream = false;
   }
 }
+
 
 function shouldReconnect() {
   const timeSinceLastConnection = Date.now() - lastConnectionTime;
@@ -1203,13 +1132,7 @@ async function handleAvatarChange() {
 
   await destroyPersistentStream();
   await initializePersistentStream();
-
-  // Play the idle video
-  if (idleVideoElement) {
-    idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e));
-  }
 }
-
 
 
 async function loadAvatars(selectedAvatarId) {
