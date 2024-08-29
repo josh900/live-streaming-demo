@@ -638,21 +638,19 @@ async function warmUpStream() {
     } else {
       logger.warn('Unexpected response status for warm-up stream:', warmUpData.status);
     }
+    isWarmingUp = false;
+    isCurrentlyStreaming = false;
+    isAvatarSpeaking = false;
+    smoothTransition(false);
 
-    
   } catch (error) {
     logger.error('Error during stream warm-up:', error);
   } finally {
-    isWarmingUp = false;
     streamVideoElement.muted = false;
     streamVideoElement.style.display = originalStreamDisplay;
     idleVideoElement.style.display = originalIdleDisplay;
     logger.debug('Warm-up process finished, restored original video element states');
-    
-    // Force a transition to idle state after warm-up
-    smoothTransition(false);
-    isAvatarSpeaking = false;
-    smoothTransition(false);
+  
   }
 }
 
