@@ -86,6 +86,7 @@ let lastActivityTime = 0;
 const IDLE_TIMEOUT = 1000; // 2 seconds of inactivity before transitioning to idle
 let isWaitingForStream = false;
 let isWarmingUp = false;
+let transitionDebounceTimer;
 
 
 function debouncedVideoStatusChange(isPlaying, stream) {
@@ -346,9 +347,9 @@ function initializeTransitionCanvas() {
   });
 }
 
-function smoothTransition(toStreaming, duration = 500) {
-  if (isTransitioning) {
-    logger.debug('Transition already in progress, skipping');
+function smoothTransition(toStreaming, duration = 300) {
+  if (isTransitioning || isWarmingUp) {
+    logger.debug('Transition already in progress or warming up, skipping');
     return;
   }
 
@@ -418,6 +419,7 @@ function smoothTransition(toStreaming, duration = 500) {
   // Start the animation
   requestAnimationFrame(animate);
 }
+
 
 function getVideoElements() {
   const idle = document.getElementById('idle-video-element');
@@ -551,8 +553,9 @@ async function warmUpStream() {
 
   isWarmingUp = true;
   const streamVideoElement = document.getElementById('stream-video-element');
-  const originalDisplay = streamVideoElement.style.display;
-  const originalMuted = streamVideoElement.muted;
+  const idleVideoElement = document.getElementById('idle-video-element');
+  const originalStreamDisplay = streamVideoElement.style.display;
+  const originalIdleDisplay = idleVideoElement.style.display;
 
   try {
     logger.debug('Warming up stream...');
@@ -596,9 +599,9 @@ async function warmUpStream() {
     logger.debug('Warm-up stream response:', warmUpData);
 
     if (warmUpData.status === 'started') {
-      streamVideoElement.src = warmUpData.result_url;
-      streamVideoElement.muted = true;
       streamVideoElement.style.display = 'none';
+      streamVideoElement.muted = true;
+      streamVideoElement.src = warmUpData.result_url;
 
       await new Promise((resolve) => {
         streamVideoElement.oncanplay = () => {
@@ -621,11 +624,13 @@ async function warmUpStream() {
     logger.error('Error during stream warm-up:', error);
   } finally {
     isWarmingUp = false;
-    streamVideoElement.muted = originalMuted;
-    streamVideoElement.style.display = originalDisplay;
-    logger.debug('Warm-up process finished, restored original video element state');
+    streamVideoElement.muted = false;
+    streamVideoElement.style.display = originalStreamDisplay;
+    idleVideoElement.style.display = originalIdleDisplay;
+    logger.debug('Warm-up process finished, restored original video element states');
   }
 }
+
 
 async function initializePersistentStream() {
   if (isInitializingStream) {
@@ -1659,26 +1664,26 @@ function onStreamingComplete() {
 
 
 function onStreamEvent(message) {
-  if (pcDataChannel.readyState === 'open') {
+  if (pcDataChannel.readyState === 'open' && !isWarmingUp) {
     let status;
     const [event, _] = message.data.split(':');
 
     switch (event) {
       case 'stream/started':
         status = 'started';
-        if (!isWarmingUp) handleStreamStarted();
+        handleStreamStarted();
         break;
       case 'stream/done':
         status = 'done';
-        if (!isWarmingUp) handleStreamDone();
+        handleStreamDone();
         break;
       case 'stream/ready':
         status = 'ready';
-        if (!isWarmingUp) handleStreamReady();
+        handleStreamReady();
         break;
       case 'stream/error':
         status = 'error';
-        if (!isWarmingUp) handleStreamError();
+        handleStreamError();
         break;
       default:
         status = 'dont-care';
@@ -1686,25 +1691,35 @@ function onStreamEvent(message) {
     }
 
     console.log(event);
-    if (!isWarmingUp) updateStreamEventLabel(status);
+    updateStreamEventLabel(status);
   }
 }
 
+
+
 function handleStreamStarted() {
-  logger.debug('Stream started');
-  isWaitingForStream = false;
-  if (!isCurrentlyStreaming) {
-    isCurrentlyStreaming = true;
-    onVideoStatusChange(true);
-  }
+  clearTimeout(transitionDebounceTimer);
+  transitionDebounceTimer = setTimeout(() => {
+    logger.debug('Stream started');
+    isWaitingForStream = false;
+    if (!isCurrentlyStreaming) {
+      isCurrentlyStreaming = true;
+      smoothTransition(true);
+    }
+  }, 100);
 }
+
 
 
 function handleStreamDone() {
-  logger.debug('Stream done');
-  isCurrentlyStreaming = false;
-  onVideoStatusChange(false);
+  clearTimeout(transitionDebounceTimer);
+  transitionDebounceTimer = setTimeout(() => {
+    logger.debug('Stream done');
+    isCurrentlyStreaming = false;
+    smoothTransition(false);
+  }, 100);
 }
+
 
 function handleStreamReady() {
   logger.debug('Stream ready');
