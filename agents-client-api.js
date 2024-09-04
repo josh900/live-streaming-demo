@@ -362,7 +362,7 @@ function smoothTransition(toStreaming, duration = 300) {
   }
 
   isTransitioning = true;
-  logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
+  logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : ''} state`);
 
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
@@ -1059,7 +1059,7 @@ async function initialize() {
       await initializePersistentStream();
       if (!hasWarmUpPlayed) {
         await warmUpStream();
-        hasWarmUpPlayed = true;
+        // hasWarmUpPlayed = true;
       }
       startConnectionHealthCheck();
     } catch (error) {
@@ -1667,7 +1667,7 @@ function onVideoStatusChange(videoIsPlaying) {
     return; // No change, ignore
   }
 
-  logger.debug(`Video status changing from ${lastVideoStatus} to ${videoIsPlaying ? 'streaming' : 'idle'}`);
+  logger.debug(`Video status changing from ${lastVideoStatus} to ${videoIsPlaying ? 'streaming' : ''}`);
 
   lastVideoStatus = videoIsPlaying;
 
@@ -1683,8 +1683,8 @@ function onVideoStatusChange(videoIsPlaying) {
 
   const streamingStatusLabel = document.getElementById('streaming-status-label');
   if (streamingStatusLabel) {
-    streamingStatusLabel.innerText = videoIsPlaying ? 'streaming' : 'idle';
-    streamingStatusLabel.className = 'streamingState-' + (videoIsPlaying ? 'streaming' : 'idle');
+    streamingStatusLabel.innerText = videoIsPlaying ? 'streaming' : '';
+    streamingStatusLabel.className = 'streamingState-' + (videoIsPlaying ? 'streaming' : '');
   }
 }
 
@@ -2087,7 +2087,7 @@ async function startStreaming(assistantReply) {
 
       isAvatarSpeaking = true;
       updateStreamEventLabel('streaming');
-      
+
       const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
         method: 'POST',
         headers: {
@@ -2173,7 +2173,7 @@ async function startStreaming(assistantReply) {
     updateStreamEventLabel('');
     smoothTransition(false);
     hasWarmUpPlayed = true;
-        // Check if we need to reconnect
+    // Check if we need to reconnect
     if (shouldReconnect()) {
       logger.info('Approaching reconnection threshold. Initiating background reconnect.');
       await backgroundReconnect();
