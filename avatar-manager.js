@@ -26,20 +26,20 @@ export async function createOrUpdateAvatar(id, name, imageFile, voiceId) {
       const croppedImageBuffer = await sharp(imageFile.buffer).resize(512, 512, { fit: 'cover' }).toBuffer();
 
       // Upload image to S3
-      const imageKey = `avatars/${name}/image.png`;
+      const imageKey = `avatars/${id}/image.png`;
       await uploadToS3(imageKey, croppedImageBuffer);
       const imageUrl = `https://${DID_API.awsConfig.bucketName}.s3.${DID_API.awsConfig.region}.amazonaws.com/${imageKey}`;
 
       if (isNewAvatar || avatar.voiceId !== voiceId) {
         // Generate silent video only if it's a new avatar or voice changed
-        const silentVideoUrl = await generateSilentVideo(imageUrl, voiceId, name);
+        const silentVideoUrl = await generateSilentVideo(imageUrl, voiceId, id);
         avatar = { id, name, imageUrl, voiceId, silentVideoUrl };
       } else {
         avatar = { ...avatar, name, imageUrl, voiceId };
       }
     } else if (isNewAvatar || (avatar && avatar.voiceId !== voiceId)) {
       // If only voice changed or it's a new avatar without image
-      const silentVideoUrl = await generateSilentVideo(avatar ? avatar.imageUrl : '', voiceId, name);
+      const silentVideoUrl = await generateSilentVideo(avatar ? avatar.imageUrl : '', voiceId, id);
       avatar = { ...(avatar || {}), id, name, voiceId, silentVideoUrl };
     } else {
       // No changes, return existing avatar
@@ -99,7 +99,7 @@ async function uploadToS3(key, file) {
   }
 }
 
-async function generateSilentVideo(imageUrl, voiceId, name) {
+async function generateSilentVideo(imageUrl, voiceId, id) {
   console.log(`Generating silent video for image: ${imageUrl}, voice: ${voiceId}`);
   const response = await fetch(`${DID_API.url}/talks`, {
     method: 'POST',
@@ -182,7 +182,7 @@ async function generateSilentVideo(imageUrl, voiceId, name) {
   }
 
   // Upload to S3
-  const s3Key = `avatars/${name}/silent_video.mp4`;
+  const s3Key = `avatars/${id}/silent_video.mp4`;
   await uploadToS3(s3Key, await videoResponse.buffer());
 
   const s3Url = `https://${DID_API.awsConfig.bucketName}.s3.${DID_API.awsConfig.region}.amazonaws.com/${s3Key}`;
