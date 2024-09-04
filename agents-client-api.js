@@ -643,6 +643,8 @@ async function warmUpStream() {
       await new Promise((resolve) => {
         const timeout = setTimeout(() => {
           logger.warn('Warm-up video did not end naturally, forcing completion');
+          hasWarmUpPlayed = true;
+          updateStreamEventLabel('');
           resolve();
         }, 5000); // 5 seconds timeout
 
@@ -666,6 +668,7 @@ async function warmUpStream() {
     streamVideoElement.style.display = originalStreamDisplay;
     idleVideoElement.style.display = originalIdleDisplay;
     smoothTransition(false);
+    hasWarmUpPlayed = true;
     updateStreamEventLabel(''); // Set to empty string to indicate idle state
     logger.debug('Warm-up process finished, restored original video element states');
   }
@@ -757,8 +760,10 @@ async function initializePersistentStream() {
     logger.info('Persistent stream initialized successfully');
     connectionState = ConnectionState.CONNECTED;
 
-    // Warm up the stream
-    await warmUpStream();
+    if (!hasWarmUpPlayed) {
+      await warmUpStream();
+      hasWarmUpPlayed = true;
+    }
   } catch (error) {
     logger.error('Failed to initialize persistent stream:', error);
     isPersistentStreamActive = false;
@@ -1270,8 +1275,9 @@ async function handleAvatarChange() {
 
   await destroyPersistentStream();
   await initializePersistentStream();
-  if (hasWarmUpPlayed) {
+  if (!hasWarmUpPlayed) {
     await warmUpStream();
+    hasWarmUpPlayed = true;
   }
 }
 
@@ -1760,6 +1766,9 @@ function handleStreamDone() {
     logger.debug('Stream done');
     isCurrentlyStreaming = false;
     smoothTransition(false);
+    hasWarmUpPlayed = true;
+    updateStreamEventLabel('');
+
   }, 100);
 }
 
@@ -2163,8 +2172,8 @@ async function startStreaming(assistantReply) {
     isAvatarSpeaking = false;
     updateStreamEventLabel('');
     smoothTransition(false);
-
-    // Check if we need to reconnect
+    hasWarmUpPlayed = true;
+        // Check if we need to reconnect
     if (shouldReconnect()) {
       logger.info('Approaching reconnection threshold. Initiating background reconnect.');
       await backgroundReconnect();
@@ -2174,6 +2183,8 @@ async function startStreaming(assistantReply) {
     isAvatarSpeaking = false;
     updateStreamEventLabel('');
     smoothTransition(false);
+    hasWarmUpPlayed = true;
+    updateStreamEventLabel('');
     if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
       logger.warn('Stream not found or invalid session. Attempting to reinitialize persistent stream.');
       await reinitializePersistentStream();
