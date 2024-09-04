@@ -565,11 +565,6 @@ async function warmUpStream() {
     return;
   }
 
-  // if (hasWarmUpPlayed) {
-  //   logger.debug('Warm-up video has already played. Skipping.');
-  //   return;
-  // }
-
   const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
   if (!currentAvatar) {
     logger.error('No avatar selected or avatar not found. Cannot warm up stream.');
@@ -604,23 +599,14 @@ async function warmUpStream() {
         session_id: persistentSessionId,
         driver_url: 'bank://lively/driver-06',
         config: {
-          stitch: true,
           fluent: true,
+          stitch: true,
+          pad_audio: 0,
           auto_match: true,
-          pad_audio: 0.5,
-          normalization_factor: 0.1,
           align_driver: true,
-          motion_factor: 0.55,
+          normalization_factor: 0.1,
           align_expand_factor: 0.3,
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: 'neutral',
-                intensity: 0.5,
-              },
-            ],
-          },
+          motion_factor: 0.55,
         },
       }),
     });
@@ -679,10 +665,10 @@ async function warmUpStream() {
     streamVideoElement.style.display = originalStreamDisplay;
     idleVideoElement.style.display = originalIdleDisplay;
     smoothTransition(false);
+    updateStreamEventLabel(''); // Set to empty string to indicate idle state
     logger.debug('Warm-up process finished, restored original video element states');
   }
 }
-
 
 
 async function initializePersistentStream() {
@@ -901,6 +887,7 @@ async function backgroundReconnect() {
     scheduleReconnect();
   }
 }
+
 
 
 
@@ -2098,9 +2085,7 @@ async function startStreaming(assistantReply) {
       if (chunk.length === 0) continue;
 
       isAvatarSpeaking = true;
-      isCurrentlyStreaming = true;
-      updateStreamEventLabel('started');
-
+      
       const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
         method: 'POST',
         headers: {
@@ -2154,6 +2139,7 @@ async function startStreaming(assistantReply) {
 
       if (playResponseData.status === 'started') {
         logger.debug('Stream chunk started successfully');
+        updateStreamEventLabel('started');
 
         if (playResponseData.result_url) {
           // Wait for the video to be ready before transitioning
@@ -2168,10 +2154,7 @@ async function startStreaming(assistantReply) {
           smoothTransition(true);
 
           await new Promise((resolve) => {
-            streamVideoElement.onended = () => {
-              logger.debug('Stream video chunk ended');
-              resolve();
-            };
+            streamVideoElement.onended = resolve;
           });
         } else {
           logger.debug('No result_url in playResponseData. Waiting for next chunk.');
@@ -2183,9 +2166,8 @@ async function startStreaming(assistantReply) {
 
     // After all chunks have been processed, transition back to idle
     isAvatarSpeaking = false;
-    isCurrentlyStreaming = false;
-    updateStreamEventLabel('done');
     smoothTransition(false);
+    updateStreamEventLabel(''); // Set to empty string to indicate idle state
 
     // Check if we need to reconnect
     if (shouldReconnect()) {
@@ -2195,9 +2177,8 @@ async function startStreaming(assistantReply) {
   } catch (error) {
     logger.error('Error during streaming:', error);
     isAvatarSpeaking = false;
-    isCurrentlyStreaming = false;
-    updateStreamEventLabel('error');
     smoothTransition(false);
+    updateStreamEventLabel('error');
     if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
       logger.warn('Stream not found or invalid session. Attempting to reinitialize persistent stream.');
       await reinitializePersistentStream();
