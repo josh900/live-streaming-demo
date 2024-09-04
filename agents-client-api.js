@@ -1722,7 +1722,7 @@ function onStreamEvent(message) {
         handleStreamStarted();
         break;
       case 'stream/done':
-        status = 'done';
+        status = '';
         handleStreamDone();
         break;
       case 'stream/ready':
@@ -1730,11 +1730,11 @@ function onStreamEvent(message) {
         handleStreamReady();
         break;
       case 'stream/error':
-        status = 'error';
+        status = '';
         handleStreamError();
         break;
       default:
-        status = 'dont-care';
+        status = '';
         break;
     }
 
@@ -1768,8 +1768,9 @@ function handleStreamDone() {
     smoothTransition(false);
     hasWarmUpPlayed = true;
     updateStreamEventLabel('');
-
   }, 100);
+  hasWarmUpPlayed = true;
+  updateStreamEventLabel('');
 }
 
 
@@ -1789,6 +1790,8 @@ function handleStreamError() {
   isCurrentlyStreaming = false;
   isWaitingForStream = false;
   onVideoStatusChange(false);
+  hasWarmUpPlayed = true;
+  updateStreamEventLabel('');
 }
 
 
