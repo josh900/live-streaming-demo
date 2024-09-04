@@ -88,6 +88,8 @@ let isWaitingForStream = false;
 let isWarmingUp = false;
 let transitionDebounceTimer;
 let pendingTransition = null;
+let hasWarmUpPlayed = false;
+
 
 function debouncedVideoStatusChange(isPlaying, stream) {
   clearTimeout(videoStatusDebounceTimer);
@@ -563,6 +565,11 @@ async function warmUpStream() {
     return;
   }
 
+  if (hasWarmUpPlayed) {
+    logger.debug('Warm-up video has already played. Skipping.');
+    return;
+  }
+
   const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
   if (!currentAvatar) {
     logger.error('No avatar selected or avatar not found. Cannot warm up stream.');
@@ -874,6 +881,7 @@ async function backgroundReconnect() {
     await destroyPersistentStream();
     await new Promise((resolve) => setTimeout(resolve, 300));
     await initializePersistentStream();
+    // Remove the warmUpStream call from here
     lastConnectionTime = Date.now();
     logger.info('Background reconnection completed successfully');
     connectionState = ConnectionState.CONNECTED;
@@ -884,6 +892,7 @@ async function backgroundReconnect() {
     scheduleReconnect();
   }
 }
+
 
 
 async function updateWebRTCConnection(newStreamData) {
@@ -1049,14 +1058,15 @@ async function initialize() {
   playIdleVideo();
 
   if (avatars.length > 0 && currentAvatarId) {
-    // showLoadingSymbol();
     try {
       await initializePersistentStream();
+      if (!hasWarmUpPlayed) {
+        await warmUpStream();
+        hasWarmUpPlayed = true;
+      }
       startConnectionHealthCheck();
-      // hideLoadingSymbol();
     } catch (error) {
       logger.error('Error during initialization:', error);
-      // hideLoadingSymbol();
       showErrorMessage('Failed to connect. Please try again.');
       connectionState = ConnectionState.DISCONNECTED;
     }
