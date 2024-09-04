@@ -1796,10 +1796,11 @@ function handleStreamError() {
 
 
 function updateStreamEventLabel(status) {
-  const streamEventLabel = document.getElementById('stream-event-label');
+  const streamEventLabel = document.getElementById('streaming-status-label');
   if (streamEventLabel) {
-    streamEventLabel.innerText = status === 'dont-care' ? event : status;
-    streamEventLabel.className = 'streamEvent-' + status;
+    streamEventLabel.textContent = status;
+  } else {
+    console.warn('Streaming status label element not found');
   }
 }
 
