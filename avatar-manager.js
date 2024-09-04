@@ -120,13 +120,15 @@ async function generateSilentVideo(imageUrl, voiceId, id) {
         },
       },
       config: {
-        normalization_factor: 0,
-        output_resolution: 512,
-        stitch: true,
         fluent: true,
-        result_format: 'mp4',
+        stitch: true,
+        pad_audio: 0.5,
+        auto_match: true,
+        align_driver: true,
         normalization_factor: 0.1,
-        align_driver: true
+        align_expand_factor: 0.3,
+        motion_factor: 0.55,
+        result_format: 'mp4'
       }
     }),
   });

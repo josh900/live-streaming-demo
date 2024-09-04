@@ -601,12 +601,13 @@ async function warmUpStream() {
         config: {
           fluent: true,
           stitch: true,
-          pad_audio: 0,
+          pad_audio: 0.5,
           auto_match: true,
           align_driver: true,
           normalization_factor: 0.1,
           align_expand_factor: 0.3,
           motion_factor: 0.55,
+          result_format: 'mp4'
         },
       }),
     });
@@ -704,23 +705,15 @@ async function initializePersistentStream() {
         output_resolution: 512,
         stream_warmup: true,
         config: {
-          stitch: true,
           fluent: true,
-          auto_match: true,
+          stitch: true,
           pad_audio: 0.5,
-          normalization_factor: 0.1,
+          auto_match: true,
           align_driver: true,
-          motion_factor: 0.55,
+          normalization_factor: 0.1,
           align_expand_factor: 0.3,
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: 'neutral',
-                intensity: 0.5,
-              },
-            ],
-          },
+          motion_factor: 0.55,
+          result_format: 'mp4'
         },
       }),
     });
@@ -891,6 +884,7 @@ async function backgroundReconnect() {
 
 
 
+
 async function updateWebRTCConnection(newStreamData) {
   logger.debug('Updating WebRTC connection...');
 
@@ -989,7 +983,7 @@ async function initialize() {
   connectionState = ConnectionState.DISCONNECTED;
 
   const { avatarId, contextId, interfaceMode, header } = getUrlParameters();
-  currentInterfaceMode = interfaceMode; // Store the interface mode
+  currentInterfaceMode = interfaceMode;
 
   // Handle header visibility
   const headerBar = document.getElementById('header-bar');
@@ -1058,7 +1052,10 @@ async function initialize() {
   if (avatars.length > 0 && currentAvatarId) {
     try {
       await initializePersistentStream();
-      await warmUpStream(); // Always call warmUpStream on initialization
+      if (!hasWarmUpPlayed) {
+        await warmUpStream();
+        hasWarmUpPlayed = true;
+      }
       startConnectionHealthCheck();
     } catch (error) {
       logger.error('Error during initialization:', error);
@@ -1273,8 +1270,11 @@ async function handleAvatarChange() {
 
   await destroyPersistentStream();
   await initializePersistentStream();
-  await warmUpStream();
+  if (hasWarmUpPlayed) {
+    await warmUpStream();
+  }
 }
+
 
 
 async function loadAvatars(selectedAvatarId) {
@@ -1980,23 +1980,15 @@ async function initializeConnection() {
         output_resolution: 512,
         stream_warmup: true,
         config: {
-          stitch: true,
           fluent: true,
-          auto_match: true,
+          stitch: true,
           pad_audio: 0.5,
-          normalization_factor: 0.1,
+          auto_match: true,
           align_driver: true,
-          motion_factor: 0.55,
+          normalization_factor: 0.1,
           align_expand_factor: 0.3,
-          driver_expressions: {
-            expressions: [
-              {
-                start_frame: 0,
-                expression: 'neutral',
-                intensity: 0.5,
-              },
-            ],
-          },
+          motion_factor: 0.55,
+          result_format: 'mp4'
         },
       }),
     });
@@ -2085,6 +2077,7 @@ async function startStreaming(assistantReply) {
       if (chunk.length === 0) continue;
 
       isAvatarSpeaking = true;
+      updateStreamEventLabel('started');
       
       const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
         method: 'POST',
@@ -2106,7 +2099,7 @@ async function startStreaming(assistantReply) {
           session_id: persistentSessionId,
           driver_url: 'bank://lively/driver-06',
           output_resolution: 512,
-          stream_warmup: true,
+          stream_warmup: false,
           config: {
             fluent: true,
             stitch: true,
@@ -2139,7 +2132,6 @@ async function startStreaming(assistantReply) {
 
       if (playResponseData.status === 'started') {
         logger.debug('Stream chunk started successfully');
-        updateStreamEventLabel('started');
 
         if (playResponseData.result_url) {
           // Wait for the video to be ready before transitioning
@@ -2154,7 +2146,10 @@ async function startStreaming(assistantReply) {
           smoothTransition(true);
 
           await new Promise((resolve) => {
-            streamVideoElement.onended = resolve;
+            streamVideoElement.onended = () => {
+              logger.debug('Stream video chunk ended');
+              resolve();
+            };
           });
         } else {
           logger.debug('No result_url in playResponseData. Waiting for next chunk.');
@@ -2166,8 +2161,8 @@ async function startStreaming(assistantReply) {
 
     // After all chunks have been processed, transition back to idle
     isAvatarSpeaking = false;
+    updateStreamEventLabel('idle');
     smoothTransition(false);
-    updateStreamEventLabel(''); // Set to empty string to indicate idle state
 
     // Check if we need to reconnect
     if (shouldReconnect()) {
@@ -2177,8 +2172,8 @@ async function startStreaming(assistantReply) {
   } catch (error) {
     logger.error('Error during streaming:', error);
     isAvatarSpeaking = false;
-    smoothTransition(false);
     updateStreamEventLabel('error');
+    smoothTransition(false);
     if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
       logger.warn('Stream not found or invalid session. Attempting to reinitialize persistent stream.');
       await reinitializePersistentStream();
