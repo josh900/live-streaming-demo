@@ -1346,7 +1346,7 @@ function openAvatarModal(avatarId = null) {
     saveButton.textContent = 'Update Avatar';
   } else {
     nameInput.value = '';
-    voiceInput.value = 'en-US-GuyNeural';
+    voiceInput.value = 'en-US-AndrewNeural';
     imagePreview.src = '';
     idInput.value = crypto.randomUUID(); // Use the Web Crypto API to generate a UUID
     saveButton.textContent = 'Create Avatar';
@@ -1364,7 +1364,7 @@ function closeAvatarModal() {
 
 async function saveAvatar() {
   const name = document.getElementById('avatar-name').value;
-  const voiceId = document.getElementById('avatar-voice').value || 'en-US-GuyNeural';
+  const voiceId = document.getElementById('avatar-voice').value || 'en-US-AndrewNeural';
   const imageFile = document.getElementById('avatar-image').files[0];
   const avatarId = document.getElementById('avatar-id').value;
 
