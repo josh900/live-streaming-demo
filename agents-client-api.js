@@ -1005,7 +1005,7 @@ async function initialize() {
   populateAvatarSelect();
   populateContextSelect();
   updateContextDisplay();
-  updateStreamEventLabel('idle');
+  updateStreamEventLabel('');
 
 
   const contextSelect = document.getElementById('context-select');
@@ -1733,7 +1733,7 @@ function onStreamEvent(message) {
     }
 
     console.log(event);
-    updateStreamEventLabel(status);
+    updateStreamEventLabel('');
   }
 }
 
@@ -2077,7 +2077,7 @@ async function startStreaming(assistantReply) {
       if (chunk.length === 0) continue;
 
       isAvatarSpeaking = true;
-      updateStreamEventLabel('started');
+      updateStreamEventLabel('streaming');
       
       const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
         method: 'POST',
@@ -2161,7 +2161,7 @@ async function startStreaming(assistantReply) {
 
     // After all chunks have been processed, transition back to idle
     isAvatarSpeaking = false;
-    updateStreamEventLabel('idle');
+    updateStreamEventLabel('');
     smoothTransition(false);
 
     // Check if we need to reconnect
@@ -2172,7 +2172,7 @@ async function startStreaming(assistantReply) {
   } catch (error) {
     logger.error('Error during streaming:', error);
     isAvatarSpeaking = false;
-    updateStreamEventLabel('error');
+    updateStreamEventLabel('');
     smoothTransition(false);
     if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
       logger.warn('Stream not found or invalid session. Attempting to reinitialize persistent stream.');
