@@ -1535,7 +1535,15 @@ function showErrorMessage(message) {
 
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
-    peerConnection = new RTCPeerConnection({ iceServers });
+    peerConnection = new RTCPeerConnection({
+      iceServers,
+      sdpSemantics: 'plan-b', // Explicitly set sdpSemantics for compatibility
+    });
+
+    // Add transceivers before setting remote description
+    peerConnection.addTransceiver('video', { direction: 'recvonly' });
+    peerConnection.addTransceiver('audio', { direction: 'recvonly' });
+
     peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
     peerConnection.addEventListener('icecandidate', onIceCandidate, true);
     peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
@@ -1547,7 +1555,7 @@ async function createPeerConnection(offer, iceServers) {
   await peerConnection.setRemoteDescription(offer);
   logger.debug('Set remote SDP');
 
-  // Now create the data channel after setting the remote description
+  // Create data channel after setting the remote description
   if (!pcDataChannel) {
     pcDataChannel = peerConnection.createDataChannel('JanusDataChannel');
     pcDataChannel.onopen = () => {
