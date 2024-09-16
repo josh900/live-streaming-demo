@@ -539,6 +539,47 @@ async function speakDirectly(text) {
 }
 
 
+function removeUnsupportedVideoCodecs(sdp) {
+  const unsupportedCodecs = ['H264', 'VP9']; // Add codecs that are causing issues
+  const sdpLines = sdp.split('\r\n');
+
+  const mVideoIndex = sdpLines.findIndex(line => line.startsWith('m=video'));
+  if (mVideoIndex === -1) {
+    return sdp;
+  }
+
+  // Get the payload types for the video m-line
+  const videoMLineParts = sdpLines[mVideoIndex].split(' ');
+  const videoPayloadTypes = videoMLineParts.slice(3);
+
+  // Find the RTP map lines for video codecs
+  const rtpMapLines = sdpLines.filter(line => line.startsWith('a=rtpmap'));
+
+  // Identify payload types for unsupported codecs
+  const unsupportedPayloadTypes = [];
+  for (const line of rtpMapLines) {
+    const match = line.match(/a=rtpmap:(\d+) (\w+)/);
+    if (match && unsupportedCodecs.includes(match[2])) {
+      unsupportedPayloadTypes.push(match[1]);
+    }
+  }
+
+  // Filter out the unsupported payload types from the m=video line
+  const updatedVideoPayloadTypes = videoPayloadTypes.filter(pt => !unsupportedPayloadTypes.includes(pt));
+  sdpLines[mVideoIndex] = [...videoMLineParts.slice(0, 3), ...updatedVideoPayloadTypes].join(' ');
+
+  // Remove the RTP map and FMTP lines for the unsupported codecs
+  sdpLines = sdpLines.filter(line => {
+    if (line.startsWith('a=rtpmap') || line.startsWith('a=fmtp')) {
+      const pt = line.match(/:(\d+)/)[1];
+      return !unsupportedPayloadTypes.includes(pt);
+    }
+    return true;
+  });
+
+  return sdpLines.join('\r\n');
+}
+
 
 function handleTextInput(text) {
   if (text.trim() === '') return;
