@@ -1,18 +1,21 @@
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
-import DID_API from './api.js';
 import fetch from 'node-fetch';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { Readable } from 'stream';
 import sharp from 'sharp';
 import { v4 as uuidv4 } from 'uuid';
-
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const s3Client = new S3Client(DID_API.awsConfig);
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION || 'us-east-1',
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+  }
+});
 
 export async function createOrUpdateAvatar(id, name, imageFile, voiceId) {
   try {
@@ -28,7 +31,7 @@ export async function createOrUpdateAvatar(id, name, imageFile, voiceId) {
       // Upload image to S3
       const imageKey = `avatars/${id}/image.png`;
       await uploadToS3(imageKey, croppedImageBuffer);
-      const imageUrl = `https://${DID_API.awsConfig.bucketName}.s3.${DID_API.awsConfig.region}.amazonaws.com/${imageKey}`;
+      const imageUrl = `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${imageKey}`;
 
       if (isNewAvatar || avatar.voiceId !== voiceId) {
         // Generate silent video only if it's a new avatar or voice changed
@@ -81,11 +84,9 @@ async function saveAvatarDetails(id, avatar) {
   await fs.writeFile(avatarsFile, JSON.stringify(avatars, null, 2));
 }
 
-
-
 async function uploadToS3(key, file) {
   const command = new PutObjectCommand({
-    Bucket: DID_API.awsConfig.bucketName,
+    Bucket: process.env.AWS_S3_BUCKET_NAME,
     Key: key,
     Body: file,
     ContentType: 'image/png',
@@ -101,10 +102,10 @@ async function uploadToS3(key, file) {
 
 async function generateSilentVideo(imageUrl, voiceId, id) {
   console.log(`Generating silent video for image: ${imageUrl}, voice: ${voiceId}`);
-  const response = await fetch(`${DID_API.url}/talks`, {
+  const response = await fetch(`${process.env.DID_API_URL || 'https://api.d-id.com'}/${process.env.DID_API_SERVICE || 'talks'}`, {
     method: 'POST',
     headers: {
-      Authorization: `Basic ${DID_API.key}`,
+      Authorization: `Basic ${process.env.DID_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -151,9 +152,9 @@ async function generateSilentVideo(imageUrl, voiceId, id) {
     // Try for 5 minutes (30 * 10 seconds)
     await new Promise((resolve) => setTimeout(resolve, 10000)); // Wait 10 seconds
 
-    const statusResponse = await fetch(`${DID_API.url}/talks/${data.id}`, {
+    const statusResponse = await fetch(`${process.env.DID_API_URL || 'https://api.d-id.com'}/${process.env.DID_API_SERVICE || 'talks'}/${data.id}`, {
       headers: {
-        Authorization: `Basic ${DID_API.key}`,
+        Authorization: `Basic ${process.env.DID_API_KEY}`,
       },
     });
 
@@ -187,12 +188,11 @@ async function generateSilentVideo(imageUrl, voiceId, id) {
   const s3Key = `avatars/${id}/silent_video.mp4`;
   await uploadToS3(s3Key, await videoResponse.buffer());
 
-  const s3Url = `https://${DID_API.awsConfig.bucketName}.s3.${DID_API.awsConfig.region}.amazonaws.com/${s3Key}`;
+  const s3Url = `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
   console.log(`Silent video uploaded to S3: ${s3Url}`);
 
   return s3Url;
 }
-
 
 export async function getAvatars() {
   try {

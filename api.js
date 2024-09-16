@@ -1,7 +1,15 @@
 export default {
-  key: 'YWRtaW4xQHNrb29wLmRpZ2l0YWw:EIwn3LpTODfc-iwZSesXu',
-  url: 'https://api.d-id.com',
-  service: 'talks',
-  groqKey: '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',
-  deepgramKey: 'ab184815a3899aea7e3add69b9d5b7bc6894dc74',
+  key: process.env.DID_API_KEY,
+  url: process.env.DID_API_URL || "https://api.d-id.com",
+  service: process.env.DID_API_SERVICE || "talks",
+  groqKey: process.env.GROQ_API_KEY,
+  deepgramKey: process.env.DEEPGRAM_API_KEY,
+  awsConfig: {
+    region: process.env.AWS_REGION || "us-east-1",
+    credentials: {
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+    },
+    bucketName: process.env.AWS_S3_BUCKET_NAME
+  }
 };
