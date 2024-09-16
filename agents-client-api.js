@@ -1533,17 +1533,25 @@ function showErrorMessage(message) {
   if (connectButton) connectButton.style.display = 'inline-block';
 }
 
+// agents-client-api.js
+
 async function createPeerConnection(offer, iceServers) {
   if (!peerConnection) {
     peerConnection = new RTCPeerConnection({ iceServers });
-    pcDataChannel = peerConnection.createDataChannel('JanusDataChannel');
     peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
     peerConnection.addEventListener('icecandidate', onIceCandidate, true);
     peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
     peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
     peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
     peerConnection.addEventListener('track', onTrack, true);
+  }
 
+  await peerConnection.setRemoteDescription(offer);
+  logger.debug('Set remote SDP');
+
+  // Now create the data channel after setting the remote description
+  if (!pcDataChannel) {
+    pcDataChannel = peerConnection.createDataChannel('JanusDataChannel');
     pcDataChannel.onopen = () => {
       logger.debug('Data channel opened');
     };
@@ -1555,9 +1563,6 @@ async function createPeerConnection(offer, iceServers) {
     };
     pcDataChannel.onmessage = onStreamEvent;
   }
-
-  await peerConnection.setRemoteDescription(offer);
-  logger.debug('Set remote SDP');
 
   const sessionClientAnswer = await peerConnection.createAnswer();
   logger.debug('Created local SDP');
