@@ -984,7 +984,7 @@ function endPushToTalk(event) {
 
 
 async function initialize() {
-  setLogLevel('INFO');
+  setLogLevel('DEBUG');
   connectionState = ConnectionState.DISCONNECTED;
 
   const { avatarId, contextId, interfaceMode, header } = getUrlParameters();
