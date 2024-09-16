@@ -674,7 +674,6 @@ async function warmUpStream() {
   }
 }
 
-
 async function initializePersistentStream() {
   if (isInitializingStream) {
     logger.warn('Stream initialization already in progress. Skipping.');
@@ -703,95 +702,83 @@ async function initializePersistentStream() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        source_url: currentAvatar.imageUrl,
-        driver_url: 'bank://lively/driver-06',
-        output_resolution: 512,
-        stream_warmup: true,
-        config: {
-          fluent: true,
-          stitch: true,
-          pad_audio: 0.5,
-          auto_match: true,
-          align_driver: true,
-          normalization_factor: 0.1,
-          align_expand_factor: 0.3,
-          motion_factor: 0.55,
-          result_format: 'mp4'
-        },
+        source_url: currentAvatar.silentVideoUrl,
       }),
     });
 
-    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
-
-    persistentStreamId = newStreamId;
-    persistentSessionId = newSessionId;
+    const { id: streamId, offer, ice_servers: iceServers, session_id: sessionId } = await sessionResponse.json();
+    persistentStreamId = streamId;
+    persistentSessionId = sessionId;
 
     logger.info('Persistent stream created:', { persistentStreamId, persistentSessionId });
+    logger.debug('Received offer:', offer);
+    logger.debug('Received ICE servers:', iceServers);
 
-    try {
-      sessionClientAnswer = await createPeerConnection(offer, iceServers);
-    } catch (e) {
-      logger.error('Error during streaming setup:', e);
-      stopAllStreams();
-      closePC();
-      throw e;
-    }
+    const answer = await createPeerConnection(offer, iceServers);
 
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await sendAnswer(answer);
+    logger.debug('Sent answer successfully');
 
-    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/sdp`, {
+    isPersistentStreamActive = true;
+    isInitializingStream = false;
+    connectionState = ConnectionState.CONNECTED;
+
+    startKeepAlive();
+    warmUpStream();
+
+  } catch (error) {
+    logger.error('Failed to initialize persistent stream:', error);
+    isInitializingStream = false;
+    connectionState = ConnectionState.DISCONNECTED;
+    throw error;
+  }
+}
+
+async function sendAnswer(answer) {
+  try {
+    const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/sdp`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        answer: sessionClientAnswer,
+        answer: answer.sdp,
         session_id: persistentSessionId,
       }),
     });
 
-    if (!sdpResponse.ok) {
-      throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
+    if (!response.ok) {
+      throw new Error(`Failed to send answer: ${response.status} ${response.statusText}`);
     }
-    isPersistentStreamActive = true;
-    startKeepAlive();
-    lastConnectionTime = Date.now();
-    logger.info('Persistent stream initialized successfully');
-    connectionState = ConnectionState.CONNECTED;
 
-    if (!hasWarmUpPlayed) {
-      await warmUpStream();
-      hasWarmUpPlayed = true;
-    }
+    logger.debug('Answer sent successfully');
   } catch (error) {
-    logger.error('Failed to initialize persistent stream:', error);
-    isPersistentStreamActive = false;
-    persistentStreamId = null;
-    persistentSessionId = null;
-    connectionState = ConnectionState.DISCONNECTED;
+    logger.error('Error sending answer:', error);
     throw error;
-  } finally {
-    isInitializingStream = false;
   }
 }
 
-function shouldReconnect() {
-  const timeSinceLastConnection = Date.now() - lastConnectionTime;
-  return timeSinceLastConnection > RECONNECTION_INTERVAL * 0.9;
-}
-
-function scheduleReconnect() {
-  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-    logger.error('Max reconnection attempts reached. Please refresh the page.');
-    showErrorMessage('Failed to reconnect after multiple attempts. Please refresh the page.');
-    return;
+function checkRTCCapabilities() {
+  if (typeof RTCPeerConnection === 'undefined') {
+    logger.error('RTCPeerConnection is not supported in this browser');
+    return false;
   }
 
-  const delay = Math.min(INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
-  logger.debug(`Scheduling reconnection attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
-  setTimeout(backgroundReconnect, delay);
-  reconnectAttempts++;
+  const pc = new RTCPeerConnection();
+  const capabilities = {
+    createOffer: typeof pc.createOffer === 'function',
+    createAnswer: typeof pc.createAnswer === 'function',
+    setLocalDescription: typeof pc.setLocalDescription === 'function',
+    setRemoteDescription: typeof pc.setRemoteDescription === 'function',
+    addTrack: typeof pc.addTrack === 'function',
+    addTransceiver: typeof pc.addTransceiver === 'function'
+  };
+
+  pc.close();
+
+  logger.debug('RTC Capabilities:', capabilities);
+  return capabilities;
 }
 
 function startKeepAlive() {
@@ -982,10 +969,29 @@ function endPushToTalk(event) {
   pushToTalkStartTime = 0;
 }
 
+function checkBrowserCompatibility() {
+  const isWebRTCSupported = navigator.mediaDevices && 'getUserMedia' in navigator.mediaDevices && RTCPeerConnection;
+  const isWebSocketSupported = 'WebSocket' in window;
+
+  if (!isWebRTCSupported) {
+    logger.error('WebRTC is not supported in this browser');
+  }
+
+  if (!isWebSocketSupported) {
+    logger.error('WebSocket is not supported in this browser');
+  }
+
+  return isWebRTCSupported && isWebSocketSupported;
+}
 
 async function initialize() {
   setLogLevel('DEBUG');
   connectionState = ConnectionState.DISCONNECTED;
+
+  if (!checkBrowserCompatibility()) {
+    logger.error('Browser does not support required features');
+    // Handle incompatibility (e.g., show an error message to the user)
+  }
 
   const { avatarId, contextId, interfaceMode, header } = getUrlParameters();
   currentInterfaceMode = interfaceMode;
@@ -1534,38 +1540,70 @@ function showErrorMessage(message) {
 }
 
 async function createPeerConnection(offer, iceServers) {
-  if (!peerConnection) {
-    peerConnection = new RTCPeerConnection({ iceServers });
-    pcDataChannel = peerConnection.createDataChannel('JanusDataChannel');
-    peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
-    peerConnection.addEventListener('icecandidate', onIceCandidate, true);
-    peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
-    peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
-    peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
-    peerConnection.addEventListener('track', onTrack, true);
-
-    pcDataChannel.onopen = () => {
-      logger.debug('Data channel opened');
-    };
-    pcDataChannel.onclose = () => {
-      logger.debug('Data channel closed');
-    };
-    pcDataChannel.onerror = (error) => {
-      logger.error('Data channel error:', error);
-    };
-    pcDataChannel.onmessage = onStreamEvent;
+  if (peerConnection) {
+    logger.warn('Closing existing peer connection');
+    peerConnection.close();
   }
 
-  await peerConnection.setRemoteDescription(offer);
-  logger.debug('Set remote SDP');
+  const config = {
+    iceServers,
+    sdpSemantics: 'unified-plan',
+    bundlePolicy: 'max-bundle',
+    rtcpMuxPolicy: 'require',
+    iceTransportPolicy: 'all'
+  };
 
-  const sessionClientAnswer = await peerConnection.createAnswer();
-  logger.debug('Created local SDP');
+  logger.debug('Creating RTCPeerConnection with config:', JSON.stringify(config));
 
-  await peerConnection.setLocalDescription(sessionClientAnswer);
-  logger.debug('Set local SDP');
+  peerConnection = new RTCPeerConnection(config);
 
-  return sessionClientAnswer;
+  peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange);
+  peerConnection.addEventListener('icecandidate', onIceCandidate);
+  peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange);
+  peerConnection.addEventListener('connectionstatechange', onConnectionStateChange);
+  peerConnection.addEventListener('signalingstatechange', onSignalingStateChange);
+  peerConnection.addEventListener('track', onTrack);
+
+  try {
+    await peerConnection.setRemoteDescription(offer);
+    logger.debug('Set remote description successfully');
+
+    const answer = await peerConnection.createAnswer();
+    logger.debug('Created answer');
+
+    const modifiedAnswer = new RTCSessionDescription({
+      type: 'answer',
+      sdp: modifySdp(answer.sdp)
+    });
+
+    await peerConnection.setLocalDescription(modifiedAnswer);
+    logger.debug('Set local description successfully');
+
+    return modifiedAnswer;
+  } catch (error) {
+    logger.error('Error in createPeerConnection:', error);
+    throw error;
+  }
+}
+
+function modifySdp(sdp) {
+  // Remove video codecs we don't support
+  sdp = sdp.replace(/a=rtpmap:.*VP8\/90000\r\n/g, '');
+  sdp = sdp.replace(/a=rtpmap:.*VP9\/90000\r\n/g, '');
+  sdp = sdp.replace(/a=rtpmap:.*H264\/90000\r\n/g, '');
+
+  // Ensure audio codec support
+  if (sdp.indexOf('opus/48000') === -1) {
+    sdp = sdp.replace(
+      /m=audio (\d+) RTP\/SAVPF.*\r\n/g,
+      'm=audio $1 RTP/SAVPF 111\r\n' +
+      'a=rtpmap:111 opus/48000/2\r\n' +
+      'a=fmtp:111 minptime=10;useinbandfec=1\r\n'
+    );
+  }
+
+  logger.debug('Modified SDP:', sdp);
+  return sdp;
 }
 
 function onIceGatheringStateChange() {
@@ -1599,6 +1637,7 @@ function onIceCandidate(event) {
     });
   }
 }
+
 
 function onIceConnectionStateChange() {
   const { ice: iceStatusLabel } = getStatusLabels();
