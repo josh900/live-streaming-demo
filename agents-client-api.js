@@ -1038,15 +1038,15 @@ async function initialize() {
   pushToTalkButton.addEventListener('mousedown', startPushToTalk);
   pushToTalkButton.addEventListener('mouseup', endPushToTalk);
   pushToTalkButton.addEventListener('mouseleave', endPushToTalk);
-  pushToTalkButton.addEventListener('touchstart', startPushToTalk);
-  pushToTalkButton.addEventListener('touchend', endPushToTalk);
+  pushToTalkButton.addEventListener('touchstart', startPushToTalk, { passive: false });
+  pushToTalkButton.addEventListener('touchend', endPushToTalk, { passive: false });
 
   if (simplePushTalkButton) {
     simplePushTalkButton.addEventListener('mousedown', startPushToTalk);
     simplePushTalkButton.addEventListener('mouseup', endPushToTalk);
     simplePushTalkButton.addEventListener('mouseleave', endPushToTalk);
-    simplePushTalkButton.addEventListener('touchstart', startPushToTalk);
-    simplePushTalkButton.addEventListener('touchend', endPushToTalk);
+    simplePushTalkButton.addEventListener('touchstart', startPushToTalk, { passive: false });
+    simplePushTalkButton.addEventListener('touchend', endPushToTalk, { passive: false });
   }
 
   startButton.addEventListener('click', toggleRecording);
