@@ -1038,15 +1038,15 @@ async function initialize() {
   pushToTalkButton.addEventListener('mousedown', startPushToTalk);
   pushToTalkButton.addEventListener('mouseup', endPushToTalk);
   pushToTalkButton.addEventListener('mouseleave', endPushToTalk);
-  pushToTalkButton.addEventListener('touchstart', startPushToTalk);
-  pushToTalkButton.addEventListener('touchend', endPushToTalk);
+  pushToTalkButton.addEventListener('touchstart', startPushToTalk, { passive: false });
+  pushToTalkButton.addEventListener('touchend', endPushToTalk, { passive: false });
 
   if (simplePushTalkButton) {
     simplePushTalkButton.addEventListener('mousedown', startPushToTalk);
     simplePushTalkButton.addEventListener('mouseup', endPushToTalk);
     simplePushTalkButton.addEventListener('mouseleave', endPushToTalk);
-    simplePushTalkButton.addEventListener('touchstart', startPushToTalk);
-    simplePushTalkButton.addEventListener('touchend', endPushToTalk);
+    simplePushTalkButton.addEventListener('touchstart', startPushToTalk, { passive: false });
+    simplePushTalkButton.addEventListener('touchend', endPushToTalk, { passive: false });
   }
 
   startButton.addEventListener('click', toggleRecording);
@@ -1559,13 +1559,60 @@ async function createPeerConnection(offer, iceServers) {
   await peerConnection.setRemoteDescription(offer);
   logger.debug('Set remote SDP');
 
+  // Add this new block of code here
+  peerConnection.getTransceivers().forEach(transceiver => {
+    if (transceiver.receiver.track && transceiver.receiver.track.kind === 'video') {
+      transceiver.direction = 'sendonly';
+      logger.debug('Set video transceiver to sendonly');
+    }
+  });
+
   const sessionClientAnswer = await peerConnection.createAnswer();
   logger.debug('Created local SDP');
+  
+  // If you're using the H.264 preference function, add it here
+  sessionClientAnswer.sdp = preferH264Codec(sessionClientAnswer.sdp);
 
   await peerConnection.setLocalDescription(sessionClientAnswer);
   logger.debug('Set local SDP');
 
   return sessionClientAnswer;
+}
+
+function preferH264Codec(sdp) {
+  const sdpLines = sdp.split('\r\n');
+  const mLineIndex = sdpLines.findIndex(line => line.startsWith('m=video'));
+  if (mLineIndex === -1) {
+    // No video m-line, return SDP unchanged
+    return sdp;
+  }
+
+  // Get codec payload types
+  const payloadTypes = sdpLines[mLineIndex].split(' ');
+  const h264PayloadTypes = [];
+
+  for (let i = 0; i < sdpLines.length; i++) {
+    if (sdpLines[i].includes('H264/90000')) {
+      const payloadType = sdpLines[i].match(/a=rtpmap:(\d+) H264\/90000/)[1];
+      h264PayloadTypes.push(payloadType);
+    }
+  }
+
+  if (h264PayloadTypes.length === 0) {
+    logger.warn('H.264 codec not found in SDP');
+    return sdp;
+  }
+
+  // Rearrange payload types to prioritize H.264
+  const newLine = sdpLines[mLineIndex]
+    .split(' ')
+    .filter(val => val !== '')
+    .slice(0, 3)
+    .concat(h264PayloadTypes)
+    .join(' ');
+
+  sdpLines[mLineIndex] = newLine;
+  return sdpLines.join('\r\n');
 }
 
 function onIceGatheringStateChange() {
