@@ -538,49 +538,6 @@ async function speakDirectly(text) {
   }
 }
 
-
-function removeUnsupportedVideoCodecs(sdp) {
-  const unsupportedCodecs = ['H264', 'VP9']; // Add codecs that are causing issues
-  const sdpLines = sdp.split('\r\n');
-
-  const mVideoIndex = sdpLines.findIndex(line => line.startsWith('m=video'));
-  if (mVideoIndex === -1) {
-    return sdp;
-  }
-
-  // Get the payload types for the video m-line
-  const videoMLineParts = sdpLines[mVideoIndex].split(' ');
-  const videoPayloadTypes = videoMLineParts.slice(3);
-
-  // Find the RTP map lines for video codecs
-  const rtpMapLines = sdpLines.filter(line => line.startsWith('a=rtpmap'));
-
-  // Identify payload types for unsupported codecs
-  const unsupportedPayloadTypes = [];
-  for (const line of rtpMapLines) {
-    const match = line.match(/a=rtpmap:(\d+) (\w+)/);
-    if (match && unsupportedCodecs.includes(match[2])) {
-      unsupportedPayloadTypes.push(match[1]);
-    }
-  }
-
-  // Filter out the unsupported payload types from the m=video line
-  const updatedVideoPayloadTypes = videoPayloadTypes.filter(pt => !unsupportedPayloadTypes.includes(pt));
-  sdpLines[mVideoIndex] = [...videoMLineParts.slice(0, 3), ...updatedVideoPayloadTypes].join(' ');
-
-  // Remove the RTP map and FMTP lines for the unsupported codecs
-  sdpLines = sdpLines.filter(line => {
-    if (line.startsWith('a=rtpmap') || line.startsWith('a=fmtp')) {
-      const pt = line.match(/:(\d+)/)[1];
-      return !unsupportedPayloadTypes.includes(pt);
-    }
-    return true;
-  });
-
-  return sdpLines.join('\r\n');
-}
-
-
 function handleTextInput(text) {
   if (text.trim() === '') return;
 
@@ -1577,98 +1534,39 @@ function showErrorMessage(message) {
 }
 
 async function createPeerConnection(offer, iceServers) {
-  // Configuration for RTCPeerConnection
-  const configuration = {
-    iceServers: iceServers,
-  };
+  if (!peerConnection) {
+    peerConnection = new RTCPeerConnection({ iceServers });
+    pcDataChannel = peerConnection.createDataChannel('JanusDataChannel');
+    peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
+    peerConnection.addEventListener('icecandidate', onIceCandidate, true);
+    peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
+    peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
+    peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
+    peerConnection.addEventListener('track', onTrack, true);
 
-  // Create the RTCPeerConnection
-  peerConnection = new RTCPeerConnection(configuration);
+    pcDataChannel.onopen = () => {
+      logger.debug('Data channel opened');
+    };
+    pcDataChannel.onclose = () => {
+      logger.debug('Data channel closed');
+    };
+    pcDataChannel.onerror = (error) => {
+      logger.error('Data channel error:', error);
+    };
+    pcDataChannel.onmessage = onStreamEvent;
+  }
 
-  // Set up event listeners for the peer connection
-  peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
-  peerConnection.addEventListener('icecandidate', onIceCandidate, true);
-  peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
-  peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
-  peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
-  peerConnection.addEventListener('track', onTrack, true);
+  await peerConnection.setRemoteDescription(offer);
+  logger.debug('Set remote SDP');
 
-  // Create the data channel
-  pcDataChannel = peerConnection.createDataChannel('JanusDataChannel');
+  const sessionClientAnswer = await peerConnection.createAnswer();
+  logger.debug('Created local SDP');
 
-  pcDataChannel.onopen = () => {
-    logger.debug('Data channel opened');
-  };
-  pcDataChannel.onclose = () => {
-    logger.debug('Data channel closed');
-  };
-  pcDataChannel.onerror = (error) => {
-    logger.error('Data channel error:', error);
-  };
-  pcDataChannel.onmessage = onStreamEvent;
-
-  // Set the remote description with the offer from the server
-  await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-
-  // Create an answer to the offer
-  let sessionClientAnswer = await peerConnection.createAnswer();
-
-  // Modify the SDP to remove unsupported video codecs
-  sessionClientAnswer.sdp = removeUnsupportedVideoCodecs(sessionClientAnswer.sdp);
-
-  // Set the local description with the modified SDP
   await peerConnection.setLocalDescription(sessionClientAnswer);
+  logger.debug('Set local SDP');
 
-  // Return the SDP answer
   return sessionClientAnswer;
 }
-
-// Helper function to remove unsupported video codecs from SDP
-function removeUnsupportedVideoCodecs(sdp) {
-  const unsupportedCodecs = ['H264', 'VP9']; // Add codecs that are causing issues
-  const sdpLines = sdp.split('\r\n');
-
-  const mVideoIndex = sdpLines.findIndex((line) => line.startsWith('m=video'));
-  if (mVideoIndex === -1) {
-    return sdp;
-  }
-
-  // Get the payload types for the video m-line
-  const videoMLineParts = sdpLines[mVideoIndex].split(' ');
-  const videoPayloadTypes = videoMLineParts.slice(3);
-
-  // Find the RTP map lines for video codecs
-  const rtpMapLines = sdpLines.filter((line) => line.startsWith('a=rtpmap'));
-
-  // Identify payload types for unsupported codecs
-  const unsupportedPayloadTypes = [];
-  for (const line of rtpMapLines) {
-    const match = line.match(/a=rtpmap:(\d+) (\w+)/);
-    if (match && unsupportedCodecs.includes(match[2])) {
-      unsupportedPayloadTypes.push(match[1]);
-    }
-  }
-
-  // Filter out the unsupported payload types from the m=video line
-  const updatedVideoPayloadTypes = videoPayloadTypes.filter(
-    (pt) => !unsupportedPayloadTypes.includes(pt)
-  );
-  sdpLines[mVideoIndex] = [...videoMLineParts.slice(0, 3), ...updatedVideoPayloadTypes].join(' ');
-
-  // Remove the RTP map and FMTP lines for the unsupported codecs
-  const filteredSdpLines = sdpLines.filter((line) => {
-    if (line.startsWith('a=rtpmap') || line.startsWith('a=fmtp')) {
-      const ptMatch = line.match(/a=(?:rtpmap|fmtp):(\d+)/);
-      if (ptMatch && unsupportedPayloadTypes.includes(ptMatch[1])) {
-        return false;
-      }
-    }
-    return true;
-  });
-
-  return filteredSdpLines.join('\r\n');
-}
-
 
 function onIceGatheringStateChange() {
   const { iceGathering: iceGatheringStatusLabel } = getStatusLabels();
