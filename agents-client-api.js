@@ -674,7 +674,6 @@ async function warmUpStream() {
   }
 }
 
-
 async function initializePersistentStream() {
   if (isInitializingStream) {
     logger.warn('Stream initialization already in progress. Skipping.');
@@ -728,7 +727,7 @@ async function initializePersistentStream() {
     });
 
     if (!sessionResponse.ok) {
-      throw new Error(`Failed to create session: ${sessionResponse.status} ${sessionResponse.statusText}`);
+      throw new Error(`Failed to create persistent stream: ${sessionResponse.status} ${sessionResponse.statusText}`);
     }
 
     const { id: streamId, offer, ice_servers: iceServers, session_id: sessionId } = await sessionResponse.json();
@@ -793,14 +792,14 @@ async function initializePersistentStream() {
       }
 
       logger.debug('Sent answer successfully');
+
+      isPersistentStreamActive = true;
+      connectionState = ConnectionState.CONNECTED;
+      logger.info('Persistent stream initialized successfully');
     } catch (error) {
       logger.error('Error creating or setting local description:', error);
       throw error;
     }
-
-    isPersistentStreamActive = true;
-    connectionState = ConnectionState.CONNECTED;
-    logger.info('Persistent stream initialized successfully');
   } catch (error) {
     logger.error('Failed to initialize persistent stream:', error);
     isPersistentStreamActive = false;
@@ -812,18 +811,19 @@ async function initializePersistentStream() {
 }
 
 function modifySdp(sdp) {
-  // Remove video codecs we don't support
-  sdp = sdp.replace(/a=rtpmap:.*VP8\/90000\r\n/g, '');
-  sdp = sdp.replace(/a=rtpmap:.*VP9\/90000\r\n/g, '');
-  sdp = sdp.replace(/a=rtpmap:.*H264\/90000\r\n/g, '');
+  // Keep the original video codecs, but ensure H264 is present
+  if (sdp.indexOf('H264/90000') === -1) {
+    sdp = sdp.replace(
+      /m=video (\d+) UDP\/TLS\/RTP\/SAVPF.*/,
+      '$& 102\r\na=rtpmap:102 H264/90000\r\na=rtcp-fb:102 goog-remb\r\na=rtcp-fb:102 transport-cc\r\na=rtcp-fb:102 ccm fir\r\na=rtcp-fb:102 nack\r\na=rtcp-fb:102 nack pli\r\na=fmtp:102 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f'
+    );
+  }
 
   // Ensure audio codec support
   if (sdp.indexOf('opus/48000') === -1) {
     sdp = sdp.replace(
-      /m=audio (\d+) RTP\/SAVPF.*\r\n/g,
-      'm=audio $1 RTP/SAVPF 111\r\n' +
-      'a=rtpmap:111 opus/48000/2\r\n' +
-      'a=fmtp:111 minptime=10;useinbandfec=1\r\n'
+      /m=audio (\d+) UDP\/TLS\/RTP\/SAVPF.*/,
+      '$& 111\r\na=rtpmap:111 opus/48000/2\r\na=rtcp-fb:111 transport-cc\r\na=fmtp:111 minptime=10;useinbandfec=1'
     );
   }
 
@@ -851,24 +851,6 @@ function checkRTCCapabilities() {
 
   logger.debug('RTC Capabilities:', capabilities);
   return capabilities;
-}
-
-function shouldReconnect() {
-  const timeSinceLastConnection = Date.now() - lastConnectionTime;
-  return timeSinceLastConnection > RECONNECTION_INTERVAL * 0.9;
-}
-
-function scheduleReconnect() {
-  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-    logger.error('Max reconnection attempts reached. Please refresh the page.');
-    showErrorMessage('Failed to reconnect after multiple attempts. Please refresh the page.');
-    return;
-  }
-
-  const delay = Math.min(INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
-  logger.debug(`Scheduling reconnection attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
-  setTimeout(backgroundReconnect, delay);
-  reconnectAttempts++;
 }
 
 function startKeepAlive() {
@@ -1059,10 +1041,29 @@ function endPushToTalk(event) {
   pushToTalkStartTime = 0;
 }
 
+function checkBrowserCompatibility() {
+  const isWebRTCSupported = navigator.mediaDevices && 'getUserMedia' in navigator.mediaDevices && RTCPeerConnection;
+  const isWebSocketSupported = 'WebSocket' in window;
+
+  if (!isWebRTCSupported) {
+    logger.error('WebRTC is not supported in this browser');
+  }
+
+  if (!isWebSocketSupported) {
+    logger.error('WebSocket is not supported in this browser');
+  }
+
+  return isWebRTCSupported && isWebSocketSupported;
+}
 
 async function initialize() {
   setLogLevel('DEBUG');
   connectionState = ConnectionState.DISCONNECTED;
+
+  if (!checkBrowserCompatibility()) {
+    logger.error('Browser does not support required features');
+    // Handle incompatibility (e.g., show an error message to the user)
+  }
 
   const { avatarId, contextId, interfaceMode, header } = getUrlParameters();
   currentInterfaceMode = interfaceMode;
@@ -1675,6 +1676,7 @@ async function createPeerConnection(offer, iceServers) {
       sdp: modifySdp(sessionClientAnswer.sdp)
     });
 
+    // Set the modified answer as the local description
     await peerConnection.setLocalDescription(modifiedAnswer);
     logger.debug('Set local SDP successfully');
 
