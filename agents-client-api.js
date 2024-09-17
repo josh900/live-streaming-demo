@@ -1534,39 +1534,113 @@ function showErrorMessage(message) {
 }
 
 async function createPeerConnection(offer, iceServers) {
-  if (!peerConnection) {
-    peerConnection = new RTCPeerConnection({ iceServers });
-    pcDataChannel = peerConnection.createDataChannel('JanusDataChannel');
-    peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
-    peerConnection.addEventListener('icecandidate', onIceCandidate, true);
-    peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
-    peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
-    peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
-    peerConnection.addEventListener('track', onTrack, true);
-
-    pcDataChannel.onopen = () => {
-      logger.debug('Data channel opened');
-    };
-    pcDataChannel.onclose = () => {
-      logger.debug('Data channel closed');
-    };
-    pcDataChannel.onerror = (error) => {
-      logger.error('Data channel error:', error);
-    };
-    pcDataChannel.onmessage = onStreamEvent;
+  if (peerConnection) {
+    logger.warn('Peer connection already exists. Closing existing connection.');
+    peerConnection.close();
+    peerConnection = null;
   }
 
-  await peerConnection.setRemoteDescription(offer);
-  logger.debug('Set remote SDP');
+  const peerConnectionConfig = {
+    iceServers,
+    sdpSemantics: 'unified-plan',
+    bundlePolicy: 'max-bundle',
+    rtcpMuxPolicy: 'require',
+    iceTransportPolicy: 'all'
+  };
 
-  const sessionClientAnswer = await peerConnection.createAnswer();
-  logger.debug('Created local SDP');
+  logger.debug('Creating RTCPeerConnection with config:', JSON.stringify(peerConnectionConfig));
 
-  await peerConnection.setLocalDescription(sessionClientAnswer);
-  logger.debug('Set local SDP');
+  try {
+    peerConnection = new RTCPeerConnection(peerConnectionConfig);
+  } catch (error) {
+    logger.error('Error creating RTCPeerConnection:', error);
+    throw error;
+  }
 
-  return sessionClientAnswer;
+  // Set up event handlers
+  peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange);
+  peerConnection.addEventListener('icecandidate', onIceCandidate);
+  peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange);
+  peerConnection.addEventListener('connectionstatechange', onConnectionStateChange);
+  peerConnection.addEventListener('signalingstatechange', onSignalingStateChange);
+  peerConnection.addEventListener('track', onTrack);
+
+  try {
+    // Set the remote description
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    logger.debug('Set remote SDP successfully');
+  } catch (error) {
+    logger.error('Error setting remote description:', error);
+    throw error;
+  }
+
+  // Create the answer
+  let answer;
+  try {
+    answer = await peerConnection.createAnswer();
+    logger.debug('Created local SDP successfully');
+  } catch (error) {
+    logger.error('Error creating local SDP:', error);
+    throw error;
+  }
+
+  // Modify the SDP to ensure compatibility
+  answer.sdp = modifySdp(answer.sdp);
+
+  try {
+    await peerConnection.setLocalDescription(answer);
+    logger.debug('Set local SDP successfully');
+  } catch (error) {
+    logger.error('Error setting local description:', error);
+    // Clean up in case of error
+    if (peerConnection) {
+      peerConnection.close();
+      peerConnection = null;
+    }
+    throw error;
+  }
+
+  return answer;
 }
+
+function modifySdp(sdp) {
+  // Detect if the client is running in Android WebView
+  function isAndroidWebView() {
+    const userAgent = navigator.userAgent || '';
+    return /Android/.test(userAgent) && /wv/.test(userAgent);
+  }
+
+  if (isAndroidWebView()) {
+    // Disable video for Android WebView to prevent SDP errors
+    logger.debug('Android WebView detected. Disabling video in SDP.');
+    // Set video port to 0 to disable video
+    sdp = sdp.replace(/m=video .*\r\n/, 'm=video 0 UDP/TLS/RTP/SAVPF 0\r\n');
+    // Remove video codecs
+    sdp = sdp.replace(/a=rtpmap:\d+ .*\r\n/g, '');
+    // Remove video attributes
+    sdp = sdp.replace(/a=fmtp:\d+ .*\r\n/g, '');
+    sdp = sdp.replace(/a=rtcp-fb:\d+ .*\r\n/g, '');
+    sdp = sdp.replace(/a=ssrc-group:.*\r\n/g, '');
+    sdp = sdp.replace(/a=ssrc:.*\r\n/g, '');
+    sdp = sdp.replace(/a=mid:v.*\r\n/g, '');
+    sdp = sdp.replace(/a=msid:.*\r\n/g, '');
+    sdp = sdp.replace(/a=extmap:.*\r\n/g, '');
+    sdp = sdp.replace(/a=rtcp-mux\r\n/g, '');
+    sdp = sdp.replace(/a=rtcp-rsize\r\n/g, '');
+    sdp = sdp.replace(/a=recvonly\r\n/g, '');
+    // Optionally remove the entire video section
+    // sdp = sdp.replace(/m=video .*\r\n([\s\S]*?)^(m=|$)/gm, '');
+  } else {
+    // Modify SDP for other browsers if necessary
+    // Example: Remove unsupported codecs
+    // sdp = sdp.replace(/a=rtpmap:\d+ VP9\/90000\r\n/g, '');
+    // sdp = sdp.replace(/a=rtpmap:\d+ AV1\/90000\r\n/g, '');
+  }
+
+  logger.debug('Modified SDP:', sdp);
+  return sdp;
+}
+
 
 function onIceGatheringStateChange() {
   const { iceGathering: iceGatheringStatusLabel } = getStatusLabels();
