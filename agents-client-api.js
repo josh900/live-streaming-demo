@@ -89,7 +89,8 @@ let isWarmingUp = false;
 let transitionDebounceTimer;
 let pendingTransition = null;
 let hasWarmUpPlayed = false;
-let streamVideoRef = { current: document.getElementById('stream-video-element') };
+let streamVideoRef = { current: document.getElementById('streamVideo') };
+
 
 function debouncedVideoStatusChange(isPlaying, stream) {
   clearTimeout(videoStatusDebounceTimer);
@@ -1619,46 +1620,30 @@ async function createPeerConnection(offer, iceServers) {
 function modifySdp(sdp) {
   const lines = sdp.split('\n');
   let videoSectionFound = false;
+  let hasBundleLine = false;
+  let hasRtcpMuxLine = false;
   
   for (let i = 0; i < lines.length; i++) {
+    if (lines[i].startsWith('a=group:BUNDLE')) {
+      hasBundleLine = true;
+    }
+    
     if (lines[i].startsWith('m=video')) {
       videoSectionFound = true;
-      // Ensure the video section is set to recvonly
-      lines[i] = lines[i].replace('sendrecv', 'recvonly');
-    } else if (videoSectionFound && lines[i].startsWith('a=')) {
-      // Keep only essential attributes for the video section
-      if (!lines[i].startsWith('a=mid:') && 
-          !lines[i].startsWith('a=rtcp-mux') && 
-          !lines[i].startsWith('a=recvonly') &&
-          !lines[i].startsWith('a=rtpmap:') &&
-          !lines[i].startsWith('a=fmtp:')) {
-        lines.splice(i, 1);
-        i--;
-      }
+      // Instead of removing, set to inactive
+      lines[i] = lines[i].replace('sendrecv', 'inactive');
+    } else if (videoSectionFound && lines[i].startsWith('a=') && !lines[i].startsWith('a=mid:') && !lines[i].startsWith('a=rtcp-mux')) {
+      // Remove all attributes for the video section except the mid attribute and rtcp-mux
+      lines.splice(i, 1);
+      i--;
     } else if (lines[i].startsWith('m=')) {
       videoSectionFound = false;
     }
-  }
-  
-  // Ensure there's a mid attribute for each media section
-  let midCounter = 0;
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].startsWith('m=')) {
-      if (!lines[i+1].startsWith('a=mid:')) {
-        lines.splice(i+1, 0, `a=mid:${midCounter}`);
-        i++;
-      }
-      // Add rtcp-mux if it's not present
-      if (!lines.slice(i+1, i+5).some(line => line.startsWith('a=rtcp-mux'))) {
-        lines.splice(i+2, 0, 'a=rtcp-mux');
-        i++;
-      }
-      midCounter++;
+    
+    if (lines[i].startsWith('a=rtcp-mux')) {
+      hasRtcpMuxLine = true;
     }
   }
-  
-  return lines.join('\n');
-}
   
   // Ensure there's a mid attribute for each media section
   let midCounter = 0;
@@ -1778,11 +1763,6 @@ function onSignalingStateChange() {
     signalingStatusLabel.className = 'signalingState-' + peerConnection.signalingState;
   }
   logger.debug('Signaling state changed:', peerConnection ? peerConnection.signalingState : 'peerConnection is null');
-  
-  if (!peerConnection) {
-    logger.warn('Peer connection is null. Attempting to reinitialize...');
-    initializePersistentStream();
-  }
 }
 
 function onVideoStatusChange(videoIsPlaying) {
