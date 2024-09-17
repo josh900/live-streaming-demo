@@ -1620,18 +1620,28 @@ async function createPeerConnection(offer, iceServers) {
 function modifySdp(sdp) {
   const lines = sdp.split('\n');
   let videoSectionFound = false;
+  let hasBundleLine = false;
+  let hasRtcpMuxLine = false;
   
   for (let i = 0; i < lines.length; i++) {
+    if (lines[i].startsWith('a=group:BUNDLE')) {
+      hasBundleLine = true;
+    }
+    
     if (lines[i].startsWith('m=video')) {
       videoSectionFound = true;
       // Instead of removing, set to inactive
       lines[i] = lines[i].replace('sendrecv', 'inactive');
-    } else if (videoSectionFound && lines[i].startsWith('a=') && !lines[i].startsWith('a=mid:')) {
-      // Remove all attributes for the video section except the mid attribute
+    } else if (videoSectionFound && lines[i].startsWith('a=') && !lines[i].startsWith('a=mid:') && !lines[i].startsWith('a=rtcp-mux')) {
+      // Remove all attributes for the video section except the mid attribute and rtcp-mux
       lines.splice(i, 1);
       i--;
     } else if (lines[i].startsWith('m=')) {
       videoSectionFound = false;
+    }
+    
+    if (lines[i].startsWith('a=rtcp-mux')) {
+      hasRtcpMuxLine = true;
     }
   }
   
@@ -1643,8 +1653,19 @@ function modifySdp(sdp) {
         lines.splice(i+1, 0, `a=mid:${midCounter}`);
         i++;
       }
+      // Add rtcp-mux if it's not present
+      if (!hasRtcpMuxLine) {
+        lines.splice(i+2, 0, 'a=rtcp-mux');
+        i++;
+        hasRtcpMuxLine = true;
+      }
       midCounter++;
     }
+  }
+  
+  // If BUNDLE is used but rtcp-mux is not present, add it
+  if (hasBundleLine && !hasRtcpMuxLine) {
+    lines.push('a=rtcp-mux');
   }
   
   return lines.join('\n');
@@ -1737,11 +1758,11 @@ function startConnectionHealthCheck() {
 
 function onSignalingStateChange() {
   const { signaling: signalingStatusLabel } = getStatusLabels();
-  if (signalingStatusLabel) {
+  if (signalingStatusLabel && peerConnection) {
     signalingStatusLabel.innerText = peerConnection.signalingState;
     signalingStatusLabel.className = 'signalingState-' + peerConnection.signalingState;
   }
-  logger.debug('Signaling state changed:', peerConnection.signalingState);
+  logger.debug('Signaling state changed:', peerConnection ? peerConnection.signalingState : 'peerConnection is null');
 }
 
 function onVideoStatusChange(videoIsPlaying) {
