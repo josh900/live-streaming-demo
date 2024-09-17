@@ -1534,46 +1534,38 @@ function showErrorMessage(message) {
 }
 
 async function createPeerConnection(offer, iceServers) {
-  logger.debug('Creating RTCPeerConnection with config:', { iceServers });
-  const peerConnection = new RTCPeerConnection({ iceServers });
+  if (!peerConnection) {
+    peerConnection = new RTCPeerConnection({ iceServers });
+    pcDataChannel = peerConnection.createDataChannel('JanusDataChannel');
+    peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
+    peerConnection.addEventListener('icecandidate', onIceCandidate, true);
+    peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
+    peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
+    peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
+    peerConnection.addEventListener('track', onTrack, true);
 
-  peerConnection.onicecandidate = async (event) => {
-    if (event.candidate) {
-      logger.debug('Sending ICE candidate:', event.candidate);
-      await sendIceCandidate(event.candidate);
-    } else {
-      logger.debug('ICE gathering completed');
-    }
-  };
-
-  peerConnection.ontrack = (event) => {
-    const track = event.track;
-    logger.debug('onTrack event:', event);
-    if (track.kind === 'audio') {
-      logger.debug('Received audio track:', track);
-      remoteStream.addTrack(track);
-    } else if (track.kind === 'video') {
-      logger.debug('Received video track:', track);
-      remoteStream.addTrack(track);
-      logger.debug('Setting stream video element with track:', track.id);
-      setStreamVideoElement(track);
-    }
-  };
-
-  peerConnection.onconnectionstatechange = () => {
-    logger.debug('Connection state change:', peerConnection.connectionState);
-  };
-
-  peerConnection.onsignalingstatechange = () => {
-    logger.debug('Signaling state changed:', peerConnection.signalingState);
-  };
+    pcDataChannel.onopen = () => {
+      logger.debug('Data channel opened');
+    };
+    pcDataChannel.onclose = () => {
+      logger.debug('Data channel closed');
+    };
+    pcDataChannel.onerror = (error) => {
+      logger.error('Data channel error:', error);
+    };
+    pcDataChannel.onmessage = onStreamEvent;
+  }
 
   await peerConnection.setRemoteDescription(offer);
+  logger.debug('Set remote SDP');
 
-  const answer = await peerConnection.createAnswer();
-  await peerConnection.setLocalDescription(answer);
+  const sessionClientAnswer = await peerConnection.createAnswer();
+  logger.debug('Created local SDP');
 
-  return peerConnection;
+  await peerConnection.setLocalDescription(sessionClientAnswer);
+  logger.debug('Set local SDP');
+
+  return sessionClientAnswer;
 }
 
 function onIceGatheringStateChange() {
