@@ -696,6 +696,12 @@ async function initializePersistentStream() {
       throw new Error('No avatar selected or avatar not found');
     }
 
+    // Check RTC capabilities
+    const capabilities = checkRTCCapabilities();
+    if (!capabilities.createOffer || !capabilities.setLocalDescription) {
+      throw new Error('Browser does not support required RTC capabilities');
+    }
+
     const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
       method: 'POST',
       headers: {
@@ -717,63 +723,134 @@ async function initializePersistentStream() {
           align_expand_factor: 0.3,
           motion_factor: 0.55,
           result_format: 'mp4'
-        },
+        }
       }),
     });
 
-    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+    if (!sessionResponse.ok) {
+      throw new Error(`Failed to create session: ${sessionResponse.status} ${sessionResponse.statusText}`);
+    }
 
-    persistentStreamId = newStreamId;
-    persistentSessionId = newSessionId;
+    const { id: streamId, offer, ice_servers: iceServers, session_id: sessionId } = await sessionResponse.json();
+    logger.info('Persistent stream created:', { persistentStreamId: streamId, persistentSessionId: sessionId });
 
-    logger.info('Persistent stream created:', { persistentStreamId, persistentSessionId });
+    persistentStreamId = streamId;
+    persistentSessionId = sessionId;
+
+    logger.debug('Received offer:', offer);
+    logger.debug('Received ICE servers:', iceServers);
+
+    const peerConnectionConfig = {
+      iceServers,
+      sdpSemantics: 'unified-plan',
+      bundlePolicy: 'max-bundle',
+      rtcpMuxPolicy: 'require',
+      iceTransportPolicy: 'all'
+    };
+
+    logger.debug('Creating RTCPeerConnection with config:', JSON.stringify(peerConnectionConfig));
+
+    peerConnection = new RTCPeerConnection(peerConnectionConfig);
+
+    peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
+    peerConnection.addEventListener('icecandidate', onIceCandidate, true);
+    peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
+    peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
+    peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
+    peerConnection.addEventListener('track', onTrack, true);
 
     try {
-      sessionClientAnswer = await createPeerConnection(offer, iceServers);
-    } catch (e) {
-      logger.error('Error during streaming setup:', e);
-      stopAllStreams();
-      closePC();
-      throw e;
+      await peerConnection.setRemoteDescription(offer);
+      logger.debug('Set remote SDP successfully');
+    } catch (error) {
+      logger.error('Error setting remote description:', error);
+      throw error;
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    try {
+      const sessionClientAnswer = await peerConnection.createAnswer();
+      logger.debug('Created local SDP:', sessionClientAnswer.sdp);
 
-    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/sdp`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        answer: sessionClientAnswer,
-        session_id: persistentSessionId,
-      }),
-    });
+      const modifiedAnswer = new RTCSessionDescription({
+        type: 'answer',
+        sdp: modifySdp(sessionClientAnswer.sdp)
+      });
 
-    if (!sdpResponse.ok) {
-      throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
+      await peerConnection.setLocalDescription(modifiedAnswer);
+      logger.debug('Set local SDP successfully');
+
+      const answerResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ answer: modifiedAnswer }),
+      });
+
+      if (!answerResponse.ok) {
+        throw new Error(`Failed to send answer: ${answerResponse.status} ${answerResponse.statusText}`);
+      }
+
+      logger.debug('Sent answer successfully');
+    } catch (error) {
+      logger.error('Error creating or setting local description:', error);
+      throw error;
     }
+
     isPersistentStreamActive = true;
-    startKeepAlive();
-    lastConnectionTime = Date.now();
-    logger.info('Persistent stream initialized successfully');
     connectionState = ConnectionState.CONNECTED;
-
-    if (!hasWarmUpPlayed) {
-      await warmUpStream();
-      hasWarmUpPlayed = true;
-    }
+    logger.info('Persistent stream initialized successfully');
   } catch (error) {
     logger.error('Failed to initialize persistent stream:', error);
     isPersistentStreamActive = false;
-    persistentStreamId = null;
-    persistentSessionId = null;
     connectionState = ConnectionState.DISCONNECTED;
     throw error;
   } finally {
     isInitializingStream = false;
   }
+}
+
+function modifySdp(sdp) {
+  // Remove video codecs we don't support
+  sdp = sdp.replace(/a=rtpmap:.*VP8\/90000\r\n/g, '');
+  sdp = sdp.replace(/a=rtpmap:.*VP9\/90000\r\n/g, '');
+  sdp = sdp.replace(/a=rtpmap:.*H264\/90000\r\n/g, '');
+
+  // Ensure audio codec support
+  if (sdp.indexOf('opus/48000') === -1) {
+    sdp = sdp.replace(
+      /m=audio (\d+) RTP\/SAVPF.*\r\n/g,
+      'm=audio $1 RTP/SAVPF 111\r\n' +
+      'a=rtpmap:111 opus/48000/2\r\n' +
+      'a=fmtp:111 minptime=10;useinbandfec=1\r\n'
+    );
+  }
+
+  logger.debug('Modified SDP:', sdp);
+  return sdp;
+}
+
+function checkRTCCapabilities() {
+  if (typeof RTCPeerConnection === 'undefined') {
+    logger.error('RTCPeerConnection is not supported in this browser');
+    return false;
+  }
+
+  const pc = new RTCPeerConnection();
+  const capabilities = {
+    createOffer: typeof pc.createOffer === 'function',
+    createAnswer: typeof pc.createAnswer === 'function',
+    setLocalDescription: typeof pc.setLocalDescription === 'function',
+    setRemoteDescription: typeof pc.setRemoteDescription === 'function',
+    addTrack: typeof pc.addTrack === 'function',
+    addTransceiver: typeof pc.addTransceiver === 'function'
+  };
+
+  pc.close();
+
+  logger.debug('RTC Capabilities:', capabilities);
+  return capabilities;
 }
 
 function shouldReconnect() {
@@ -1540,6 +1617,15 @@ async function createPeerConnection(offer, iceServers) {
       sdpSemantics: 'unified-plan', // Set SDP semantics to 'unified-plan'
     });
 
+    logger.debug('Creating RTCPeerConnection with config:', JSON.stringify(config));
+
+    try {
+      peerConnection = new RTCPeerConnection(config);
+    } catch (error) {
+      logger.error('Error creating RTCPeerConnection:', error);
+      throw error;
+    }
+
     peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
     peerConnection.addEventListener('icecandidate', onIceCandidate, true);
     peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
@@ -1551,6 +1637,15 @@ async function createPeerConnection(offer, iceServers) {
   
   await peerConnection.setRemoteDescription(offer);
   logger.debug('Set remote SDP');
+
+  
+  try {
+    await peerConnection.setRemoteDescription(offer);
+    logger.debug('Set remote SDP successfully');
+  } catch (error) {
+    logger.error('Error setting remote description:', error);
+    throw error;
+  }
 
   // Now create the data channel after setting the remote description
   if (!pcDataChannel) {
@@ -1567,13 +1662,19 @@ async function createPeerConnection(offer, iceServers) {
     pcDataChannel.onmessage = onStreamEvent;
   }
 
-  const sessionClientAnswer = await peerConnection.createAnswer();
-  logger.debug('Created local SDP');
+ 
+  try {
+    const sessionClientAnswer = await peerConnection.createAnswer();
+    logger.debug('Created local SDP:', sessionClientAnswer.sdp);
 
-  await peerConnection.setLocalDescription(sessionClientAnswer);
-  logger.debug('Set local SDP');
+    await peerConnection.setLocalDescription(sessionClientAnswer);
+    logger.debug('Set local SDP successfully');
 
-  return sessionClientAnswer;
+    return sessionClientAnswer;
+  } catch (error) {
+    logger.error('Error creating or setting local description:', error);
+    throw error;
+  }
 }
 
 function onIceGatheringStateChange() {
