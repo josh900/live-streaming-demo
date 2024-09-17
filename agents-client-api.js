@@ -1632,13 +1632,6 @@ function modifySdp(sdp) {
 
     sdp = sdpLines.join('\n');
     logger.debug('Modified SDP for Android WebView:', sdp);
-
-      sdp = sdp.replace(/a=rtpmap:\d+ (.+)\/\d+\r\n/g, (match, codec) => {
-        if (codec.toLowerCase() === 'opus') {
-          return match; // Keep Opus codec
-        }
-        return ''; // Remove other audio codecs
-      });
   }
   return sdp;
 }
