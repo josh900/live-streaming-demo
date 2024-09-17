@@ -1567,7 +1567,6 @@ async function createPeerConnection(offer, iceServers) {
 
   try {
     logger.debug('Setting remote description');
-    logger.debug('Offer SDP:', JSON.stringify(offer));
     await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
     logger.debug('Set remote SDP successfully');
   } catch (error) {
@@ -1607,32 +1606,56 @@ async function createPeerConnection(offer, iceServers) {
 }
 
 function modifySdp(sdp) {
+  // Detect if the client is running in Android WebView
+  function isAndroidWebView() {
+    const userAgent = navigator.userAgent || '';
+    return /Android/.test(userAgent) && /wv/.test(userAgent);
+  }
+
   if (isAndroidWebView()) {
-    const sdpLines = sdp.split('\n');
-    let videoSectionIndex = -1;
-    
-    // Find the video section
-    for (let i = 0; i < sdpLines.length; i++) {
-      if (sdpLines[i].startsWith('m=video')) {
-        videoSectionIndex = i;
-        break;
+    logger.debug('Android WebView detected. Modifying video section in SDP.');
+
+    // Split the SDP into lines
+    const lines = sdp.split('\r\n');
+    const modifiedLines = [];
+    let inVideoSection = false;
+
+    for (let line of lines) {
+      if (line.startsWith('m=video')) {
+        inVideoSection = true;
+        // Modify the video line to disable it
+        modifiedLines.push('m=video 0 UDP/TLS/RTP/SAVPF 96');
+      } else if (inVideoSection) {
+        if (line.startsWith('m=')) {
+          // We've reached the next section, exit video section
+          inVideoSection = false;
+          modifiedLines.push(line);
+        } else if (line.startsWith('a=')) {
+          // Remove most attributes in the video section
+          if (line.startsWith('a=mid:') || line.startsWith('a=inactive') || line.startsWith('a=recvonly')) {
+            modifiedLines.push(line);
+          }
+          // Skip other attributes
+        } else {
+          // Keep non-attribute lines
+          modifiedLines.push(line);
+        }
+      } else {
+        // Outside video section, keep the line as is
+        modifiedLines.push(line);
       }
     }
 
-    if (videoSectionIndex !== -1) {
-      // Modify the video section instead of removing it
-      sdpLines[videoSectionIndex] = sdpLines[videoSectionIndex].replace('UDP/TLS/RTP/SAVPF', 'UDP/TLS/RTP/SAVPF 96');
-      
-      // Add necessary attributes for the video section
-      sdpLines.splice(videoSectionIndex + 1, 0, 'a=rtpmap:96 VP8/90000');
-      sdpLines.splice(videoSectionIndex + 2, 0, 'a=rtcp-fb:96 nack');
-      sdpLines.splice(videoSectionIndex + 3, 0, 'a=rtcp-fb:96 nack pli');
-      sdpLines.splice(videoSectionIndex + 4, 0, 'a=rtcp-fb:96 ccm fir');
-    }
+    // Join the modified lines back into a single SDP string
+    sdp = modifiedLines.join('\r\n');
 
-    sdp = sdpLines.join('\n');
-    logger.debug('Modified SDP for Android WebView:', sdp);
+    // Remove 'v' from BUNDLE group
+    sdp = sdp.replace(/(a=group:BUNDLE.*)\sv\s/, '$1 ');
+    sdp = sdp.replace(/(a=group:BUNDLE.*)\sv/, '$1');
+
+    logger.debug('Modified SDP:', sdp);
   }
+
   return sdp;
 }
 
