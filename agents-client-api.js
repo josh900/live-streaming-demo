@@ -1636,6 +1636,10 @@ function modifySdp(sdp) {
   return sdp;
 }
 
+function isAndroidWebView() {
+  const userAgent = navigator.userAgent.toLowerCase();
+  return /android/.test(userAgent) && /wv/.test(userAgent);
+}
 
 function onIceGatheringStateChange() {
   const { iceGathering: iceGatheringStatusLabel } = getStatusLabels();
