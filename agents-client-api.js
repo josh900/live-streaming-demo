@@ -1533,47 +1533,6 @@ function showErrorMessage(message) {
   if (connectButton) connectButton.style.display = 'inline-block';
 }
 
-
-async function setLocalDescriptionWithFallback(peerConnection, answer) {
-  const originalSdp = answer.sdp;
-  const codecs = ['VP8', 'VP9', 'H264'];
-  
-  for (let i = 0; i <= codecs.length; i++) {
-    try {
-      if (i === codecs.length) {
-        // If all codec removals fail, try the original SDP
-        answer.sdp = originalSdp;
-      } else {
-        // Remove the codec from the SDP
-        answer.sdp = removeCodecFromSdp(originalSdp, codecs[i]);
-      }
-      await peerConnection.setLocalDescription(answer);
-      logger.debug('Set local SDP successfully');
-      return;
-    } catch (error) {
-      logger.warn(`Failed to set local description with codec ${codecs[i] || 'original'}:`, error);
-    }
-  }
-  
-  throw new Error('Failed to set local description with all codec combinations');
-}
-
-function removeCodecFromSdp(sdp, codec) {
-  const lines = sdp.split('\n');
-  const codecRegex = new RegExp(`a=rtpmap:\\d+ ${codec}/\\d+`, 'i');
-  const filteredLines = lines.filter(line => !codecRegex.test(line));
-  return filteredLines.join('\n');
-}
-
-function logSdp(sdp, label) {
-  logger.debug(`${label} SDP:`);
-  sdp.split('\n').forEach((line, index) => {
-    logger.debug(`${index + 1}: ${line}`);
-  });
-}
-
-
-
 async function createPeerConnection(offer, iceServers) {
   if (peerConnection) {
     logger.warn('Peer connection already exists. Closing existing connection.');
@@ -1600,7 +1559,7 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.ontrack = onTrack;
 
     const remoteDesc = new RTCSessionDescription(offer);
-    logSdp(offer.sdp, 'Offer');
+    logger.debug('Setting remote description');
     await peerConnection.setRemoteDescription(remoteDesc);
     logger.debug('Set remote SDP successfully');
 
@@ -1608,14 +1567,12 @@ async function createPeerConnection(offer, iceServers) {
     const answer = await peerConnection.createAnswer();
     logger.debug('Created local SDP successfully');
 
-    logSdp(answer.sdp, 'Original Answer');
     const modifiedSdp = modifySdp(answer.sdp);
     answer.sdp = modifiedSdp;
-    logSdp(answer.sdp, 'Modified Answer');
-
 
     logger.debug('Setting local description');
-    await setLocalDescriptionWithFallback(peerConnection, answer);
+    await peerConnection.setLocalDescription(answer);
+    logger.debug('Set local SDP successfully');
 
     return answer;
   } catch (error) {
@@ -1639,10 +1596,6 @@ function modifySdp(sdp) {
       videoSectionFound = true;
       // Extract video codecs
       videoCodecs = lines[i].split(' ').slice(3);
-      // Ensure VP8 codec is included
-      if (!videoCodecs.includes('96')) {
-        videoCodecs.push('96');
-      }
       // Set to recvonly and include all codecs
       lines[i] = `m=video 9 UDP/TLS/RTP/SAVPF ${videoCodecs.join(' ')}`;
     } else if (videoSectionFound && lines[i].startsWith('a=')) {
@@ -1685,17 +1638,8 @@ function modifySdp(sdp) {
     }
   }
   
-  // Add VP8 codec if not present
-  if (!lines.some(line => line.includes('VP8'))) {
-    lines.push('a=rtpmap:96 VP8/90000');
-    lines.push('a=rtcp-fb:96 nack');
-    lines.push('a=rtcp-fb:96 nack pli');
-    lines.push('a=rtcp-fb:96 ccm fir');
-  }
-  
   return lines.join('\n');
 }
-
 
 function onIceGatheringStateChange() {
   const { iceGathering: iceGatheringStatusLabel } = getStatusLabels();
