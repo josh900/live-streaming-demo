@@ -1534,88 +1534,38 @@ function showErrorMessage(message) {
 }
 
 async function createPeerConnection(offer, iceServers) {
-  if (peerConnection) {
-    logger.warn('Peer connection already exists. Closing existing connection.');
-    peerConnection.close();
+  if (!peerConnection) {
+    peerConnection = new RTCPeerConnection({ iceServers });
+    pcDataChannel = peerConnection.createDataChannel('JanusDataChannel');
+    peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
+    peerConnection.addEventListener('icecandidate', onIceCandidate, true);
+    peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
+    peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
+    peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
+    peerConnection.addEventListener('track', onTrack, true);
+
+    pcDataChannel.onopen = () => {
+      logger.debug('Data channel opened');
+    };
+    pcDataChannel.onclose = () => {
+      logger.debug('Data channel closed');
+    };
+    pcDataChannel.onerror = (error) => {
+      logger.error('Data channel error:', error);
+    };
+    pcDataChannel.onmessage = onStreamEvent;
   }
 
-  const peerConnectionConfig = {
-    iceServers,
-    sdpSemantics: 'unified-plan',
-    bundlePolicy: 'max-bundle',
-    rtcpMuxPolicy: 'require',
-    iceTransportPolicy: 'all'
-  };
+  await peerConnection.setRemoteDescription(offer);
+  logger.debug('Set remote SDP');
 
-  logger.debug('Creating RTCPeerConnection with config:', JSON.stringify(peerConnectionConfig));
+  const sessionClientAnswer = await peerConnection.createAnswer();
+  logger.debug('Created local SDP');
 
-  try {
-    peerConnection = new RTCPeerConnection(peerConnectionConfig);
-  } catch (error) {
-    logger.error('Error creating RTCPeerConnection:', error);
-    throw error;
-  }
+  await peerConnection.setLocalDescription(sessionClientAnswer);
+  logger.debug('Set local SDP');
 
-  peerConnection.onicecandidate = onIceCandidate;
-  peerConnection.ontrack = onTrack;
-  peerConnection.oniceconnectionstatechange = onIceConnectionStateChange;
-  peerConnection.onconnectionstatechange = onConnectionStateChange;
-  peerConnection.onsignalingstatechange = onSignalingStateChange;
-
-  try {
-    logger.debug('Setting remote description');
-    await peerConnection.setRemoteDescription(offer);
-    logger.debug('Set remote description successfully');
-  } catch (error) {
-    logger.error('Error setting remote description:', error);
-    throw error;
-  }
-
-  try {
-    logger.debug('Creating answer');
-    const answer = await peerConnection.createAnswer();
-    
-    // Modify SDP to ensure compatibility
-    answer.sdp = modifySdp(answer.sdp);
-
-    logger.debug('Setting local description');
-    await peerConnection.setLocalDescription(answer);
-    logger.debug('Set local description successfully');
-
-    return answer;
-  } catch (error) {
-    logger.error('Error creating answer or setting local description:', error);
-    throw error;
-  }
-}
-
-function modifySdp(sdp) {
-  // Remove video codecs we don't support
-  sdp = sdp.replace(/a=rtpmap:.*VP8\/90000\r\n/g, '');
-  sdp = sdp.replace(/a=rtpmap:.*VP9\/90000\r\n/g, '');
-  sdp = sdp.replace(/a=rtpmap:.*H264\/90000\r\n/g, '');
-
-  // Ensure audio codec support
-  if (sdp.indexOf('opus/48000') === -1) {
-    sdp = sdp.replace(
-      /m=audio (\d+) RTP\/SAVPF.*\r\n/g,
-      'm=audio $1 RTP/SAVPF 111\r\n' +
-      'a=rtpmap:111 opus/48000/2\r\n' +
-      'a=fmtp:111 minptime=10;useinbandfec=1\r\n'
-    );
-  }
-
-  // Add a basic video codec if none are present
-  if (sdp.indexOf('m=video') !== -1 && sdp.indexOf('a=rtpmap:') === -1) {
-    sdp = sdp.replace(
-      /m=video (\d+) [^\r\n]+\r\n/g,
-      'm=video $1 RTP/SAVPF 120\r\n' +
-      'a=rtpmap:120 VP8/90000\r\n'
-    );
-  }
-
-  logger.debug('Modified SDP:', sdp);
-  return sdp;
+  return sessionClientAnswer;
 }
 
 function onIceGatheringStateChange() {
