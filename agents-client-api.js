@@ -690,7 +690,7 @@ async function initializePersistentStream() {
   connectionState = ConnectionState.CONNECTING;
 
   try {
-    const currentAvatar = avatars.find((avatar) => avatar.id === currentAvatarId);
+    const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
     if (!currentAvatar) {
       throw new Error('No avatar selected or avatar not found');
     }
@@ -701,7 +701,6 @@ async function initializePersistentStream() {
       throw new Error('Browser does not support required RTC capabilities');
     }
 
-    // Create persistent stream
     const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
       method: 'POST',
       headers: {
@@ -709,65 +708,92 @@ async function initializePersistentStream() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        source_url: currentAvatar.silentVideoUrl,
-        voice_id: currentAvatar.voiceId || 'Jenny',
-        ...(currentContextId && { usage_policy: currentContextId }), // Include context if available
+        source_url: currentAvatar.imageUrl,
+        driver_url: 'bank://lively/driver-06',
+        output_resolution: 512,
+        stream_warmup: true,
+        config: {
+          fluent: true,
+          stitch: true,
+          pad_audio: 0.5,
+          auto_match: true,
+          align_driver: true,
+          normalization_factor: 0.1,
+          align_expand_factor: 0.3,
+          motion_factor: 0.55,
+          result_format: 'mp4'
+        }
       }),
     });
 
     if (!sessionResponse.ok) {
-      throw new Error(`Failed to create persistent stream: ${sessionResponse.statusText}`);
+      throw new Error(`Failed to create persistent stream: ${sessionResponse.status} ${sessionResponse.statusText}`);
     }
 
-    const sessionData = await sessionResponse.json();
-    logger.info('Persistent stream created:', sessionData);
+    const { id: streamId, offer, ice_servers: iceServers, session_id: sessionId } = await sessionResponse.json();
+    logger.info('Persistent stream created:', { persistentStreamId: streamId, persistentSessionId: sessionId });
 
-    persistentStreamId = sessionData.id;
+    persistentStreamId = streamId;
+    persistentSessionId = sessionId;
 
-    // Extract session cookies for subsequent requests
-    const cookieHeader = sessionResponse.headers.get('set-cookie');
-    if (!cookieHeader) {
-      throw new Error('Session cookie not found in response');
-    }
-
-    persistentSessionId = cookieHeader;
-    logger.debug('Persistent Session ID:', persistentSessionId);
-
-    // Fetch ICE servers
-    const iceServers = await fetchIceServers();
+    logger.debug('Received offer:', offer);
     logger.debug('Received ICE servers:', iceServers);
 
-    // Create offer object
-    const offer = new RTCSessionDescription(sessionData.offer);
-
-    // Create peer connection
     const answer = await createPeerConnection(offer, iceServers);
+    logger.debug('Created peer connection and got answer:', answer);
 
-    // Send the answer back to the server
-    await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/sdp`, {
+    const answerResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
         'Content-Type': 'application/json',
-        Cookie: persistentSessionId, // Include the session ID
       },
-      body: JSON.stringify({
-        sdp: answer.sdp,
-        type: answer.type,
-      }),
+      body: JSON.stringify({ answer }),
     });
+
+    if (!answerResponse.ok) {
+      throw new Error(`Failed to send answer: ${answerResponse.status} ${answerResponse.statusText}`);
+    }
 
     logger.debug('Sent answer successfully');
 
-    // Start ICE candidate listener
-    peerConnection.addEventListener('icecandidate', onIceCandidate);
+    // Add a timeout for connection establishment
+    const connectionTimeout = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Connection timeout')), 30000); // 30 seconds timeout
+    });
 
+    await Promise.race([
+      new Promise((resolve) => {
+        const checkConnection = () => {
+          if (peerConnection.connectionState === 'connected') {
+            resolve();
+          } else if (peerConnection.connectionState === 'failed') {
+            throw new Error('Connection failed');
+          } else {
+            setTimeout(checkConnection, 1000);
+          }
+        };
+        checkConnection();
+      }),
+      connectionTimeout
+    ]);
+
+    logger.info('Persistent stream initialized successfully');
     isPersistentStreamActive = true;
     connectionState = ConnectionState.CONNECTED;
-    logger.info('Persistent stream initialized and connected');
+
+    // Warm up the stream
+    await warmUpStream();
+
   } catch (error) {
     logger.error('Failed to initialize persistent stream:', error);
+    isPersistentStreamActive = false;
     connectionState = ConnectionState.DISCONNECTED;
+    if (peerConnection) {
+      peerConnection.close();
+      peerConnection = null;
+    }
+    throw error;
   } finally {
     isInitializingStream = false;
   }
@@ -786,7 +812,7 @@ function checkRTCCapabilities() {
     setLocalDescription: typeof pc.setLocalDescription === 'function',
     setRemoteDescription: typeof pc.setRemoteDescription === 'function',
     addTrack: typeof pc.addTrack === 'function',
-    addTransceiver: typeof pc.addTransceiver === 'function',
+    addTransceiver: typeof pc.addTransceiver === 'function'
   };
 
   pc.close();
@@ -1559,13 +1585,12 @@ async function createPeerConnection(offer, iceServers) {
     peerConnection.close();
   }
 
-  // Adjusted configuration for compatibility
   const peerConnectionConfig = {
     iceServers,
-    // sdpSemantics: 'unified-plan', // Commented out or adjust based on compatibility
+    sdpSemantics: 'unified-plan',
     bundlePolicy: 'max-bundle',
     rtcpMuxPolicy: 'require',
-    iceTransportPolicy: 'all',
+    iceTransportPolicy: 'all'
   };
 
   logger.debug('Creating RTCPeerConnection with config:', JSON.stringify(peerConnectionConfig));
@@ -1577,13 +1602,12 @@ async function createPeerConnection(offer, iceServers) {
     throw error;
   }
 
-  peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange);
-  peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange);
-  peerConnection.addEventListener('connectionstatechange', onConnectionStateChange);
-  peerConnection.addEventListener('signalingstatechange', onSignalingStateChange);
-
-  // Handle tracks
-  peerConnection.addEventListener('track', onTrack);
+  peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
+  peerConnection.addEventListener('icecandidate', onIceCandidate, true);
+  peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
+  peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
+  peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
+  peerConnection.addEventListener('track', onTrack, true);
 
   try {
     await peerConnection.setRemoteDescription(offer);
@@ -1593,7 +1617,6 @@ async function createPeerConnection(offer, iceServers) {
     throw error;
   }
 
-  // Create data channel
   try {
     pcDataChannel = peerConnection.createDataChannel('data');
     pcDataChannel.onopen = () => logger.debug('Data channel opened');
@@ -1602,18 +1625,11 @@ async function createPeerConnection(offer, iceServers) {
     pcDataChannel.onmessage = onStreamEvent;
   } catch (error) {
     logger.error('Error creating data channel:', error);
-    // Continue execution; data channel might not be critical
   }
 
   try {
     const answer = await peerConnection.createAnswer();
     logger.debug('Created local SDP:', answer.sdp);
-
-    // Remove modifySdp function or adjust it
-    // const modifiedAnswer = new RTCSessionDescription({
-    //   type: 'answer',
-    //   sdp: modifySdp(answer.sdp),
-    // });
 
     await peerConnection.setLocalDescription(answer);
     logger.debug('Set local SDP successfully');
@@ -1625,12 +1641,6 @@ async function createPeerConnection(offer, iceServers) {
   }
 }
 
-// Remove or adjust the modifySdp function
-// function modifySdp(sdp) {
-//   // Your SDP modifications here
-// }
-
-
 function onIceGatheringStateChange() {
   const { iceGathering: iceGatheringStatusLabel } = getStatusLabels();
   if (iceGatheringStatusLabel) {
@@ -1641,23 +1651,20 @@ function onIceGatheringStateChange() {
 }
 
 function onIceCandidate(event) {
-  if (event.candidate && persistentStreamId && persistentSessionId) {
-    const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
-    logger.debug('New ICE candidate:', candidate);
-
+  if (event.candidate) {
+    logger.debug('New ICE candidate:', event.candidate.candidate);
     // Send the ICE candidate to the server
-    sendIceCandidate({ candidate, sdpMid, sdpMLineIndex });
+    sendIceCandidate(event.candidate);
   }
 }
 
 async function sendIceCandidate(candidate) {
   try {
-    const response = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/ice`, {
+    const response = await fetch(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/ice`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
         'Content-Type': 'application/json',
-        Cookie: persistentSessionId, // Include the session ID
       },
       body: JSON.stringify({
         candidate: candidate.candidate,
