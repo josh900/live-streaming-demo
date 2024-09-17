@@ -1612,29 +1612,21 @@ function modifySdp(sdp) {
 
   if (isAndroidWebView()) {
     // Disable video for Android WebView to prevent SDP errors
-    logger.debug('Android WebView detected. Disabling video in SDP.');
-    // Set video port to 0 to disable video
-    sdp = sdp.replace(/m=video .*\r\n/, 'm=video 0 UDP/TLS/RTP/SAVPF 0\r\n');
-    // Remove video codecs
-    sdp = sdp.replace(/a=rtpmap:\d+ .*\r\n/g, '');
-    // Remove video attributes
-    sdp = sdp.replace(/a=fmtp:\d+ .*\r\n/g, '');
-    sdp = sdp.replace(/a=rtcp-fb:\d+ .*\r\n/g, '');
-    sdp = sdp.replace(/a=ssrc-group:.*\r\n/g, '');
-    sdp = sdp.replace(/a=ssrc:.*\r\n/g, '');
-    sdp = sdp.replace(/a=mid:v.*\r\n/g, '');
-    sdp = sdp.replace(/a=msid:.*\r\n/g, '');
-    sdp = sdp.replace(/a=extmap:.*\r\n/g, '');
-    sdp = sdp.replace(/a=rtcp-mux\r\n/g, '');
-    sdp = sdp.replace(/a=rtcp-rsize\r\n/g, '');
-    sdp = sdp.replace(/a=recvonly\r\n/g, '');
-    // Optionally remove the entire video section
-    // sdp = sdp.replace(/m=video .*\r\n([\s\S]*?)^(m=|$)/gm, '');
-  } else {
-    // Modify SDP for other browsers if necessary
-    // Example: Remove unsupported codecs
-    // sdp = sdp.replace(/a=rtpmap:\d+ VP9\/90000\r\n/g, '');
-    // sdp = sdp.replace(/a=rtpmap:\d+ AV1\/90000\r\n/g, '');
+    logger.debug('Android WebView detected. Removing video section from SDP.');
+
+    // Remove the entire video section
+    sdp = sdp.replace(/m=video[\s\S]+?(?=(m=|$))/g, '');
+
+    // Remove 'v' from BUNDLE group
+    sdp = sdp.replace(/(a=group:BUNDLE.*\s)(v\s)/, '$1');
+
+    // Ensure that any extra spaces are cleaned up in the BUNDLE group
+    sdp = sdp.replace(/(a=group:BUNDLE .*)(\s\s+)/, '$1 ');
+
+    // If there are extra spaces at the end, trim them
+    sdp = sdp.replace(/(a=group:BUNDLE .*)\s*$/, '$1');
+
+    // Ensure that the 'a=mid' attributes in other sections are preserved
   }
 
   logger.debug('Modified SDP:', sdp);
