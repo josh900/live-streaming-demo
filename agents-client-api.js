@@ -1563,18 +1563,7 @@ async function createPeerConnection(offer, iceServers) {
   peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange);
   peerConnection.addEventListener('connectionstatechange', onConnectionStateChange);
   peerConnection.addEventListener('signalingstatechange', onSignalingStateChange);
-  
-  // New onTrack event handler
-  peerConnection.ontrack = (event) => {
-    logger.debug('onTrack event:', event);
-    logger.debug('Track kind:', event.track.kind);
-    logger.debug('Track readyState:', event.track.readyState);
-    
-    if (event.track.kind === 'video') {
-      logger.debug('Setting stream video element with track:', event.track.id);
-      setStreamVideoElement(event.streams[0]);
-    }
-  };
+  peerConnection.addEventListener('track', onTrack);
 
   try {
     logger.debug('Setting remote description');
@@ -1617,25 +1606,59 @@ async function createPeerConnection(offer, iceServers) {
 }
 
 function modifySdp(sdp) {
-  const lines = sdp.split('\n');
-  let videoSectionFound = false;
-  
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].startsWith('m=video')) {
-      videoSectionFound = true;
-      // Instead of removing, set to inactive
-      lines[i] = lines[i].replace('sendrecv', 'inactive');
-    } else if (videoSectionFound && lines[i].startsWith('a=')) {
-      // Remove all attributes for the video section
-      lines.splice(i, 1);
-      i--;
-    } else if (lines[i].startsWith('m=')) {
-      videoSectionFound = false;
-    }
+  // Detect if the client is running in Android WebView
+  function isAndroidWebView() {
+    const userAgent = navigator.userAgent || '';
+    return /Android/.test(userAgent) && /wv/.test(userAgent);
   }
-  
-  return lines.join('\n');
+
+  if (isAndroidWebView()) {
+    logger.debug('Android WebView detected. Modifying video section in SDP.');
+
+    // Split the SDP into lines
+    const lines = sdp.split('\r\n');
+    const modifiedLines = [];
+    let inVideoSection = false;
+
+    for (let line of lines) {
+      if (line.startsWith('m=video')) {
+        inVideoSection = true;
+        // Modify the video line to disable it
+        modifiedLines.push('m=video 0 UDP/TLS/RTP/SAVPF 96');
+      } else if (inVideoSection) {
+        if (line.startsWith('m=')) {
+          // We've reached the next section, exit video section
+          inVideoSection = false;
+          modifiedLines.push(line);
+        } else if (line.startsWith('a=')) {
+          // Remove most attributes in the video section
+          if (line.startsWith('a=mid:') || line.startsWith('a=inactive') || line.startsWith('a=recvonly')) {
+            modifiedLines.push(line);
+          }
+          // Skip other attributes
+        } else {
+          // Keep non-attribute lines
+          modifiedLines.push(line);
+        }
+      } else {
+        // Outside video section, keep the line as is
+        modifiedLines.push(line);
+      }
+    }
+
+    // Join the modified lines back into a single SDP string
+    sdp = modifiedLines.join('\r\n');
+
+    // Remove 'v' from BUNDLE group
+    sdp = sdp.replace(/(a=group:BUNDLE.*)\sv\s/, '$1 ');
+    sdp = sdp.replace(/(a=group:BUNDLE.*)\sv/, '$1');
+
+    logger.debug('Modified SDP:', sdp);
+  }
+
+  return sdp;
 }
+
 
 function onIceGatheringStateChange() {
   const { iceGathering: iceGatheringStatusLabel } = getStatusLabels();
@@ -1757,16 +1780,20 @@ function onVideoStatusChange(videoIsPlaying) {
   }
 }
 
+
 function setStreamVideoElement(stream) {
-  console.log('[DEBUG] Setting stream video element');
-  if (streamVideoRef.current) {
-    streamVideoRef.current.srcObject = stream;
-    streamVideoRef.current.play().then(() => {
-      console.log('[DEBUG] Stream video playback started successfully');
-    }).catch(error => {
-      console.error('[ERROR] Failed to start stream video playback:', error);
-    });
+  const streamVideoElement = document.getElementById('stream-video-element');
+  if (!streamVideoElement) {
+    logger.error('Stream video element not found');
+    return;
   }
+
+  logger.debug('Setting stream video element');
+  streamVideoElement.srcObject = stream;
+  streamVideoElement.onloadedmetadata = () => {
+    logger.debug('Stream video metadata loaded');
+    streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
+  };
 }
 
 function onStreamingComplete() {
