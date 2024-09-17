@@ -89,6 +89,7 @@ let isWarmingUp = false;
 let transitionDebounceTimer;
 let pendingTransition = null;
 let hasWarmUpPlayed = false;
+let streamVideoRef = { current: document.getElementById('streamVideo') };
 
 
 function debouncedVideoStatusChange(isPlaying, stream) {
@@ -1625,12 +1626,24 @@ function modifySdp(sdp) {
       videoSectionFound = true;
       // Instead of removing, set to inactive
       lines[i] = lines[i].replace('sendrecv', 'inactive');
-    } else if (videoSectionFound && lines[i].startsWith('a=')) {
-      // Remove all attributes for the video section
+    } else if (videoSectionFound && lines[i].startsWith('a=') && !lines[i].startsWith('a=mid:')) {
+      // Remove all attributes for the video section except the mid attribute
       lines.splice(i, 1);
       i--;
     } else if (lines[i].startsWith('m=')) {
       videoSectionFound = false;
+    }
+  }
+  
+  // Ensure there's a mid attribute for each media section
+  let midCounter = 0;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].startsWith('m=')) {
+      if (!lines[i+1].startsWith('a=mid:')) {
+        lines.splice(i+1, 0, `a=mid:${midCounter}`);
+        i++;
+      }
+      midCounter++;
     }
   }
   
@@ -1759,13 +1772,15 @@ function onVideoStatusChange(videoIsPlaying) {
 
 function setStreamVideoElement(stream) {
   console.log('[DEBUG] Setting stream video element');
-  if (streamVideoRef.current) {
+  if (streamVideoRef && streamVideoRef.current) {
     streamVideoRef.current.srcObject = stream;
     streamVideoRef.current.play().then(() => {
       console.log('[DEBUG] Stream video playback started successfully');
     }).catch(error => {
       console.error('[ERROR] Failed to start stream video playback:', error);
     });
+  } else {
+    console.error('[ERROR] streamVideoRef or its current property is not defined');
   }
 }
 
