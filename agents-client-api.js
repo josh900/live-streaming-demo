@@ -1534,39 +1534,90 @@ function showErrorMessage(message) {
 }
 
 async function createPeerConnection(offer, iceServers) {
-  if (!peerConnection) {
-    peerConnection = new RTCPeerConnection({ iceServers });
-    pcDataChannel = peerConnection.createDataChannel('JanusDataChannel');
-    peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
-    peerConnection.addEventListener('icecandidate', onIceCandidate, true);
-    peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
-    peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
-    peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
-    peerConnection.addEventListener('track', onTrack, true);
-
-    pcDataChannel.onopen = () => {
-      logger.debug('Data channel opened');
-    };
-    pcDataChannel.onclose = () => {
-      logger.debug('Data channel closed');
-    };
-    pcDataChannel.onerror = (error) => {
-      logger.error('Data channel error:', error);
-    };
-    pcDataChannel.onmessage = onStreamEvent;
+  if (peerConnection) {
+    logger.warn('Peer connection already exists. Closing existing connection.');
+    peerConnection.close();
   }
 
-  await peerConnection.setRemoteDescription(offer);
-  logger.debug('Set remote SDP');
+  const peerConnectionConfig = {
+    iceServers,
+    sdpSemantics: 'unified-plan',
+    bundlePolicy: 'max-bundle',
+    rtcpMuxPolicy: 'require',
+    iceTransportPolicy: 'all'
+  };
 
-  const sessionClientAnswer = await peerConnection.createAnswer();
-  logger.debug('Created local SDP');
+  logger.debug('Creating RTCPeerConnection with config:', JSON.stringify(peerConnectionConfig));
 
-  await peerConnection.setLocalDescription(sessionClientAnswer);
-  logger.debug('Set local SDP');
+  try {
+    peerConnection = new RTCPeerConnection(peerConnectionConfig);
+  } catch (error) {
+    logger.error('Error creating RTCPeerConnection:', error);
+    throw error;
+  }
 
-  return sessionClientAnswer;
+  peerConnection.onicecandidate = onIceCandidate;
+  peerConnection.ontrack = onTrack;
+  peerConnection.oniceconnectionstatechange = onIceConnectionStateChange;
+  peerConnection.onconnectionstatechange = onConnectionStateChange;
+  peerConnection.onsignalingstatechange = onSignalingStateChange;
+
+  try {
+    logger.debug('Setting remote description');
+    await peerConnection.setRemoteDescription(offer);
+    logger.debug('Remote description set successfully');
+
+    logger.debug('Creating answer');
+    const answer = await peerConnection.createAnswer();
+    
+    // Modify SDP to ensure compatibility
+    const modifiedSdp = modifySdp(answer.sdp);
+    answer.sdp = modifiedSdp;
+
+    logger.debug('Setting local description');
+    await peerConnection.setLocalDescription(answer);
+    logger.debug('Local description set successfully');
+
+    return answer;
+  } catch (error) {
+    logger.error('Error in createPeerConnection:', error);
+    throw error;
+  }
 }
+
+
+function modifySdp(sdp) {
+  // Remove video codecs we don't support
+  sdp = sdp.replace(/a=rtpmap:.*VP8\/90000\r\n/g, '');
+  sdp = sdp.replace(/a=rtpmap:.*VP9\/90000\r\n/g, '');
+  sdp = sdp.replace(/a=rtpmap:.*H264\/90000\r\n/g, '');
+
+  // Ensure audio codec support
+  if (sdp.indexOf('opus/48000') === -1) {
+    sdp = sdp.replace(
+      /m=audio (\d+) RTP\/SAVPF.*\r\n/g,
+      'm=audio $1 RTP/SAVPF 111\r\n' +
+      'a=rtpmap:111 opus/48000/2\r\n' +
+      'a=fmtp:111 minptime=10;useinbandfec=1\r\n'
+    );
+  }
+
+  // Add fallback video codec (H.264) if not present
+  if (sdp.indexOf('H264/90000') === -1) {
+    sdp = sdp.replace(
+      /m=video (\d+) RTP\/SAVPF.*\r\n/g,
+      '$&a=rtpmap:96 H264/90000\r\n' +
+      'a=rtcp-fb:96 nack\r\n' +
+      'a=rtcp-fb:96 nack pli\r\n' +
+      'a=rtcp-fb:96 ccm fir\r\n'
+    );
+  }
+
+  logger.debug('Modified SDP:', sdp);
+  return sdp;
+}
+
+
 
 function onIceGatheringStateChange() {
   const { iceGathering: iceGatheringStatusLabel } = getStatusLabels();
@@ -1578,61 +1629,46 @@ function onIceGatheringStateChange() {
 }
 
 function onIceCandidate(event) {
-  if (event.candidate && persistentStreamId && persistentSessionId) {
-    const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
-    logger.debug('New ICE candidate:', candidate);
+  if (event.candidate) {
+    logger.debug('New ICE candidate:', event.candidate.candidate);
+    sendIceCandidate(event.candidate);
+  }
+}
 
-    fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/ice`, {
+async function sendIceCandidate(candidate) {
+  try {
+    const response = await fetch(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/ice`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        candidate,
-        sdpMid,
-        sdpMLineIndex,
+        candidate: candidate.candidate,
+        sdpMid: candidate.sdpMid,
+        sdpMLineIndex: candidate.sdpMLineIndex,
         session_id: persistentSessionId,
       }),
-    }).catch((error) => {
-      logger.error('Error sending ICE candidate:', error);
     });
+
+    if (!response.ok) {
+      throw new Error(`Failed to send ICE candidate: ${response.status} ${response.statusText}`);
+    }
+
+    logger.debug('Sent ICE candidate successfully');
+  } catch (error) {
+    logger.error('Error sending ICE candidate:', error);
   }
 }
 
 function onIceConnectionStateChange() {
-  const { ice: iceStatusLabel } = getStatusLabels();
-  if (iceStatusLabel) {
-    iceStatusLabel.innerText = peerConnection.iceConnectionState;
-    iceStatusLabel.className = 'iceConnectionState-' + peerConnection.iceConnectionState;
-  }
   logger.debug('ICE connection state changed:', peerConnection.iceConnectionState);
-
-  if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'closed') {
-    stopAllStreams();
-    closePC();
-    showErrorMessage('Connection lost. Please try again.');
-  }
 }
 
 
-function onConnectionStateChange() {
-  const { peer: peerStatusLabel } = getStatusLabels();
-  if (peerStatusLabel) {
-    peerStatusLabel.innerText = peerConnection.connectionState;
-    peerStatusLabel.className = 'peerConnectionState-' + peerConnection.connectionState;
-  }
-  logger.debug('Peer connection state changed:', peerConnection.connectionState);
 
-  if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
-    logger.warn('Peer connection failed or disconnected. Attempting to reconnect...');
-    connectionState = ConnectionState.DISCONNECTED;
-    backgroundReconnect();
-  } else if (peerConnection.connectionState === 'connected') {
-    logger.debug('Peer connection established successfully');
-    connectionState = ConnectionState.CONNECTED;
-    reconnectAttempts = 0;
-  }
+function onConnectionStateChange() {
+  logger.debug('Connection state changed:', peerConnection.connectionState);
 }
 
 function startConnectionHealthCheck() {
@@ -1654,11 +1690,6 @@ function startConnectionHealthCheck() {
 }
 
 function onSignalingStateChange() {
-  const { signaling: signalingStatusLabel } = getStatusLabels();
-  if (signalingStatusLabel) {
-    signalingStatusLabel.innerText = peerConnection.signalingState;
-    signalingStatusLabel.className = 'signalingState-' + peerConnection.signalingState;
-  }
   logger.debug('Signaling state changed:', peerConnection.signalingState);
 }
 
@@ -1810,65 +1841,26 @@ function updateStreamEventLabel(status) {
 
 function onTrack(event) {
   logger.debug('onTrack event:', event);
-  if (!event.track) {
-    logger.warn('No track in onTrack event');
-    return;
+  if (event.track.kind === 'video') {
+    handleVideoTrack(event);
+  } else if (event.track.kind === 'audio') {
+    handleAudioTrack(event);
   }
+}
 
-  if (statsIntervalId) {
-    clearInterval(statsIntervalId);
+
+function handleVideoTrack(event) {
+  logger.debug('Setting stream video element with track:', event.track.id);
+  if (streamVideoElement) {
+    streamVideoElement.srcObject = event.streams[0];
   }
+}
 
-  statsIntervalId = setInterval(async () => {
-    if (peerConnection && peerConnection.connectionState === 'connected') {
-      try {
-        const stats = await peerConnection.getStats(event.track);
-        let videoStatsFound = false;
-        stats.forEach((report) => {
-          if (report.type === 'inbound-rtp' && report.kind === 'video') {
-            videoStatsFound = true;
-            const currentTime = Date.now();
-            const isReceivingVideo = report.bytesReceived > lastBytesReceived;
-
-            if (isReceivingVideo) {
-              lastActivityTime = currentTime;
-              if (!isCurrentlyStreaming) {
-                // Start of a new stream
-                isCurrentlyStreaming = true;
-                streamStartTime = currentTime;
-                onVideoStatusChange(true, event.streams[0]);
-              }
-            } else if (isCurrentlyStreaming && (currentTime - lastActivityTime > IDLE_TIMEOUT)) {
-              // Transition to idle state
-              isCurrentlyStreaming = false;
-              onVideoStatusChange(false, event.streams[0]);
-            }
-
-            lastBytesReceived = report.bytesReceived;
-          }
-        });
-        if (!videoStatsFound) {
-          logger.debug('No video stats found yet.');
-        }
-      } catch (error) {
-        logger.error('Error getting stats:', error);
-      }
-    } else {
-      logger.debug('Peer connection not ready for stats.');
-    }
-  }, 50); // Check every 100ms
-
-  if (event.streams && event.streams.length > 0) {
-    const stream = event.streams[0];
-    if (stream.getVideoTracks().length > 0) {
-      logger.debug('Setting stream video element with track:', event.track.id);
-      setStreamVideoElement(stream);
-    } else {
-      logger.warn('Stream does not contain any video tracks');
-    }
-  } else {
-    logger.warn('No streams found in onTrack event');
-  }
+function handleAudioTrack(event) {
+  logger.debug('Setting audio track');
+  const audioElement = document.createElement('audio');
+  audioElement.srcObject = event.streams[0];
+  audioElement.play().catch(error => logger.error('Error playing audio:', error));
 }
 
 function playIdleVideo() {
