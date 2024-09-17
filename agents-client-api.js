@@ -1619,18 +1619,22 @@ async function createPeerConnection(offer, iceServers) {
 function modifySdp(sdp) {
   const lines = sdp.split('\n');
   let videoSectionFound = false;
+  let videoCodecs = [];
   
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].startsWith('m=video')) {
       videoSectionFound = true;
-      // Ensure the video section is set to recvonly
-      lines[i] = lines[i].replace('sendrecv', 'recvonly');
+      // Extract video codecs
+      videoCodecs = lines[i].split(' ').slice(3);
+      // Set to recvonly and include all codecs
+      lines[i] = `m=video 9 UDP/TLS/RTP/SAVPF ${videoCodecs.join(' ')}`;
     } else if (videoSectionFound && lines[i].startsWith('a=')) {
       // Keep only essential attributes for the video section
       if (!lines[i].startsWith('a=mid:') && 
           !lines[i].startsWith('a=rtcp-mux') && 
           !lines[i].startsWith('a=recvonly') &&
           !lines[i].startsWith('a=rtpmap:') &&
+          !lines[i].startsWith('a=rtcp-fb:') &&
           !lines[i].startsWith('a=fmtp:')) {
         lines.splice(i, 1);
         i--;
@@ -1652,6 +1656,13 @@ function modifySdp(sdp) {
       if (!lines.slice(i+1, i+5).some(line => line.startsWith('a=rtcp-mux'))) {
         lines.splice(i+2, 0, 'a=rtcp-mux');
         i++;
+      }
+      // Add recvonly for audio and video sections
+      if (lines[i].startsWith('m=audio') || lines[i].startsWith('m=video')) {
+        if (!lines.slice(i+1, i+5).some(line => line.startsWith('a=recvonly'))) {
+          lines.splice(i+3, 0, 'a=recvonly');
+          i++;
+        }
       }
       midCounter++;
     }
@@ -1789,10 +1800,16 @@ function setStreamVideoElement(stream) {
   console.log('[DEBUG] Setting stream video element');
   if (streamVideoRef && streamVideoRef.current) {
     streamVideoRef.current.srcObject = stream;
+    streamVideoRef.current.muted = true; // Mute the video to allow autoplay
     streamVideoRef.current.play().then(() => {
       console.log('[DEBUG] Stream video playback started successfully');
     }).catch(error => {
-      console.error('[ERROR] Failed to start stream video playback:', error);
+      console.warn('[WARN] Failed to start stream video playback:', error);
+      console.log('[INFO] Waiting for user interaction to play video');
+      // Add a play button or wait for user interaction to play the video
+      document.addEventListener('click', () => {
+        streamVideoRef.current.play().catch(e => console.error('[ERROR] Failed to play video after user interaction:', e));
+      }, { once: true });
     });
   } else {
     console.error('[ERROR] streamVideoRef or its current property is not defined');
