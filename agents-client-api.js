@@ -1611,34 +1611,35 @@ function showErrorMessage(message) {
 }
 
 async function createPeerConnection(offer, iceServers) {
-  if (!peerConnection) {
-    peerConnection = new RTCPeerConnection({
-      iceServers,
-      sdpSemantics: 'unified-plan', // Set SDP semantics to 'unified-plan'
-    });
-
-    logger.debug('Creating RTCPeerConnection with config:', JSON.stringify(config));
-
-    try {
-      peerConnection = new RTCPeerConnection(config);
-    } catch (error) {
-      logger.error('Error creating RTCPeerConnection:', error);
-      throw error;
-    }
-
-    peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
-    peerConnection.addEventListener('icecandidate', onIceCandidate, true);
-    peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
-    peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
-    peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
-    peerConnection.addEventListener('track', onTrack, true);
+  if (peerConnection) {
+    logger.warn('Peer connection already exists. Closing existing connection.');
+    peerConnection.close();
   }
 
-  
-  await peerConnection.setRemoteDescription(offer);
-  logger.debug('Set remote SDP');
+  const peerConnectionConfig = {
+    iceServers,
+    sdpSemantics: 'unified-plan',
+    bundlePolicy: 'max-bundle',
+    rtcpMuxPolicy: 'require',
+    iceTransportPolicy: 'all'
+  };
 
-  
+  logger.debug('Creating RTCPeerConnection with config:', JSON.stringify(peerConnectionConfig));
+
+  try {
+    peerConnection = new RTCPeerConnection(peerConnectionConfig);
+  } catch (error) {
+    logger.error('Error creating RTCPeerConnection:', error);
+    throw error;
+  }
+
+  peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
+  peerConnection.addEventListener('icecandidate', onIceCandidate, true);
+  peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
+  peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
+  peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
+  peerConnection.addEventListener('track', onTrack, true);
+
   try {
     await peerConnection.setRemoteDescription(offer);
     logger.debug('Set remote SDP successfully');
@@ -1647,9 +1648,9 @@ async function createPeerConnection(offer, iceServers) {
     throw error;
   }
 
-  // Now create the data channel after setting the remote description
-  if (!pcDataChannel) {
-    pcDataChannel = peerConnection.createDataChannel('JanusDataChannel');
+  // Create data channel
+  try {
+    pcDataChannel = peerConnection.createDataChannel('data');
     pcDataChannel.onopen = () => {
       logger.debug('Data channel opened');
     };
@@ -1660,22 +1661,30 @@ async function createPeerConnection(offer, iceServers) {
       logger.error('Data channel error:', error);
     };
     pcDataChannel.onmessage = onStreamEvent;
+  } catch (error) {
+    logger.error('Error creating data channel:', error);
+    // Continue execution, as data channel might not be critical
   }
 
- 
   try {
     const sessionClientAnswer = await peerConnection.createAnswer();
     logger.debug('Created local SDP:', sessionClientAnswer.sdp);
 
-    await peerConnection.setLocalDescription(sessionClientAnswer);
+    const modifiedAnswer = new RTCSessionDescription({
+      type: 'answer',
+      sdp: modifySdp(sessionClientAnswer.sdp)
+    });
+
+    await peerConnection.setLocalDescription(modifiedAnswer);
     logger.debug('Set local SDP successfully');
 
-    return sessionClientAnswer;
+    return modifiedAnswer;
   } catch (error) {
     logger.error('Error creating or setting local description:', error);
     throw error;
   }
 }
+
 
 function onIceGatheringStateChange() {
   const { iceGathering: iceGatheringStatusLabel } = getStatusLabels();
