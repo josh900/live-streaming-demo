@@ -1620,43 +1620,21 @@ function modifySdp(sdp) {
     }
 
     if (videoSectionIndex !== -1) {
-      // Modify the video section to only include VP8
-      sdpLines[videoSectionIndex] = sdpLines[videoSectionIndex].split(' ')
-        .filter(part => !part.includes('VP9') && !part.includes('H264'))
-        .join(' ');
+      // Modify the video section instead of removing it
+      sdpLines[videoSectionIndex] = sdpLines[videoSectionIndex].replace('UDP/TLS/RTP/SAVPF', 'UDP/TLS/RTP/SAVPF 96');
       
-      // Ensure VP8 is included and set as the first codec
-      if (!sdpLines[videoSectionIndex].includes('96')) {
-        sdpLines[videoSectionIndex] += ' 96';
-      }
-
-      // Remove other video codecs and their related attributes
-      for (let i = videoSectionIndex + 1; i < sdpLines.length; i++) {
-        if (sdpLines[i].startsWith('m=')) break; // Stop when we reach the next media section
-        if (sdpLines[i].includes('a=rtpmap') || sdpLines[i].includes('a=rtcp-fb') || sdpLines[i].includes('a=fmtp')) {
-          if (sdpLines[i].includes('VP8') || sdpLines[i].includes('96')) {
-            // Keep VP8 related lines
-            continue;
-          } else {
-            // Remove other codec related lines
-            sdpLines[i] = null;
-          }
-        }
-      }
-
-      // Add necessary attributes for VP8
+      // Add necessary attributes for the video section
       sdpLines.splice(videoSectionIndex + 1, 0, 'a=rtpmap:96 VP8/90000');
       sdpLines.splice(videoSectionIndex + 2, 0, 'a=rtcp-fb:96 nack');
       sdpLines.splice(videoSectionIndex + 3, 0, 'a=rtcp-fb:96 nack pli');
       sdpLines.splice(videoSectionIndex + 4, 0, 'a=rtcp-fb:96 ccm fir');
     }
 
-    sdp = sdpLines.filter(Boolean).join('\n');
+    sdp = sdpLines.join('\n');
     logger.debug('Modified SDP for Android WebView:', sdp);
   }
   return sdp;
 }
-
 
 function isAndroidWebView() {
   const userAgent = navigator.userAgent.toLowerCase();
