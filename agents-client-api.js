@@ -1659,6 +1659,32 @@ function modifySdp(sdp) {
   
   return lines.join('\n');
 }
+  
+  // Ensure there's a mid attribute for each media section
+  let midCounter = 0;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].startsWith('m=')) {
+      if (!lines[i+1].startsWith('a=mid:')) {
+        lines.splice(i+1, 0, `a=mid:${midCounter}`);
+        i++;
+      }
+      // Add rtcp-mux if it's not present
+      if (!hasRtcpMuxLine) {
+        lines.splice(i+2, 0, 'a=rtcp-mux');
+        i++;
+        hasRtcpMuxLine = true;
+      }
+      midCounter++;
+    }
+  }
+  
+  // If BUNDLE is used but rtcp-mux is not present, add it
+  if (hasBundleLine && !hasRtcpMuxLine) {
+    lines.push('a=rtcp-mux');
+  }
+  
+  return lines.join('\n');
+}
 
 function onIceGatheringStateChange() {
   const { iceGathering: iceGatheringStatusLabel } = getStatusLabels();
