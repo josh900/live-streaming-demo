@@ -1606,57 +1606,45 @@ async function createPeerConnection(offer, iceServers) {
 }
 
 function modifySdp(sdp) {
-  // Detect if the client is running in Android WebView
-  function isAndroidWebView() {
-    const userAgent = navigator.userAgent || '';
-    return /Android/.test(userAgent) && /wv/.test(userAgent);
-  }
+  const sdpLines = sdp.split('\r\n');
+  const androidWebView = navigator.userAgent.includes('Android') && navigator.userAgent.includes('wv');
 
-  if (isAndroidWebView()) {
-    logger.debug('Android WebView detected. Modifying video section in SDP.');
+  if (androidWebView) {
+      console.debug('Android WebView detected. Modifying video section in SDP.');
 
-    // Split the SDP into lines
-    const lines = sdp.split('\r\n');
-    const modifiedLines = [];
-    let inVideoSection = false;
+      // Find the m=video line
+      const videoLineIndex = sdpLines.findIndex(line => line.startsWith('m=video'));
+      if (videoLineIndex !== -1) {
+          // Extract the components of the m=video line
+          const videoLineParts = sdpLines[videoLineIndex].split(' ');
 
-    for (let line of lines) {
-      if (line.startsWith('m=video')) {
-        inVideoSection = true;
-        // Modify the video line to disable it
-        modifiedLines.push('m=video 0 UDP/TLS/RTP/SAVPF 96');
-      } else if (inVideoSection) {
-        if (line.startsWith('m=')) {
-          // We've reached the next section, exit video section
-          inVideoSection = false;
-          modifiedLines.push(line);
-        } else if (line.startsWith('a=')) {
-          // Remove most attributes in the video section
-          if (line.startsWith('a=mid:') || line.startsWith('a=inactive') || line.startsWith('a=recvonly')) {
-            modifiedLines.push(line);
+          // Set the port to a valid number (e.g., 9)
+          videoLineParts[1] = '9';
+
+          // Reconstruct the m=video line
+          sdpLines[videoLineIndex] = videoLineParts.join(' ');
+
+          // Ensure the c= line is present after m=video
+          const cLineIndex = sdpLines.findIndex((line, index) => line.startsWith('c=') && index > videoLineIndex);
+          if (cLineIndex === -1 || cLineIndex > videoLineIndex + 1) {
+              sdpLines.splice(videoLineIndex + 1, 0, 'c=IN IP4 0.0.0.0');
           }
-          // Skip other attributes
-        } else {
-          // Keep non-attribute lines
-          modifiedLines.push(line);
-        }
-      } else {
-        // Outside video section, keep the line as is
-        modifiedLines.push(line);
+
+          // Set the media direction to recvonly
+          const directionAttributes = ['a=sendrecv', 'a=sendonly', 'a=recvonly', 'a=inactive'];
+          let directionLineIndex = sdpLines.findIndex((line, index) =>
+              directionAttributes.includes(line.trim()) && index > videoLineIndex
+          );
+          if (directionLineIndex !== -1) {
+              sdpLines[directionLineIndex] = 'a=recvonly';
+          } else {
+              // Insert the direction attribute if it's missing
+              sdpLines.splice(videoLineIndex + 2, 0, 'a=recvonly');
+          }
       }
-    }
-
-    // Join the modified lines back into a single SDP string
-    sdp = modifiedLines.join('\r\n');
-
-    // Remove 'v' from BUNDLE group
-    sdp = sdp.replace(/(a=group:BUNDLE.*)\sv\s/, '$1 ');
-    sdp = sdp.replace(/(a=group:BUNDLE.*)\sv/, '$1');
-
-    logger.debug('Modified SDP:', sdp);
   }
 
-  return sdp;
+  return sdpLines.join('\r\n');
 }
 
 
