@@ -1573,29 +1573,6 @@ async function createPeerConnection(offer, iceServers) {
   const answer = await peerConnection.createAnswer();
   await peerConnection.setLocalDescription(answer);
 
-  // Send the answer back to the server with the required properties
-  const answerToSend = {
-    type: answer.type,
-    sdp: answer.sdp,
-  };
-
-  try {
-    await fetch(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/sdp`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        answer: answerToSend,
-        session_id: persistentSessionId,
-      }),
-    });
-  } catch (error) {
-    logger.error('Error sending answer:', error);
-    throw error;
-  }
-
   return peerConnection;
 }
 
