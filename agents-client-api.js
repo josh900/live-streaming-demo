@@ -739,96 +739,64 @@ async function initializePersistentStream() {
     logger.debug('Received offer:', offer);
     logger.debug('Received ICE servers:', iceServers);
 
-    const peerConnectionConfig = {
-      iceServers,
-      sdpSemantics: 'unified-plan',
-      bundlePolicy: 'max-bundle',
-      rtcpMuxPolicy: 'require',
-      iceTransportPolicy: 'all'
-    };
+    const answer = await createPeerConnection(offer, iceServers);
+    logger.debug('Created peer connection and got answer:', answer);
 
-    logger.debug('Creating RTCPeerConnection with config:', JSON.stringify(peerConnectionConfig));
+    const answerResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ answer }),
+    });
 
-    peerConnection = new RTCPeerConnection(peerConnectionConfig);
-
-    peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange, true);
-    peerConnection.addEventListener('icecandidate', onIceCandidate, true);
-    peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange, true);
-    peerConnection.addEventListener('connectionstatechange', onConnectionStateChange, true);
-    peerConnection.addEventListener('signalingstatechange', onSignalingStateChange, true);
-    peerConnection.addEventListener('track', onTrack, true);
-
-    try {
-      await peerConnection.setRemoteDescription(offer);
-      logger.debug('Set remote SDP successfully');
-    } catch (error) {
-      logger.error('Error setting remote description:', error);
-      throw error;
+    if (!answerResponse.ok) {
+      throw new Error(`Failed to send answer: ${answerResponse.status} ${answerResponse.statusText}`);
     }
 
-    try {
-      const sessionClientAnswer = await peerConnection.createAnswer();
-      logger.debug('Created local SDP:', sessionClientAnswer.sdp);
+    logger.debug('Sent answer successfully');
 
-      const modifiedAnswer = new RTCSessionDescription({
-        type: 'answer',
-        sdp: modifySdp(sessionClientAnswer.sdp)
-      });
+    // Add a timeout for connection establishment
+    const connectionTimeout = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Connection timeout')), 30000); // 30 seconds timeout
+    });
 
-      await peerConnection.setLocalDescription(modifiedAnswer);
-      logger.debug('Set local SDP successfully');
+    await Promise.race([
+      new Promise((resolve) => {
+        const checkConnection = () => {
+          if (peerConnection.connectionState === 'connected') {
+            resolve();
+          } else if (peerConnection.connectionState === 'failed') {
+            throw new Error('Connection failed');
+          } else {
+            setTimeout(checkConnection, 1000);
+          }
+        };
+        checkConnection();
+      }),
+      connectionTimeout
+    ]);
 
-      const answerResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${streamId}/sdp`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${DID_API.key}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ answer: modifiedAnswer }),
-      });
+    logger.info('Persistent stream initialized successfully');
+    isPersistentStreamActive = true;
+    connectionState = ConnectionState.CONNECTED;
 
-      if (!answerResponse.ok) {
-        throw new Error(`Failed to send answer: ${answerResponse.status} ${answerResponse.statusText}`);
-      }
+    // Warm up the stream
+    await warmUpStream();
 
-      logger.debug('Sent answer successfully');
-
-      isPersistentStreamActive = true;
-      connectionState = ConnectionState.CONNECTED;
-      logger.info('Persistent stream initialized successfully');
-    } catch (error) {
-      logger.error('Error creating or setting local description:', error);
-      throw error;
-    }
   } catch (error) {
     logger.error('Failed to initialize persistent stream:', error);
     isPersistentStreamActive = false;
     connectionState = ConnectionState.DISCONNECTED;
+    if (peerConnection) {
+      peerConnection.close();
+      peerConnection = null;
+    }
     throw error;
   } finally {
     isInitializingStream = false;
   }
-}
-
-function modifySdp(sdp) {
-  // Keep the original video codecs, but ensure H264 is present
-  if (sdp.indexOf('H264/90000') === -1) {
-    sdp = sdp.replace(
-      /m=video (\d+) UDP\/TLS\/RTP\/SAVPF.*/,
-      '$& 102\r\na=rtpmap:102 H264/90000\r\na=rtcp-fb:102 goog-remb\r\na=rtcp-fb:102 transport-cc\r\na=rtcp-fb:102 ccm fir\r\na=rtcp-fb:102 nack\r\na=rtcp-fb:102 nack pli\r\na=fmtp:102 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f'
-    );
-  }
-
-  // Ensure audio codec support
-  if (sdp.indexOf('opus/48000') === -1) {
-    sdp = sdp.replace(
-      /m=audio (\d+) UDP\/TLS\/RTP\/SAVPF.*/,
-      '$& 111\r\na=rtpmap:111 opus/48000/2\r\na=rtcp-fb:111 transport-cc\r\na=fmtp:111 minptime=10;useinbandfec=1'
-    );
-  }
-
-  logger.debug('Modified SDP:', sdp);
-  return sdp;
 }
 
 function checkRTCCapabilities() {
@@ -1649,44 +1617,29 @@ async function createPeerConnection(offer, iceServers) {
     throw error;
   }
 
-  // Create data channel
   try {
     pcDataChannel = peerConnection.createDataChannel('data');
-    pcDataChannel.onopen = () => {
-      logger.debug('Data channel opened');
-    };
-    pcDataChannel.onclose = () => {
-      logger.debug('Data channel closed');
-    };
-    pcDataChannel.onerror = (error) => {
-      logger.error('Data channel error:', error);
-    };
+    pcDataChannel.onopen = () => logger.debug('Data channel opened');
+    pcDataChannel.onclose = () => logger.debug('Data channel closed');
+    pcDataChannel.onerror = (error) => logger.error('Data channel error:', error);
     pcDataChannel.onmessage = onStreamEvent;
   } catch (error) {
     logger.error('Error creating data channel:', error);
-    // Continue execution, as data channel might not be critical
   }
 
   try {
-    const sessionClientAnswer = await peerConnection.createAnswer();
-    logger.debug('Created local SDP:', sessionClientAnswer.sdp);
+    const answer = await peerConnection.createAnswer();
+    logger.debug('Created local SDP:', answer.sdp);
 
-    const modifiedAnswer = new RTCSessionDescription({
-      type: 'answer',
-      sdp: modifySdp(sessionClientAnswer.sdp)
-    });
-
-    // Set the modified answer as the local description
-    await peerConnection.setLocalDescription(modifiedAnswer);
+    await peerConnection.setLocalDescription(answer);
     logger.debug('Set local SDP successfully');
 
-    return modifiedAnswer;
+    return answer;
   } catch (error) {
     logger.error('Error creating or setting local description:', error);
     throw error;
   }
 }
-
 
 function onIceGatheringStateChange() {
   const { iceGathering: iceGatheringStatusLabel } = getStatusLabels();
@@ -1698,25 +1651,35 @@ function onIceGatheringStateChange() {
 }
 
 function onIceCandidate(event) {
-  if (event.candidate && persistentStreamId && persistentSessionId) {
-    const { candidate, sdpMid, sdpMLineIndex } = event.candidate;
-    logger.debug('New ICE candidate:', candidate);
+  if (event.candidate) {
+    logger.debug('New ICE candidate:', event.candidate.candidate);
+    // Send the ICE candidate to the server
+    sendIceCandidate(event.candidate);
+  }
+}
 
-    fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/ice`, {
+async function sendIceCandidate(candidate) {
+  try {
+    const response = await fetch(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/ice`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${DID_API.key}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        candidate,
-        sdpMid,
-        sdpMLineIndex,
-        session_id: persistentSessionId,
+        candidate: candidate.candidate,
+        sdpMid: candidate.sdpMid,
+        sdpMLineIndex: candidate.sdpMLineIndex,
       }),
-    }).catch((error) => {
-      logger.error('Error sending ICE candidate:', error);
     });
+
+    if (!response.ok) {
+      throw new Error(`Failed to send ICE candidate: ${response.status} ${response.statusText}`);
+    }
+
+    logger.debug('Sent ICE candidate successfully');
+  } catch (error) {
+    logger.error('Error sending ICE candidate:', error);
   }
 }
 
