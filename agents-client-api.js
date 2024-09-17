@@ -1545,45 +1545,75 @@ async function createPeerConnection(offer, iceServers) {
     sdpSemantics: 'unified-plan',
     bundlePolicy: 'max-bundle',
     rtcpMuxPolicy: 'require',
-    iceTransportPolicy: 'all',
+    iceTransportPolicy: 'all'
   };
+
+  logger.debug('Creating RTCPeerConnection with config:', JSON.stringify(peerConnectionConfig));
 
   try {
     peerConnection = new RTCPeerConnection(peerConnectionConfig);
-    logger.debug('Created new RTCPeerConnection');
+  } catch (error) {
+    logger.error('Error creating RTCPeerConnection:', error);
+    throw error;
+  }
 
-    peerConnection.onicecandidate = onIceCandidate;
-    peerConnection.oniceconnectionstatechange = onIceConnectionStateChange;
-    peerConnection.onconnectionstatechange = onConnectionStateChange;
-    peerConnection.onsignalingstatechange = onSignalingStateChange;
-    peerConnection.ontrack = onTrack;
+  // Set up event handlers
+  peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange);
+  peerConnection.addEventListener('icecandidate', onIceCandidate);
+  peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange);
+  peerConnection.addEventListener('connectionstatechange', onConnectionStateChange);
+  peerConnection.addEventListener('signalingstatechange', onSignalingStateChange);
+  
+  // New onTrack event handler
+  peerConnection.ontrack = (event) => {
+    logger.debug('onTrack event:', event);
+    logger.debug('Track kind:', event.track.kind);
+    logger.debug('Track readyState:', event.track.readyState);
+    
+    if (event.track.kind === 'video') {
+      logger.debug('Setting stream video element with track:', event.track.id);
+      setStreamVideoElement(event.streams[0]);
+    }
+  };
 
-    const remoteDesc = new RTCSessionDescription(offer);
+  try {
     logger.debug('Setting remote description');
-    await peerConnection.setRemoteDescription(remoteDesc);
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
     logger.debug('Set remote SDP successfully');
+  } catch (error) {
+    logger.error('Error setting remote description:', error);
+    throw error;
+  }
 
+  let answer;
+  try {
     logger.debug('Creating answer');
-    const answer = await peerConnection.createAnswer();
+    answer = await peerConnection.createAnswer();
     logger.debug('Created local SDP successfully');
+  } catch (error) {
+    logger.error('Error creating local SDP:', error);
+    throw error;
+  }
 
-    const modifiedSdp = modifySdp(answer.sdp);
-    answer.sdp = modifiedSdp;
+  // Modify the SDP to ensure compatibility
+  answer.sdp = modifySdp(answer.sdp);
 
+  try {
     logger.debug('Setting local description');
     await peerConnection.setLocalDescription(answer);
     logger.debug('Set local SDP successfully');
-
-    return answer;
   } catch (error) {
-    logger.error('Error in createPeerConnection:', error);
-    logger.debug('Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+    logger.error('Error setting local description:', error);
+    logger.debug('Problematic SDP:', answer.sdp);
+    // Clean up in case of error
     if (peerConnection) {
       peerConnection.close();
       peerConnection = null;
     }
     throw error;
   }
+
+  return answer;
 }
 
 function modifySdp(sdp) {
