@@ -1566,7 +1566,7 @@ async function createPeerConnection(offer, iceServers) {
   peerConnection.addEventListener('track', onTrack);
 
   try {
-    // Set the remote description
+    logger.debug('Setting remote description');
     await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
     logger.debug('Set remote SDP successfully');
   } catch (error) {
@@ -1574,9 +1574,9 @@ async function createPeerConnection(offer, iceServers) {
     throw error;
   }
 
-  // Create the answer
   let answer;
   try {
+    logger.debug('Creating answer');
     answer = await peerConnection.createAnswer();
     logger.debug('Created local SDP successfully');
   } catch (error) {
@@ -1588,10 +1588,12 @@ async function createPeerConnection(offer, iceServers) {
   answer.sdp = modifySdp(answer.sdp);
 
   try {
+    logger.debug('Setting local description');
     await peerConnection.setLocalDescription(answer);
     logger.debug('Set local SDP successfully');
   } catch (error) {
     logger.error('Error setting local description:', error);
+    logger.debug('Problematic SDP:', answer.sdp);
     // Clean up in case of error
     if (peerConnection) {
       peerConnection.close();
@@ -1611,25 +1613,49 @@ function modifySdp(sdp) {
   }
 
   if (isAndroidWebView()) {
-    // Disable video for Android WebView to prevent SDP errors
-    logger.debug('Android WebView detected. Removing video section from SDP.');
+    logger.debug('Android WebView detected. Modifying video section in SDP.');
 
-    // Remove the entire video section
-    sdp = sdp.replace(/m=video[\s\S]+?(?=(m=|$))/g, '');
+    // Split the SDP into lines
+    const lines = sdp.split('\r\n');
+    const modifiedLines = [];
+    let inVideoSection = false;
+
+    for (let line of lines) {
+      if (line.startsWith('m=video')) {
+        inVideoSection = true;
+        // Modify the video line to disable it
+        modifiedLines.push('m=video 0 UDP/TLS/RTP/SAVPF 96');
+      } else if (inVideoSection) {
+        if (line.startsWith('m=')) {
+          // We've reached the next section, exit video section
+          inVideoSection = false;
+          modifiedLines.push(line);
+        } else if (line.startsWith('a=')) {
+          // Remove most attributes in the video section
+          if (line.startsWith('a=mid:') || line.startsWith('a=inactive') || line.startsWith('a=recvonly')) {
+            modifiedLines.push(line);
+          }
+          // Skip other attributes
+        } else {
+          // Keep non-attribute lines
+          modifiedLines.push(line);
+        }
+      } else {
+        // Outside video section, keep the line as is
+        modifiedLines.push(line);
+      }
+    }
+
+    // Join the modified lines back into a single SDP string
+    sdp = modifiedLines.join('\r\n');
 
     // Remove 'v' from BUNDLE group
-    sdp = sdp.replace(/(a=group:BUNDLE.*\s)(v\s)/, '$1');
+    sdp = sdp.replace(/(a=group:BUNDLE.*)\sv\s/, '$1 ');
+    sdp = sdp.replace(/(a=group:BUNDLE.*)\sv/, '$1');
 
-    // Ensure that any extra spaces are cleaned up in the BUNDLE group
-    sdp = sdp.replace(/(a=group:BUNDLE .*)(\s\s+)/, '$1 ');
-
-    // If there are extra spaces at the end, trim them
-    sdp = sdp.replace(/(a=group:BUNDLE .*)\s*$/, '$1');
-
-    // Ensure that the 'a=mid' attributes in other sections are preserved
+    logger.debug('Modified SDP:', sdp);
   }
 
-  logger.debug('Modified SDP:', sdp);
   return sdp;
 }
 
