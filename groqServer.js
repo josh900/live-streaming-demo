@@ -15,6 +15,8 @@ app.post('/chat', async (req, res) => {
   const { messages, model } = req.body;
 
   try {
+    console.log('Received chat request:', { messages, model });
+
     const completion = await groq.chat.completions.create({
       messages,
       model,
@@ -33,9 +35,10 @@ app.post('/chat', async (req, res) => {
 
     res.write(`data: [DONE]\n\n`);
     res.end();
+    console.log('Chat response completed');
   } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ error: 'An error occurred' });
+    console.error('Error in chat endpoint:', error);
+    res.status(500).json({ error: 'An error occurred', details: error.message });
   }
 });
 

@@ -89,6 +89,11 @@ let isWarmingUp = false;
 let transitionDebounceTimer;
 let pendingTransition = null;
 let hasWarmUpPlayed = false;
+let ws;
+let isStreaming = false;
+let isTransitioning = false;
+let sessionId = null;
+let streamId = null;
 
 
 function debouncedVideoStatusChange(isPlaying, stream) {
@@ -463,36 +468,34 @@ function getStatusLabels() {
 }
 
 function initializeWebSocket() {
-  socket = new WebSocket(`wss://${window.location.host}`);
-
-  socket.onopen = () => {
-    logger.info('WebSocket connection established');
+  ws = new WebSocket(`ws://${window.location.hostname}:${window.location.port}`);
+  
+  ws.onopen = () => {
+    console.log('WebSocket connection established');
   };
 
-  socket.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    logger.debug('Received WebSocket message:', data);
-
-    switch (data.type) {
-      case 'transcription':
-        updateTranscription(data.text);
-        break;
-      case 'assistantReply':
-        updateAssistantReply(data.text);
-        break;
-      default:
-        logger.warn('Unknown WebSocket message type:', data.type);
+  ws.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+    if (message.type === 'streamStatus') {
+      updateStreamStatus(message.status);
     }
   };
 
-  socket.onerror = (error) => {
-    logger.error('WebSocket error:', error);
+  ws.onerror = (error) => {
+    console.error('WebSocket error:', error);
   };
 
-  socket.onclose = () => {
-    logger.info('WebSocket connection closed');
-    setTimeout(initializeWebSocket, 5000);
+  ws.onclose = () => {
+    console.log('WebSocket connection closed');
+    setTimeout(initializeWebSocket, 5000); // Attempt to reconnect after 5 seconds
   };
+}
+
+function updateStreamStatus(status) {
+  const streamingStatusLabel = document.getElementById('streaming-status-label');
+  if (streamingStatusLabel) {
+    streamingStatusLabel.textContent = status;
+  }
 }
 
 function updateTranscript(text, isFinal) {
@@ -538,20 +541,34 @@ async function speakDirectly(text) {
   }
 }
 
-function handleTextInput(text) {
-  if (text.trim() === '') return;
-
+async function handleTextInput() {
   const textInput = document.getElementById('text-input');
-  textInput.value = '';
+  const message = textInput.value.trim();
 
-  updateTranscript(text, true);
+  if (message) {
+    try {
+      updateChatHistory('User', message);
+      textInput.value = '';
 
-  chatHistory.push({
-    role: 'user',
-    content: text,
-  });
+      const response = await sendChatToGroq(message);
+      if (response) {
+        updateChatHistory('Assistant', response);
+        await startStreaming(response);
+      }
+    } catch (error) {
+      console.error('Error handling text input:', error);
+      updateChatHistory('System', 'An error occurred while processing your message.');
+    }
+  }
+}
 
-  sendChatToGroq();
+function updateChatHistory(sender, message) {
+  const msgHistory = document.getElementById('msgHistory');
+  const messageElement = document.createElement('div');
+  messageElement.className = `message ${sender.toLowerCase()}`;
+  messageElement.innerHTML = `<strong>${sender}:</strong> ${message}`;
+  msgHistory.appendChild(messageElement);
+  msgHistory.scrollTop = msgHistory.scrollHeight;
 }
 
 function updateAssistantReply(text) {
@@ -677,106 +694,36 @@ async function warmUpStream() {
 
 
 async function initializePersistentStream() {
-  if (isInitializingStream) {
-    logger.warn('Stream initialization already in progress. Skipping.');
-    return;
-  }
-
-  if (isPersistentStreamActive) {
-    logger.warn('Persistent stream is already active. Skipping initialization.');
-    return;
-  }
-
-  isInitializingStream = true;
   logger.info('Initializing persistent stream...');
-  connectionState = ConnectionState.CONNECTING;
-
   try {
-    const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
-    if (!currentAvatar) {
-      throw new Error('No avatar selected or avatar not found');
-    }
-
-    const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
+    const response = await fetchWithRetries(`${DID_API.url}/talks/streams`, {
       method: 'POST',
       headers: {
-        Authorization: `Basic ${DID_API.key}`,
+        'Authorization': `Basic ${DID_API.key}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        source_url: currentAvatar.imageUrl,
-        driver_url: 'bank://lively/driver-06',
-        output_resolution: 512,
-        stream_warmup: true,
-        compatibility_mode: "on",
-        config: {
-          fluent: true,
-          stitch: true,
-          pad_audio: 0.5,
-          auto_match: true,
-          align_driver: true,
-          normalization_factor: 0.1,
-          align_expand_factor: 0.3,
-          motion_factor: 0.55,
-          result_format: 'mp4'
-        },
+        source_url: currentAvatarId,
       }),
     });
 
-    const { id: newStreamId, offer, ice_servers: iceServers, session_id: newSessionId } = await sessionResponse.json();
+    if (!response.ok) {
+      throw new Error(`HTTP error ${response.status}`);
+    }
 
-    persistentStreamId = newStreamId;
-    persistentSessionId = newSessionId;
-
+    const data = await response.json();
+    persistentStreamId = data.id;
+    persistentSessionId = data.session_id;
     logger.info('Persistent stream created:', { persistentStreamId, persistentSessionId });
 
-    try {
-      sessionClientAnswer = await createPeerConnection(offer, iceServers);
-    } catch (e) {
-      logger.error('Error during streaming setup:', e);
-      stopAllStreams();
-      closePC();
-      throw e;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 300));
-
-    const sdpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}/sdp`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        answer: sessionClientAnswer,
-        session_id: persistentSessionId,
-      }),
-    });
-
-    if (!sdpResponse.ok) {
-      throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
-    }
-    isPersistentStreamActive = true;
-    startKeepAlive();
-    lastConnectionTime = Date.now();
+    await createPeerConnection();
     logger.info('Persistent stream initialized successfully');
-    connectionState = ConnectionState.CONNECTED;
-
-    if (!hasWarmUpPlayed) {
-      await warmUpStream();
-      hasWarmUpPlayed = true;
-    }
   } catch (error) {
-    logger.error('Failed to initialize persistent stream:', error);
-    isPersistentStreamActive = false;
-    persistentStreamId = null;
-    persistentSessionId = null;
-    connectionState = ConnectionState.DISCONNECTED;
+    logger.error('Error initializing persistent stream:', error);
     throw error;
-  } finally {
-    isInitializingStream = false;
   }
 }
+
 
 function shouldReconnect() {
   const timeSinceLastConnection = Date.now() - lastConnectionTime;
@@ -986,134 +933,40 @@ function endPushToTalk(event) {
 
 
 async function initialize() {
-  setLogLevel('DEBUG');
-  connectionState = ConnectionState.DISCONNECTED;
+  try {
+    const urlParams = getUrlParameters();
+    currentAvatarId = urlParams.avatarId || '';
+    currentContextId = urlParams.contextId || '';
+    currentInterfaceMode = urlParams.interfaceMode || 'full';
 
-  const { avatarId, contextId, interfaceMode, header } = getUrlParameters();
-  currentInterfaceMode = interfaceMode;
+    await loadContexts(currentContextId);
+    await loadAvatars();
 
-  // Handle header visibility
-  const headerBar = document.getElementById('header-bar');
-  if (headerBar && header) {
-    headerBar.classList.add('visible');
-  }
+    initializeWebSocket();
+    initializeAudioContext();
+    await initializePersistentStream();
 
-  const { idle, stream } = getVideoElements();
-  idleVideoElement = idle;
-  streamVideoElement = stream;
+    populateAvatarSelect();
+    populateContextSelect();
+    updateContextDisplay();
 
-  if (idleVideoElement) idleVideoElement.setAttribute('playsinline', '');
-  if (streamVideoElement) streamVideoElement.setAttribute('playsinline', '');
-
-  initializeTransitionCanvas();
-
-  await loadAvatars(avatarId);
-  await loadContexts(contextId);
-  populateAvatarSelect();
-  populateContextSelect();
-  updateContextDisplay();
-  updateStreamEventLabel('');
-
-
-  const contextSelect = document.getElementById('context-select');
-  contextSelect.addEventListener('change', handleContextChange);
-
-  const editContextButton = document.getElementById('edit-context-button');
-  editContextButton.addEventListener('click', () => openContextModal(currentContextId));
-
-  const sendTextButton = document.getElementById('send-text-button');
-  const textInput = document.getElementById('text-input');
-  const autoSpeakToggle = document.getElementById('auto-speak-toggle');
-  const editAvatarButton = document.getElementById('edit-avatar-button');
-  const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
-  const pushToTalkButton = document.getElementById('push-to-talk-button');
-  const simplePushTalkButton = document.getElementById('simple-push-talk-button');
-  const startButton = document.getElementById('start-button');
-
-  sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
-  textInput.addEventListener('keypress', (event) => {
-    if (event.key === 'Enter') handleTextInput(textInput.value);
-  });
-  autoSpeakToggle.addEventListener('click', toggleAutoSpeak);
-  editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatarId));
-  pushToTalkToggle.addEventListener('click', togglePushToTalk);
-  pushToTalkButton.addEventListener('mousedown', startPushToTalk);
-  pushToTalkButton.addEventListener('mouseup', endPushToTalk);
-  pushToTalkButton.addEventListener('mouseleave', endPushToTalk);
-  pushToTalkButton.addEventListener('touchstart', startPushToTalk);
-  pushToTalkButton.addEventListener('touchend', endPushToTalk);
-
-  if (simplePushTalkButton) {
-    simplePushTalkButton.addEventListener('mousedown', startPushToTalk);
-    simplePushTalkButton.addEventListener('mouseup', endPushToTalk);
-    simplePushTalkButton.addEventListener('mouseleave', endPushToTalk);
-    simplePushTalkButton.addEventListener('touchstart', startPushToTalk);
-    simplePushTalkButton.addEventListener('touchend', endPushToTalk);
-  }
-
-  startButton.addEventListener('click', toggleRecording);
-
-  initializeWebSocket();
-  playIdleVideo();
-
-  if (avatars.length > 0 && currentAvatarId) {
-    try {
-      await initializePersistentStream();
-      if (!hasWarmUpPlayed) {
-        await warmUpStream();
-        // hasWarmUpPlayed = true;
-      }
-      startConnectionHealthCheck();
-    } catch (error) {
-      logger.error('Error during initialization:', error);
-      showErrorMessage('Failed to connect. Please try again.');
-      connectionState = ConnectionState.DISCONNECTED;
+    if (currentInterfaceMode === 'simple') {
+      toggleSimpleMode();
     }
-  } else {
-    logger.warn('No avatars available or no current avatar selected. Skipping stream initialization.');
-    showErrorMessage('No avatars available or no avatar selected. Please create or select an avatar before connecting.');
-  }
 
-  window.addEventListener('online', async () => {
-    if (connectionState === ConnectionState.DISCONNECTED) {
-      logger.info('Network connection restored. Attempting to reconnect...');
-      try {
-        await backgroundReconnect();
-      } catch (error) {
-        logger.error('Failed to reconnect after network restoration:', error);
-      }
+    const header = document.querySelector('.header');
+    if (header) {
+      header.style.display = urlParams.header ? 'flex' : 'none';
     }
-  });
 
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && connectionState === ConnectionState.DISCONNECTED) {
-      logger.info('Page became visible. Checking connection...');
-      if (navigator.onLine) {
-        backgroundReconnect();
-      }
-    }
-  });
-
-  // Apply simple mode after initialization is complete
-  if (currentInterfaceMode === 'simpleVoice' || currentInterfaceMode === 'simplePushTalk') {
-    applySimpleMode(currentInterfaceMode);
+    document.body.classList.remove('initializing');
+    notifyParentWindowReady();
+  } catch (error) {
+    console.error('Initialization error:', error);
+    showErrorMessage('Failed to initialize the application. Please try refreshing the page.');
   }
-
-  // Check if the application is running in an iframe
-  if (window.self !== window.top) {
-    console.log('Running in iframe mode');
-  }
-
-  // Remove the initialization class to show the content
-  document.body.classList.remove('initializing');
-
-  document.addEventListener('DOMContentLoaded', notifyParentWindowReady);
-
-
-  logger.info('Initialization complete');
-
-
 }
+
 
 function applySimpleMode(mode) {
   const content = document.getElementById('content');
@@ -1535,77 +1388,67 @@ function showErrorMessage(message) {
   if (connectButton) connectButton.style.display = 'inline-block';
 }
 
-async function createPeerConnection(offer, iceServers) {
-  if (peerConnection) {
-    logger.warn('Peer connection already exists. Closing existing connection.');
-    peerConnection.close();
-    peerConnection = null;
-  }
+async function createPeerConnection() {
+  const iceServers = await fetchIceServers();
+  const configuration = { iceServers };
 
-  const peerConnectionConfig = {
-    iceServers,
-    sdpSemantics: 'unified-plan',
-    bundlePolicy: 'max-bundle',
-    rtcpMuxPolicy: 'require',
-    iceTransportPolicy: 'all'
-  };
+  logger.debug('Creating RTCPeerConnection with config:', configuration);
+  peerConnection = new RTCPeerConnection(configuration);
 
-  logger.debug('Creating RTCPeerConnection with config:', JSON.stringify(peerConnectionConfig));
+  peerConnection.ontrack = handleOnTrack;
+  peerConnection.onicecandidate = handleICECandidate;
+  peerConnection.oniceconnectionstatechange = handleICEConnectionStateChange;
+  peerConnection.onicegatheringstatechange = handleICEGatheringStateChange;
+  peerConnection.onsignalingstatechange = handleSignalingStateChange;
+  peerConnection.onconnectionstatechange = handleConnectionStateChange;
 
-  try {
-    peerConnection = new RTCPeerConnection(peerConnectionConfig);
-  } catch (error) {
-    logger.error('Error creating RTCPeerConnection:', error);
-    throw error;
-  }
+  pcDataChannel = peerConnection.createDataChannel('data');
+  pcDataChannel.onmessage = onStreamEvent;
 
-  // Set up event handlers
-  peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange);
-  peerConnection.addEventListener('icecandidate', onIceCandidate);
-  peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange);
-  peerConnection.addEventListener('connectionstatechange', onConnectionStateChange);
-  peerConnection.addEventListener('signalingstatechange', onSignalingStateChange);
-  peerConnection.addEventListener('track', onTrack);
+  const offer = await fetchStreamOffer(persistentStreamId);
+  await peerConnection.setRemoteDescription(offer);
+  logger.debug('Set remote SDP successfully');
 
-  try {
-    logger.debug('Setting remote description');
-    logger.debug('Offer SDP:', JSON.stringify(offer));
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-    logger.debug('Set remote SDP successfully');
-  } catch (error) {
-    logger.error('Error setting remote description:', error);
-    throw error;
-  }
+  const answer = await peerConnection.createAnswer();
+  await peerConnection.setLocalDescription(answer);
+  logger.debug('Created local SDP successfully');
 
-  let answer;
-  try {
-    logger.debug('Creating answer');
-    answer = await peerConnection.createAnswer();
-    logger.debug('Created local SDP successfully');
-  } catch (error) {
-    logger.error('Error creating local SDP:', error);
-    throw error;
-  }
+  await sendSDPAnswer(persistentStreamId, persistentSessionId, answer);
+  logger.debug('Peer connection established successfully');
+}
 
-  // Modify the SDP to ensure compatibility
-  answer.sdp = modifySdp(answer.sdp);
-
-  try {
-    logger.debug('Setting local description');
-    await peerConnection.setLocalDescription(answer);
-    logger.debug('Set local SDP successfully');
-  } catch (error) {
-    logger.error('Error setting local description:', error);
-    logger.debug('Problematic SDP:', answer.sdp);
-    // Clean up in case of error
-    if (peerConnection) {
-      peerConnection.close();
-      peerConnection = null;
+function handleOnTrack(event) {
+  logger.debug('onTrack event:', event);
+  if (event.track.kind === 'video') {
+    const streamVideoElement = document.getElementById('stream-video-element');
+    if (streamVideoElement) {
+      streamVideoElement.srcObject = event.streams[0];
+      streamVideoElement.play().catch(e => logger.error('Error playing video:', e));
     }
-    throw error;
   }
+}
 
-  return answer;
+function handleICECandidate(event) {
+  logger.debug('New ICE candidate:', event.candidate);
+}
+
+function handleICEConnectionStateChange() {
+  logger.debug('ICE connection state changed:', peerConnection.iceConnectionState);
+}
+
+function handhandleICEGatheringStateChangeleICEGatheringStateChange() {
+  logger.debug('ICE gathering state changed:', peerConnection.iceGatheringState);
+}
+
+function handleSignalingStateChange() {
+  logger.debug('Signaling state changed:', peerConnection.signalingState);
+}
+
+function handleConnectionStateChange() {
+  logger.debug('Peer connection state changed:', peerConnection.connectionState);
+  if (peerConnection.connectionState === 'connected') {
+    logger.debug('Peer connection established successfully');
+  }
 }
 
 function modifySdp(sdp) {
@@ -1786,37 +1629,21 @@ function onStreamingComplete() {
 }
 
 
-function onStreamEvent(message) {
-  if (pcDataChannel.readyState === 'open' && !isWarmingUp) {
-    let status;
-    const [event, _] = message.data.split(':');
-
-    switch (event) {
-      case 'stream/started':
-        status = 'started';
-        handleStreamStarted();
-        break;
-      case 'stream/done':
-        status = '';
-        handleStreamDone();
-        break;
-      case 'stream/ready':
-        status = 'ready';
-        handleStreamReady();
-        break;
-      case 'stream/error':
-        status = '';
-        handleStreamError();
-        break;
-      default:
-        status = '';
-        break;
-    }
-
-    console.log(event);
-    updateStreamEventLabel('');
+function onStreamEvent(event) {
+  const [eventType, eventData] = event.data.split('|');
+  switch (eventType) {
+    case 'stream-started':
+      logger.debug('Stream started');
+      break;
+    case 'stream-ended':
+      logger.debug('Stream ended');
+      stopStreaming();
+      break;
+    default:
+      logger.debug('Unknown stream event:', eventType, eventData);
   }
 }
+
 
 
 
@@ -2004,37 +1831,21 @@ function closePC(pc = peerConnection) {
   }
 }
 
-async function fetchWithRetries(url, options, retries = 0, delayMs = 300) {
+async function fetchWithRetries(url, options, retries = 3, delay = 1000) {
   try {
-    const now = Date.now();
-    const timeSinceLastCall = now - lastApiCallTime;
-
-    if (timeSinceLastCall < API_CALL_INTERVAL) {
-      await new Promise((resolve) => setTimeout(resolve, API_CALL_INTERVAL - timeSinceLastCall));
-    }
-
-    lastApiCallTime = Date.now();
-
     const response = await fetch(url, options);
     if (!response.ok) {
-      if (response.status === 429) {
-        // If rate limited, wait for a longer time before retrying
-        const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
-        logger.warn(`Rate limited. Retrying after ${retryAfter} seconds.`);
-        await new Promise((resolve) => setTimeout(resolve, retryAfter * 500));
-        return fetchWithRetries(url, options, retries, delayMs);
-      }
       throw new Error(`HTTP error ${response.status}: ${await response.text()}`);
     }
     return response;
-  } catch (err) {
-    if (retries < maxRetryCount) {
-      const delay = Math.min(Math.pow(2, retries) * delayMs + Math.random() * 500, maxDelaySec * 500);
-      logger.warn(`Request failed, retrying ${retries + 1}/${maxRetryCount} in ${delay}ms. Error: ${err.message}`);
-      await new Promise((resolve) => setTimeout(resolve, delay));
-      return fetchWithRetries(url, options, retries + 1, delayMs);
+  } catch (error) {
+    if (retries > 0) {
+      logger.warn(`Fetch failed, retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return fetchWithRetries(url, options, retries - 1, delay * 2);
     } else {
-      throw err;
+      logger.error(`Fetch failed after retries:`, error);
+      throw error;
     }
   }
 }
@@ -2129,167 +1940,95 @@ async function initializeConnection() {
 }
 
 
-async function startStreaming(assistantReply) {
+async function startStreaming(reply) {
+  if (isStreaming || isTransitioning) {
+    console.warn('Already streaming or transitioning');
+    return;
+  }
+  isTransitioning = true;
+  
   try {
-    logger.debug('Starting streaming with reply:', assistantReply);
-    if (!persistentStreamId || !persistentSessionId) {
-      logger.error('Persistent stream not initialized. Cannot start streaming.');
+    if (!sessionId || !streamId) {
       await initializePersistentStream();
     }
 
-    const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
-    if (!currentAvatar) {
-      logger.error('No avatar selected or avatar not found. Cannot start streaming.');
-      return;
-    }
-
-    const streamVideoElement = document.getElementById('stream-video-element');
-    const idleVideoElement = document.getElementById('idle-video-element');
-
-    if (!streamVideoElement || !idleVideoElement) {
-      logger.error('Video elements not found');
-      return;
-    }
-
-    let ssmlContent = assistantReply.trim();
-    if (ssmlContent.startsWith('<speak>') && ssmlContent.endsWith('</speak>')) {
-      ssmlContent = ssmlContent.slice(7, -8).trim();
-    }
-
-    // Split the SSML content into chunks, respecting SSML tags
-    const chunks = ssmlContent.match(/(?:<[^>]+>|[^<]+)+/g) || [];
-
-    logger.debug('Chunks', chunks);
-
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i].trim();
-      if (chunk.length === 0) continue;
-
-      isAvatarSpeaking = true;
-      updateStreamEventLabel('streaming');
-
-      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${DID_API.key}`,
-          'Content-Type': 'application/json',
+    const streamResponse = await fetchWithRetries(`${DID_API.url}/talks/streams/${streamId}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${DID_API.key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        script: {
+          type: 'text',
+          input: reply,
         },
-        body: JSON.stringify({
-          script: {
-            type: 'text',
-            input: chunk,
-            ssml: true,
-            provider: {
-              type: 'microsoft',
-              voice_id: currentAvatar.voiceId,
-            },
-          },
-          source_url: currentAvatar.imageUrl,
-          session_id: persistentSessionId,
-          driver_url: 'bank://lively/driver-06',
-          output_resolution: 512,
-          stream_warmup: false,
-          compatibility_mode: "on",
-          config: {
-            fluent: true,
-            stitch: true,
-            pad_audio: 0.5,
-            auto_match: true,
-            align_driver: true,
-            normalization_factor: 0.1,
-            align_expand_factor: 0.3,
-            motion_factor: 0.55,
-            result_format: 'mp4',
-            driver_expressions: {
-              expressions: [
-                {
-                  start_frame: 0,
-                  expression: 'neutral',
-                  intensity: 0.5
-                }
-              ]
-            }
-          },
-        }),
-      });
+        driver_url: 'bank://lively/',
+        config: {
+          stitch: true,
+        },
+        session_id: sessionId,
+      }),
+    });
 
-      if (!playResponse.ok) {
-        throw new Error(`HTTP error! status: ${playResponse.status}`);
-      }
-
-      const playResponseData = await playResponse.json();
-      logger.debug('Streaming response:', playResponseData);
-
-      if (playResponseData.status === 'started') {
-        logger.debug('Stream chunk started successfully');
-
-        if (playResponseData.result_url) {
-          // Wait for the video to be ready before transitioning
-          await new Promise((resolve) => {
-            streamVideoElement.src = playResponseData.result_url;
-            streamVideoElement.muted = false; // Ensure it's not muted
-            streamVideoElement.style.display = ''; // Ensure it's visible
-            streamVideoElement.oncanplay = resolve;
-          });
-
-          // Perform the transition
-          smoothTransition(true);
-
-          await new Promise((resolve) => {
-            streamVideoElement.onended = () => {
-              logger.debug('Stream video chunk ended');
-              resolve();
-            };
-          });
-        } else {
-          logger.debug('No result_url in playResponseData. Waiting for next chunk.');
-        }
-      } else {
-        logger.warn('Unexpected response status:', playResponseData.status);
-      }
+    if (!streamResponse.ok) {
+      throw new Error(`HTTP error ${streamResponse.status}`);
     }
 
-    // After all chunks have been processed, transition back to idle
-    isAvatarSpeaking = false;
-    updateStreamEventLabel('');
-    smoothTransition(false);
-    hasWarmUpPlayed = true;
-    // Check if we need to reconnect
-    if (shouldReconnect()) {
-      logger.info('Approaching reconnection threshold. Initiating background reconnect.');
-      await backgroundReconnect();
-    }
+    isStreaming = true;
+    updateStreamStatus('Streaming');
+    ws.send(JSON.stringify({ type: 'updateStreamStatus', status: 'Streaming' }));
   } catch (error) {
-    logger.error('Error during streaming:', error);
-    isAvatarSpeaking = false;
-    updateStreamEventLabel('');
-    smoothTransition(false);
-    hasWarmUpPlayed = true;
-    updateStreamEventLabel('');
-    if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
-      logger.warn('Stream not found or invalid session. Attempting to reinitialize persistent stream.');
-      await reinitializePersistentStream();
-    }
+    console.error('Error starting stream:', error);
+    updateStreamStatus('Error');
+  } finally {
+    isTransitioning = false;
   }
 }
 
-export function toggleSimpleMode() {
-  if (currentInterfaceMode) {
-    exitSimpleMode();
+function stopStreaming() {
+  if (!isStreaming) return;
+  
+  try {
+    if (peerConnection) {
+      peerConnection.close();
+      peerConnection = null;
+    }
+    if (pcDataChannel) {
+      pcDataChannel.close();
+      pcDataChannel = null;
+    }
+
+    isStreaming = false;
+    updateStreamStatus('Idle');
+    ws.send(JSON.stringify({ type: 'updateStreamStatus', status: 'Idle' }));
+  } catch (error) {
+    console.error('Error stopping stream:', error);
+    updateStreamStatus('Error');
+  }
+}
+
+
+function toggleSimpleMode() {
+  const fullModeElements = document.querySelectorAll('.full-mode');
+  const simpleModeElements = document.querySelectorAll('.simple-mode');
+  const simpleModeButtton = document.getElementById('simple-mode-button');
+
+  fullModeElements.forEach(el => el.classList.toggle('hidden'));
+  simpleModeElements.forEach(el => el.classList.toggle('hidden'));
+
+  if (simpleModeButtton.textContent === 'Simple Mode') {
+    simpleModeButtton.textContent = 'Full Mode';
+    currentInterfaceMode = 'simple';
   } else {
-    applySimpleMode('simpleVoice'); // Default to simpleVoice when toggling
+    simpleModeButtton.textContent = 'Simple Mode';
+    currentInterfaceMode = 'full';
   }
 
-  // Update URL
+  // Update URL with new interface mode
   const url = new URL(window.location);
-  if (currentInterfaceMode) {
-    url.searchParams.set('interfaceMode', currentInterfaceMode);
-  } else {
-    url.searchParams.delete('interfaceMode');
-  }
+  url.searchParams.set('interfaceMode', currentInterfaceMode);
   window.history.pushState({}, '', url);
-
-  logger.info(`Toggled simple mode. Current mode: ${currentInterfaceMode || 'full'}`);
 }
 
 
@@ -2530,111 +2269,73 @@ async function stopRecording(isPushToTalk = false) {
   }
 }
 
-async function sendChatToGroq() {
-  if (chatHistory.length === 0 || chatHistory[chatHistory.length - 1].content.trim() === '') {
-    logger.debug('No new content to send to Groq. Skipping request.');
-    return;
-  }
-
-  logger.debug('Sending chat to Groq...');
+async function sendChatToGroq(message) {
   try {
-    const startTime = Date.now();
-    const currentContext = getCurrentContext();
-    const requestBody = {
-      messages: [
-        {
-          role: 'system',
-          content: currentContext,
-        },
-        ...chatHistory,
-      ],
-      model: 'llama-3.1-8b-instant',
-    };
-    logger.debug('Request body:', JSON.stringify(requestBody));
+    const context = getCurrentContext();
+    chatHistory.push({ role: 'user', content: message });
 
+    const messages = [
+      { role: 'system', content: 'You are a helpful, harmless, and honest grocery store assistant. Please answer the users questions briefly, be concise. Reply with 1 sentance in SSML syntax.' },
+      { role: 'system', content: context },
+      ...chatHistory
+    ];
+
+    logger.debug('Sending chat to Groq...');
+    logger.debug('Request body:', JSON.stringify({ messages, model: 'llama-3.1-8b-instant' }));
+
+    const startTime = Date.now();
     const response = await fetch('/chat', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages, model: 'llama-3.1-8b-instant' })
     });
 
-    logger.debug('Groq response status:', response.status);
-
     if (!response.ok) {
-      throw new Error(`HTTP error ${response.status}`);
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
 
     const reader = response.body.getReader();
-    let assistantReply = '';
-    let done = false;
+    let accumulatedResponse = '';
 
-    const msgHistory = document.getElementById('msgHistory');
-    const assistantSpan = document.createElement('span');
-    assistantSpan.innerHTML = '<u>Assistant:</u> ';
-    msgHistory.appendChild(assistantSpan);
-    msgHistory.appendChild(document.createElement('br'));
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const chunk = new TextDecoder().decode(value);
+      logger.debug('Received chunk:', chunk);
 
-    while (!done) {
-      const { value, done: readerDone } = await reader.read();
-      done = readerDone;
-
-      if (value) {
-        const chunk = new TextDecoder().decode(value);
-        logger.debug('Received chunk:', chunk);
-        const lines = chunk.split('\n');
-
-        for (const line of lines) {
-          if (line.startsWith('data:')) {
-            const data = line.substring(5).trim();
-            if (data === '[DONE]') {
-              done = true;
-              break;
-            }
-
-            try {
-              const parsed = JSON.parse(data);
-              const content = parsed.choices[0]?.delta?.content || '';
-              assistantReply += content;
-              assistantSpan.innerHTML += content;
-              logger.debug('Parsed content:', content);
-            } catch (error) {
-              logger.error('Error parsing JSON:', error);
-            }
+      const lines = chunk.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const jsonData = line.slice(6);
+          if (jsonData === '[DONE]') {
+            logger.debug('Groq processing completed');
+            break;
+          }
+          try {
+            const parsedData = JSON.parse(jsonData);
+            const content = parsedData.choices[0]?.delta?.content || '';
+            accumulatedResponse += content;
+            logger.debug('Parsed content:', content);
+          } catch (error) {
+            logger.error('Error parsing JSON:', error);
           }
         }
-
-        msgHistory.scrollTop = msgHistory.scrollHeight;
       }
     }
 
     const endTime = Date.now();
-    const processingTime = endTime - startTime;
-    logger.debug(`Groq processing completed in ${processingTime}ms`);
+    logger.debug(`Groq processing completed in ${endTime - startTime}ms`);
 
-    chatHistory.push({
-      role: 'assistant',
-      content: assistantReply,
-    });
+    chatHistory.push({ role: 'assistant', content: accumulatedResponse });
+    logger.debug('Assistant reply:', accumulatedResponse);
 
-    logger.debug('Assistant reply:', assistantReply);
-
-    // Start streaming the entire response
-    await startStreaming(assistantReply);
-
-    // Ensure Push to Talk remains active after avatar response
-    if (isPushToTalkEnabled) {
-      const pushToTalkButton = document.getElementById('push-to-talk-button');
-      pushToTalkButton.disabled = false;
-    }
+    return accumulatedResponse;
   } catch (error) {
     logger.error('Error in sendChatToGroq:', error);
-    const msgHistory = document.getElementById('msgHistory');
-    msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
-    msgHistory.scrollTop = msgHistory.scrollHeight;
+    throw error;
   }
 }
+
 
 function toggleAutoSpeak() {
   autoSpeakMode = !autoSpeakMode;
