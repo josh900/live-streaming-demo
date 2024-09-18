@@ -13,14 +13,15 @@ import { readFile, writeFile } from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 
+
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const port = process.env.PORT || 3000;
+const port = 3000;
 const upload = multer({ storage: multer.memoryStorage() });
 
 const app = express();
-const server = http.createServer(app);
 
 app.use(compression());
 app.use(cors());
@@ -73,6 +74,7 @@ app.post('/avatar', upload.single('image'), async (req, res) => {
     res.end();
   }
 });
+
 
 app.get('/avatars', async (req, res) => {
   try {
@@ -144,8 +146,11 @@ app.get('/api/contexts', async (req, res) => {
   }
 });
 
-// WebSocket server
-const wss = new WebSocketServer({ noServer: true });
+
+
+const server = http.createServer(app);
+
+const wss = new WebSocketServer({ server });
 
 wss.on('connection', (ws) => {
   console.log('WebSocket client connected');
@@ -174,15 +179,8 @@ wss.on('connection', (ws) => {
   });
 });
 
-// Handle WebSocket upgrade
-server.on('upgrade', (request, socket, head) => {
-  if (request.url === '/ws') {
-    wss.handleUpgrade(request, socket, head, (ws) => {
-      wss.emit('connection', ws, request);
-    });
-  }
-});
-
 server.listen(port, () => {
-  console.log(`Server running on port ${port}`);
+  console.log(`Server started on port localhost:${port}`);
+  console.log(`http://localhost:${port}`);
+  console.log(`http://localhost:${port}/agents`);
 });

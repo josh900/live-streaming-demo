@@ -465,23 +465,16 @@ function getStatusLabels() {
 }
 
 function initializeWebSocket() {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${protocol}//${window.location.host}/ws`;
-  
-  ws = new WebSocket(wsUrl);
+  ws = new WebSocket(`ws://${window.location.hostname}:${window.location.port}`);
   
   ws.onopen = () => {
     console.log('WebSocket connection established');
   };
 
   ws.onmessage = (event) => {
-    try {
-      const message = JSON.parse(event.data);
-      if (message.type === 'streamStatus') {
-        updateStreamStatus(message.status);
-      }
-    } catch (error) {
-      console.error('Error parsing WebSocket message:', error);
+    const message = JSON.parse(event.data);
+    if (message.type === 'streamStatus') {
+      updateStreamStatus(message.status);
     }
   };
 
