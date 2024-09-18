@@ -1742,7 +1742,11 @@ function onVideoStatusChange(videoIsPlaying) {
     return; // No change, ignore
   }
 
-  logger.debug(`Video status changing from ${lastVideoStatus} to ${videoIsPlaying ? 'streaming' : ''}`);
+  logger.debug(
+    `Video status changing from ${lastVideoStatus} to ${
+      videoIsPlaying ? 'streaming' : 'idle'
+    }`
+  );
 
   lastVideoStatus = videoIsPlaying;
 
@@ -1758,11 +1762,10 @@ function onVideoStatusChange(videoIsPlaying) {
 
   const streamingStatusLabel = document.getElementById('streaming-status-label');
   if (streamingStatusLabel) {
-    streamingStatusLabel.innerText = videoIsPlaying ? 'streaming' : '';
-    streamingStatusLabel.className = 'streamingState-' + (videoIsPlaying ? 'streaming' : '');
+    streamingStatusLabel.innerText = videoIsPlaying ? 'streaming' : 'idle';
+    streamingStatusLabel.className = 'streamingState-' + (videoIsPlaying ? 'streaming' : 'idle');
   }
 }
-
 
 function setStreamVideoElement(stream) {
   const streamVideoElement = document.getElementById('stream-video-element');
@@ -2168,50 +2171,53 @@ async function startStreaming(assistantReply) {
       isAvatarSpeaking = true;
       updateStreamEventLabel('streaming');
 
-      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${DID_API.key}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          script: {
-            type: 'text',
-            input: chunk,
-            ssml: true,
-            provider: {
-              type: 'microsoft',
-              voice_id: currentAvatar.voiceId,
+      const playResponse = await fetchWithRetries(
+        `${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Basic ${DID_API.key}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            script: {
+              type: 'text',
+              input: chunk,
+              ssml: true,
+              provider: {
+                type: 'microsoft',
+                voice_id: currentAvatar.voiceId,
+              },
             },
-          },
-          source_url: currentAvatar.imageUrl,
-          session_id: persistentSessionId,
-          driver_url: 'bank://lively/driver-06',
-          output_resolution: 512,
-          stream_warmup: false,
-          compatibility_mode: "on",
-          config: {
-            fluent: true,
-            stitch: true,
-            pad_audio: 0.5,
-            auto_match: true,
-            align_driver: true,
-            normalization_factor: 0.1,
-            align_expand_factor: 0.3,
-            motion_factor: 0.55,
-            result_format: 'mp4',
-            driver_expressions: {
-              expressions: [
-                {
-                  start_frame: 0,
-                  expression: 'neutral',
-                  intensity: 0.5
-                }
-              ]
-            }
-          },
-        }),
-      });
+            source_url: currentAvatar.imageUrl,
+            session_id: persistentSessionId,
+            driver_url: 'bank://lively/driver-06',
+            output_resolution: 512,
+            stream_warmup: false,
+            compatibility_mode: 'on',
+            config: {
+              fluent: true,
+              stitch: true,
+              pad_audio: 0.5,
+              auto_match: true,
+              align_driver: true,
+              normalization_factor: 0.1,
+              align_expand_factor: 0.3,
+              motion_factor: 0.55,
+              result_format: 'mp4',
+              driver_expressions: {
+                expressions: [
+                  {
+                    start_frame: 0,
+                    expression: 'neutral',
+                    intensity: 0.5,
+                  },
+                ],
+              },
+            },
+          }),
+        }
+      );
 
       if (!playResponse.ok) {
         throw new Error(`HTTP error! status: ${playResponse.status}`);
@@ -2232,8 +2238,8 @@ async function startStreaming(assistantReply) {
             streamVideoElement.oncanplay = resolve;
           });
 
-          // Perform the transition
-          smoothTransition(true);
+          // Transition will be handled by onVideoStatusChange
+          // Removed call to smoothTransition(true);
 
           await new Promise((resolve) => {
             streamVideoElement.onended = () => {
@@ -2252,8 +2258,10 @@ async function startStreaming(assistantReply) {
     // After all chunks have been processed, transition back to idle
     isAvatarSpeaking = false;
     updateStreamEventLabel('');
-    smoothTransition(false);
+    // Transition will be handled by onVideoStatusChange
+    // Removed call to smoothTransition(false);
     hasWarmUpPlayed = true;
+
     // Check if we need to reconnect
     if (shouldReconnect()) {
       logger.info('Approaching reconnection threshold. Initiating background reconnect.');
@@ -2263,11 +2271,17 @@ async function startStreaming(assistantReply) {
     logger.error('Error during streaming:', error);
     isAvatarSpeaking = false;
     updateStreamEventLabel('');
-    smoothTransition(false);
     hasWarmUpPlayed = true;
-    updateStreamEventLabel('');
-    if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
-      logger.warn('Stream not found or invalid session. Attempting to reinitialize persistent stream.');
+
+    // Removed call to smoothTransition(false);
+
+    if (
+      error.message.includes('HTTP error! status: 404') ||
+      error.message.includes('missing or invalid session_id')
+    ) {
+      logger.warn(
+        'Stream not found or invalid session. Attempting to reinitialize persistent stream.'
+      );
       await reinitializePersistentStream();
     }
   }
