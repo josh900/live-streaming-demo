@@ -598,6 +598,7 @@ async function warmUpStream() {
         },
         session_id: persistentSessionId,
         driver_url: 'bank://lively/driver-06',
+        compatibility_mode: "on",
         config: {
           fluent: true,
           stitch: true,
@@ -702,7 +703,22 @@ async function initializePersistentStream() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        source_url: currentAvatar.silentVideoUrl,
+        source_url: currentAvatar.imageUrl,
+        driver_url: 'bank://lively/driver-06',
+        output_resolution: 512,
+        stream_warmup: true,
+        compatibility_mode: "on",
+        config: {
+          fluent: true,
+          stitch: true,
+          pad_audio: 0.5,
+          auto_match: true,
+          align_driver: true,
+          normalization_factor: 0.1,
+          align_expand_factor: 0.3,
+          motion_factor: 0.55,
+          result_format: 'mp4'
+        },
       }),
     });
 
@@ -1541,11 +1557,12 @@ function showErrorMessage(message) {
 
 async function createPeerConnection(offer, iceServers) {
   if (peerConnection) {
-    logger.warn('Closing existing peer connection');
+    logger.warn('Peer connection already exists. Closing existing connection.');
     peerConnection.close();
+    peerConnection = null;
   }
 
-  const config = {
+  const peerConnectionConfig = {
     iceServers,
     sdpSemantics: 'unified-plan',
     bundlePolicy: 'max-bundle',
@@ -1553,10 +1570,16 @@ async function createPeerConnection(offer, iceServers) {
     iceTransportPolicy: 'all'
   };
 
-  logger.debug('Creating RTCPeerConnection with config:', JSON.stringify(config));
+  logger.debug('Creating RTCPeerConnection with config:', JSON.stringify(peerConnectionConfig));
 
-  peerConnection = new RTCPeerConnection(config);
+  try {
+    peerConnection = new RTCPeerConnection(peerConnectionConfig);
+  } catch (error) {
+    logger.error('Error creating RTCPeerConnection:', error);
+    throw error;
+  }
 
+  // Set up event handlers
   peerConnection.addEventListener('icegatheringstatechange', onIceGatheringStateChange);
   peerConnection.addEventListener('icecandidate', onIceCandidate);
   peerConnection.addEventListener('iceconnectionstatechange', onIceConnectionStateChange);
@@ -1565,45 +1588,79 @@ async function createPeerConnection(offer, iceServers) {
   peerConnection.addEventListener('track', onTrack);
 
   try {
-    await peerConnection.setRemoteDescription(offer);
-    logger.debug('Set remote description successfully');
-
-    const answer = await peerConnection.createAnswer();
-    logger.debug('Created answer');
-
-    const modifiedAnswer = new RTCSessionDescription({
-      type: 'answer',
-      sdp: modifySdp(answer.sdp)
-    });
-
-    await peerConnection.setLocalDescription(modifiedAnswer);
-    logger.debug('Set local description successfully');
-
-    return modifiedAnswer;
+    logger.debug('Setting remote description');
+    logger.debug('Offer SDP:', JSON.stringify(offer));
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    logger.debug('Set remote SDP successfully');
   } catch (error) {
-    logger.error('Error in createPeerConnection:', error);
+    logger.error('Error setting remote description:', error);
     throw error;
   }
+
+  let answer;
+  try {
+    logger.debug('Creating answer');
+    answer = await peerConnection.createAnswer();
+    logger.debug('Created local SDP successfully');
+  } catch (error) {
+    logger.error('Error creating local SDP:', error);
+    throw error;
+  }
+
+  // Modify the SDP to ensure compatibility
+  answer.sdp = modifySdp(answer.sdp);
+
+  try {
+    logger.debug('Setting local description');
+    await peerConnection.setLocalDescription(answer);
+    logger.debug('Set local SDP successfully');
+  } catch (error) {
+    logger.error('Error setting local description:', error);
+    logger.debug('Problematic SDP:', answer.sdp);
+    // Clean up in case of error
+    if (peerConnection) {
+      peerConnection.close();
+      peerConnection = null;
+    }
+    throw error;
+  }
+
+  return answer;
 }
 
 function modifySdp(sdp) {
-  // Remove video codecs we don't support
-  sdp = sdp.replace(/a=rtpmap:.*VP8\/90000\r\n/g, '');
-  sdp = sdp.replace(/a=rtpmap:.*VP9\/90000\r\n/g, '');
-  sdp = sdp.replace(/a=rtpmap:.*H264\/90000\r\n/g, '');
+  if (isAndroidWebView()) {
+    const sdpLines = sdp.split('\n');
+    let videoSectionIndex = -1;
+    
+    // Find the video section
+    for (let i = 0; i < sdpLines.length; i++) {
+      if (sdpLines[i].startsWith('m=video')) {
+        videoSectionIndex = i;
+        break;
+      }
+    }
 
-  // Ensure audio codec support
-  if (sdp.indexOf('opus/48000') === -1) {
-    sdp = sdp.replace(
-      /m=audio (\d+) RTP\/SAVPF.*\r\n/g,
-      'm=audio $1 RTP/SAVPF 111\r\n' +
-      'a=rtpmap:111 opus/48000/2\r\n' +
-      'a=fmtp:111 minptime=10;useinbandfec=1\r\n'
-    );
+    if (videoSectionIndex !== -1) {
+      // Modify the video section instead of removing it
+      sdpLines[videoSectionIndex] = sdpLines[videoSectionIndex].replace('UDP/TLS/RTP/SAVPF', 'UDP/TLS/RTP/SAVPF 96');
+      
+      // Add necessary attributes for the video section
+      sdpLines.splice(videoSectionIndex + 1, 0, 'a=rtpmap:96 VP8/90000');
+      sdpLines.splice(videoSectionIndex + 2, 0, 'a=rtcp-fb:96 nack');
+      sdpLines.splice(videoSectionIndex + 3, 0, 'a=rtcp-fb:96 nack pli');
+      sdpLines.splice(videoSectionIndex + 4, 0, 'a=rtcp-fb:96 ccm fir');
+    }
+
+    sdp = sdpLines.join('\n');
+    logger.debug('Modified SDP for Android WebView:', sdp);
   }
-
-  logger.debug('Modified SDP:', sdp);
   return sdp;
+}
+
+function isAndroidWebView() {
+  const userAgent = navigator.userAgent.toLowerCase();
+  return /android/.test(userAgent) && /wv/.test(userAgent);
 }
 
 function onIceGatheringStateChange() {
@@ -2031,6 +2088,7 @@ async function initializeConnection() {
         driver_url: 'bank://lively/driver-06',
         output_resolution: 512,
         stream_warmup: true,
+        compatibility_mode: "on",
         config: {
           fluent: true,
           stitch: true,
@@ -2152,6 +2210,7 @@ async function startStreaming(assistantReply) {
           driver_url: 'bank://lively/driver-06',
           output_resolution: 512,
           stream_warmup: false,
+          compatibility_mode: "on",
           config: {
             fluent: true,
             stitch: true,
