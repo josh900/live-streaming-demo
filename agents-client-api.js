@@ -351,9 +351,18 @@ function initializeTransitionCanvas() {
 }
 
 function smoothTransition(toStreaming, duration = 300) {
+  if (isCurrentlyStreaming === toStreaming) {
+    logger.debug(`Already in the desired state: ${toStreaming ? 'streaming' : 'idle'}. Skipping transition.`);
+    return;
+  }
+
   if (isTransitioning) {
-    pendingTransition = { toStreaming, duration };
-    logger.debug('Transition already in progress, queueing next transition');
+    if (pendingTransition && pendingTransition.toStreaming === toStreaming) {
+      logger.debug(`Transition to ${toStreaming ? 'streaming' : 'idle'} already pending.`);
+    } else {
+      pendingTransition = { toStreaming, duration };
+      logger.debug('Transition already in progress, queueing next transition');
+    }
     return;
   }
 
@@ -363,7 +372,7 @@ function smoothTransition(toStreaming, duration = 300) {
   }
 
   isTransitioning = true;
-  logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : ''} state`);
+  logger.debug(`Starting smooth transition to ${toStreaming ? 'streaming' : 'idle'} state`);
 
   const idleVideoElement = document.getElementById('idle-video-element');
   const streamVideoElement = document.getElementById('stream-video-element');
@@ -431,15 +440,17 @@ function smoothTransition(toStreaming, duration = 300) {
   requestAnimationFrame(animate);
 }
 
-
 function checkPendingTransition() {
   if (pendingTransition) {
     const { toStreaming, duration } = pendingTransition;
     pendingTransition = null;
-    smoothTransition(toStreaming, duration);
+    if (isCurrentlyStreaming === toStreaming) {
+      logger.debug(`Pending transition to ${toStreaming ? 'streaming' : 'idle'} is already current state. Skipping.`);
+    } else {
+      smoothTransition(toStreaming, duration);
+    }
   }
 }
-
 
 
 function getVideoElements() {
@@ -1738,29 +1749,21 @@ function onSignalingStateChange() {
   logger.debug('Signaling state changed:', peerConnection.signalingState);
 }
 
-function onVideoStatusChange(videoIsPlaying) {
-  if (videoIsPlaying === lastVideoStatus) {
+function onVideoStatusChange(isPlaying, stream) {
+  if (isPlaying === lastVideoStatus) {
     return; // No change, ignore
   }
 
-  logger.debug(`Video status changing from ${lastVideoStatus} to ${videoIsPlaying ? 'streaming' : ''}`);
+  logger.debug(`Video status changing from ${lastVideoStatus ? 'streaming' : 'idle'} to ${isPlaying ? 'streaming' : 'idle'}`);
 
-  lastVideoStatus = videoIsPlaying;
+  lastVideoStatus = isPlaying;
 
-  const streamVideoElement = document.getElementById('stream-video-element');
-  const idleVideoElement = document.getElementById('idle-video-element');
-
-  if (!streamVideoElement || !idleVideoElement) {
-    logger.error('Video elements not found');
-    return;
-  }
-
-  smoothTransition(videoIsPlaying);
+  smoothTransition(isPlaying);
 
   const streamingStatusLabel = document.getElementById('streaming-status-label');
   if (streamingStatusLabel) {
-    streamingStatusLabel.innerText = videoIsPlaying ? 'streaming' : '';
-    streamingStatusLabel.className = 'streamingState-' + (videoIsPlaying ? 'streaming' : '');
+    streamingStatusLabel.innerText = isPlaying ? 'streaming' : '';
+    streamingStatusLabel.className = 'streamingState-' + (isPlaying ? 'streaming' : 'idle');
   }
 }
 
