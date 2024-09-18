@@ -2420,5 +2420,9 @@ export {
   toggleAutoSpeak,
   initializePersistentStream,
   destroyPersistentStream,
-  speakDirectly
+  toggleSimpleMode,
+  speakDirectly,
+  stopStreaming,
+  startStreaming,
+  updateChatHistory
 };
