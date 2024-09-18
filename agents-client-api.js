@@ -1758,6 +1758,12 @@ function onVideoStatusChange(videoIsPlaying) {
     return;
   }
 
+  // If the transition was already handled in startStreaming, skip it here
+  if (isAvatarSpeaking) {
+    logger.debug('Avatar is speaking, transition already handled in startStreaming');
+    return;
+  }
+
   smoothTransition(videoIsPlaying);
 
   const streamingStatusLabel = document.getElementById('streaming-status-label');
@@ -1828,7 +1834,7 @@ function handleStreamStarted() {
   transitionDebounceTimer = setTimeout(() => {
     logger.debug('Stream started');
     isWaitingForStream = false;
-    if (!isCurrentlyStreaming) {
+    if (!isCurrentlyStreaming && !isAvatarSpeaking) {
       isCurrentlyStreaming = true;
       smoothTransition(true);
     }
@@ -1838,12 +1844,15 @@ function handleStreamStarted() {
 
 
 
+
 function handleStreamDone() {
   clearTimeout(transitionDebounceTimer);
   transitionDebounceTimer = setTimeout(() => {
     logger.debug('Stream done');
-    isCurrentlyStreaming = false;
-    smoothTransition(false);
+    if (isCurrentlyStreaming && !isAvatarSpeaking) {
+      isCurrentlyStreaming = false;
+      smoothTransition(false);
+    }
     hasWarmUpPlayed = true;
     updateStreamEventLabel('');
   }, 100);
@@ -2238,8 +2247,11 @@ async function startStreaming(assistantReply) {
             streamVideoElement.oncanplay = resolve;
           });
 
-          // Transition will be handled by onVideoStatusChange
-          // Removed call to smoothTransition(true);
+          // Ensure we transition only if not already streaming
+          if (!isCurrentlyStreaming) {
+            smoothTransition(true);
+            isCurrentlyStreaming = true; // Update the streaming state
+          }
 
           await new Promise((resolve) => {
             streamVideoElement.onended = () => {
@@ -2258,8 +2270,10 @@ async function startStreaming(assistantReply) {
     // After all chunks have been processed, transition back to idle
     isAvatarSpeaking = false;
     updateStreamEventLabel('');
-    // Transition will be handled by onVideoStatusChange
-    // Removed call to smoothTransition(false);
+    if (isCurrentlyStreaming) {
+      smoothTransition(false);
+      isCurrentlyStreaming = false; // Update the streaming state
+    }
     hasWarmUpPlayed = true;
 
     // Check if we need to reconnect
@@ -2273,7 +2287,10 @@ async function startStreaming(assistantReply) {
     updateStreamEventLabel('');
     hasWarmUpPlayed = true;
 
-    // Removed call to smoothTransition(false);
+    if (isCurrentlyStreaming) {
+      smoothTransition(false);
+      isCurrentlyStreaming = false; // Update the streaming state
+    }
 
     if (
       error.message.includes('HTTP error! status: 404') ||
