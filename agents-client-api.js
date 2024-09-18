@@ -83,7 +83,7 @@ const MIN_BYTES_THRESHOLD = 1000;
 let streamingStartTime = 0;
 const STREAMING_HYSTERESIS = 500;
 let lastActivityTime = 0;
-const IDLE_TIMEOUT = 10; // 2 seconds of inactivity before transitioning to idle
+const IDLE_TIMEOUT = 1000; // 2 seconds of inactivity before transitioning to idle
 let isWaitingForStream = false;
 let isWarmingUp = false;
 let transitionDebounceTimer;
