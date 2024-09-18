@@ -115,7 +115,7 @@ let connectionState = ConnectionState.DISCONNECTED;
 
 export function setLogLevel(level) {
   logger.setLogLevel(level);
-  isDebugMode = level === 'INFO';
+  isDebugMode = level === 'DEBUG';
   logger.debug(`Log level set to ${level}. Debug mode is ${isDebugMode ? 'enabled' : 'disabled'}.`);
 }
 
@@ -986,7 +986,7 @@ function endPushToTalk(event) {
 
 
 async function initialize() {
-  setLogLevel('DEBUG');
+  setLogLevel('INFO');
   connectionState = ConnectionState.DISCONNECTED;
 
   const { avatarId, contextId, interfaceMode, header } = getUrlParameters();
