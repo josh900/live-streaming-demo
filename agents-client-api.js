@@ -91,9 +91,6 @@ let pendingTransition = null;
 let hasWarmUpPlayed = false;
 let ws;
 let isStreaming = false;
-let isTransitioning = false;
-let sessionId = null;
-let streamId = null;
 
 
 function debouncedVideoStatusChange(isPlaying, stream) {
