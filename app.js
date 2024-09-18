@@ -157,21 +157,6 @@ wss.on('connection', (ws) => {
 
   ws.on('message', (message) => {
     console.log('Received message:', message);
-    try {
-      const parsedMessage = JSON.parse(message);
-      if (parsedMessage.type === 'updateStreamStatus') {
-        wss.clients.forEach((client) => {
-          if (client !== ws && client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({
-              type: 'streamStatus',
-              status: parsedMessage.status
-            }));
-          }
-        });
-      }
-    } catch (error) {
-      console.error('Error parsing WebSocket message:', error);
-    }
   });
 
   ws.on('close', () => {
