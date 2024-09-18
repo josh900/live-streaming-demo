@@ -89,7 +89,8 @@ let isWarmingUp = false;
 let transitionDebounceTimer;
 let pendingTransition = null;
 let hasWarmUpPlayed = false;
-
+let lastLogTime = 0;
+let logCount = 0;
 
 function debouncedVideoStatusChange(isPlaying, stream) {
   clearTimeout(videoStatusDebounceTimer);
@@ -1612,7 +1613,7 @@ function modifySdp(sdp) {
   if (isAndroidWebView()) {
     const sdpLines = sdp.split('\n');
     let videoSectionIndex = -1;
-    
+
     // Find the video section
     for (let i = 0; i < sdpLines.length; i++) {
       if (sdpLines[i].startsWith('m=video')) {
@@ -1624,7 +1625,7 @@ function modifySdp(sdp) {
     if (videoSectionIndex !== -1) {
       // Modify the video section instead of removing it
       sdpLines[videoSectionIndex] = sdpLines[videoSectionIndex].replace('UDP/TLS/RTP/SAVPF', 'UDP/TLS/RTP/SAVPF 96');
-      
+
       // Add necessary attributes for the video section
       sdpLines.splice(videoSectionIndex + 1, 0, 'a=rtpmap:96 VP8/90000');
       sdpLines.splice(videoSectionIndex + 2, 0, 'a=rtcp-fb:96 nack');
@@ -1929,9 +1930,19 @@ function onTrack(event) {
         logger.error('Error getting stats:', error);
       }
     } else {
-      logger.debug('Peer connection not ready for stats.');
+      const currentTime = Date.now();
+      if (currentTime - lastLogTime >= 1000) {
+        // Reset the counter every second
+        logCount = 0;
+        lastLogTime = currentTime;
+      }
+
+      if (logCount < 3) {
+        logger.debug('Peer connection not ready for stats.');
+        logCount++;
+      }
     }
-  }, 50); // Check every 100ms
+  }, 50); // Check every 50ms
 
   if (event.streams && event.streams.length > 0) {
     const stream = event.streams[0];
