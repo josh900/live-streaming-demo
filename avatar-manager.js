@@ -110,7 +110,6 @@ async function generateSilentVideo(imageUrl, voiceId, id) {
     body: JSON.stringify({
       source_url: imageUrl,
       driver_url: 'bank://lively/driver-06',
-      compatibility_mode: "on",
       script: {
         type: 'text',
         ssml: true,
