@@ -598,6 +598,7 @@ async function warmUpStream() {
         },
         session_id: persistentSessionId,
         driver_url: 'bank://lively/driver-06',
+        compatibility_mode: "on",
         config: {
           fluent: true,
           stitch: true,
@@ -707,6 +708,7 @@ async function initializePersistentStream() {
         driver_url: 'bank://lively/driver-06',
         output_resolution: 512,
         stream_warmup: true,
+        compatibility_mode: "on",
         config: {
           fluent: true,
           stitch: true,
@@ -1992,6 +1994,7 @@ async function initializeConnection() {
         driver_url: 'bank://lively/driver-06',
         output_resolution: 512,
         stream_warmup: true,
+        compatibility_mode: "on",
         config: {
           fluent: true,
           stitch: true,
@@ -2113,6 +2116,7 @@ async function startStreaming(assistantReply) {
           driver_url: 'bank://lively/driver-06',
           output_resolution: 512,
           stream_warmup: false,
+          compatibility_mode: "on",
           config: {
             fluent: true,
             stitch: true,
