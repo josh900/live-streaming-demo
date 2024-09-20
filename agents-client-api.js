@@ -59,15 +59,15 @@ const API_RATE_LIMIT = 80; // Maximum number of calls per minute
 const API_CALL_INTERVAL = 5000 / API_RATE_LIMIT; // Minimum time between API calls in milliseconds
 let lastApiCallTime = 0;
 const maxRetryCount = 10;
-const maxDelaySec = 100;
-const RECONNECTION_INTERVAL = 100000; // 25 seconds for testing, adjust as needed
+const maxDelaySec = 75;
+const RECONNECTION_INTERVAL = 150000; // 25 seconds for testing, adjust as needed
 let isAvatarSpeaking = false;
 const MAX_RECONNECT_ATTEMPTS = 10;
 const INITIAL_RECONNECT_DELAY = 300; // 1 second
-const MAX_RECONNECT_DELAY = 90000; // 30 seconds
+const MAX_RECONNECT_DELAY = 140000; // 30 seconds
 let isPushToTalkEnabled = false;
 let pushToTalkStartTime = 0;
-const MIN_PUSH_TO_TALK_DURATION = 300;
+const MIN_PUSH_TO_TALK_DURATION = 125;
 let pushToTalkTimer = null;
 let contexts = [];
 let currentContextId = '';
@@ -77,7 +77,7 @@ let currentInterfaceMode = null;
 let isPushToTalkActive = false;
 let autoSpeakInProgress = false;
 let streamStartTime = 0;
-const STREAM_DURATION_THRESHOLD = 300; // 300ms threshold to consider a stream stable
+const STREAM_DURATION_THRESHOLD = 200; // 300ms threshold to consider a stream stable
 let videoStatusDebounceTimer;
 const MIN_BYTES_THRESHOLD = 1000;
 let streamingStartTime = 0;
@@ -88,7 +88,7 @@ let isWaitingForStream = false;
 let isWarmingUp = false;
 let transitionDebounceTimer;
 let pendingTransition = null;
-let hasWarmUpPlayed = false;
+let hasWarmUpPlayed = true;
 
 
 function debouncedVideoStatusChange(isPlaying, stream) {
@@ -986,7 +986,7 @@ function endPushToTalk(event) {
 
 
 async function initialize() {
-  setLogLevel('DEBUG');
+  setLogLevel('INFO');
   connectionState = ConnectionState.DISCONNECTED;
 
   const { avatarId, contextId, interfaceMode, header } = getUrlParameters();
@@ -1612,7 +1612,7 @@ function modifySdp(sdp) {
   if (isAndroidWebView()) {
     const sdpLines = sdp.split('\n');
     let videoSectionIndex = -1;
-    
+
     // Find the video section
     for (let i = 0; i < sdpLines.length; i++) {
       if (sdpLines[i].startsWith('m=video')) {
@@ -1624,7 +1624,7 @@ function modifySdp(sdp) {
     if (videoSectionIndex !== -1) {
       // Modify the video section instead of removing it
       sdpLines[videoSectionIndex] = sdpLines[videoSectionIndex].replace('UDP/TLS/RTP/SAVPF', 'UDP/TLS/RTP/SAVPF 96');
-      
+
       // Add necessary attributes for the video section
       sdpLines.splice(videoSectionIndex + 1, 0, 'a=rtpmap:96 VP8/90000');
       sdpLines.splice(videoSectionIndex + 2, 0, 'a=rtcp-fb:96 nack');
@@ -1754,6 +1754,12 @@ function onVideoStatusChange(videoIsPlaying) {
     return;
   }
 
+  // If the transition was already handled in startStreaming, skip it here
+  if (isAvatarSpeaking) {
+    logger.debug('Avatar is speaking, transition already handled in startStreaming');
+    return;
+  }
+
   smoothTransition(videoIsPlaying);
 
   const streamingStatusLabel = document.getElementById('streaming-status-label');
@@ -1825,7 +1831,7 @@ function handleStreamStarted() {
   transitionDebounceTimer = setTimeout(() => {
     logger.debug('Stream started');
     isWaitingForStream = false;
-    if (!isCurrentlyStreaming) {
+    if (!isCurrentlyStreaming && !isAvatarSpeaking) {
       isCurrentlyStreaming = true;
       smoothTransition(true);
     }
@@ -1839,8 +1845,10 @@ function handleStreamDone() {
   clearTimeout(transitionDebounceTimer);
   transitionDebounceTimer = setTimeout(() => {
     logger.debug('Stream done');
-    isCurrentlyStreaming = false;
-    smoothTransition(false);
+    if (isCurrentlyStreaming && !isAvatarSpeaking) {
+      isCurrentlyStreaming = false;
+      smoothTransition(false);
+    }
     hasWarmUpPlayed = true;
     updateStreamEventLabel('');
   }, 100);
@@ -2233,7 +2241,11 @@ async function startStreaming(assistantReply) {
           });
 
           // Perform the transition
-          smoothTransition(true);
+          // Ensure we transition only if not already streaming
+          if (!isCurrentlyStreaming) {
+            smoothTransition(true);
+            isCurrentlyStreaming = true; // Update the streaming state
+          }
 
           await new Promise((resolve) => {
             streamVideoElement.onended = () => {
@@ -2252,7 +2264,10 @@ async function startStreaming(assistantReply) {
     // After all chunks have been processed, transition back to idle
     isAvatarSpeaking = false;
     updateStreamEventLabel('');
-    smoothTransition(false);
+    if (isCurrentlyStreaming) {
+      smoothTransition(false);
+      isCurrentlyStreaming = false; // Update the streaming state
+    }
     hasWarmUpPlayed = true;
     // Check if we need to reconnect
     if (shouldReconnect()) {
@@ -2263,12 +2278,21 @@ async function startStreaming(assistantReply) {
     logger.error('Error during streaming:', error);
     isAvatarSpeaking = false;
     updateStreamEventLabel('');
-    smoothTransition(false);
     hasWarmUpPlayed = true;
-    updateStreamEventLabel('');
-    if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
-      logger.warn('Stream not found or invalid session. Attempting to reinitialize persistent stream.');
-      await reinitializePersistentStream();
+
+    if (isCurrentlyStreaming) {
+      smoothTransition(false);
+      isCurrentlyStreaming = false; // Update the streaming state
+    }
+
+    if (
+      error.message.includes('HTTP error! status: 404') ||
+      error.message.includes('missing or invalid session_id')
+    ) {
+      logger.warn(
+        'Stream not found or invalid session. Attempting to reinitialize persistent stream.'
+      );
+    await reinitializePersistentStream();
     }
   }
 }
