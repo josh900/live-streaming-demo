@@ -89,7 +89,7 @@ let isWarmingUp = false;
 let transitionDebounceTimer;
 let pendingTransition = null;
 let hasWarmUpPlayed = false;
-
+let enableWarmUpStream = false; // Set to false to disable
 
 function debouncedVideoStatusChange(isPlaying, stream) {
   clearTimeout(videoStatusDebounceTimer);
@@ -559,7 +559,13 @@ function updateAssistantReply(text) {
 }
 
 
+
 async function warmUpStream() {
+  if (!enableWarmUpStream) {
+    logger.debug('Warm-up stream is disabled');
+    return;
+  }
+
   if (!persistentStreamId || !persistentSessionId) {
     logger.error('Persistent stream not initialized. Cannot warm up stream.');
     return;
@@ -762,7 +768,7 @@ async function initializePersistentStream() {
     logger.info('Persistent stream initialized successfully');
     connectionState = ConnectionState.CONNECTED;
 
-    if (!hasWarmUpPlayed) {
+    if (!hasWarmUpPlayed && enableWarmUpStream) {
       await warmUpStream();
       hasWarmUpPlayed = true;
     }
@@ -1059,7 +1065,7 @@ async function initialize() {
   if (avatars.length > 0 && currentAvatarId) {
     try {
       await initializePersistentStream();
-      if (!hasWarmUpPlayed) {
+      if (enableWarmUpStream && !hasWarmUpPlayed) {
         await warmUpStream();
         // hasWarmUpPlayed = true;
       }
@@ -1277,7 +1283,7 @@ async function handleAvatarChange() {
 
   await destroyPersistentStream();
   await initializePersistentStream();
-  if (!hasWarmUpPlayed) {
+  if (enableWarmUpStream && !hasWarmUpPlayed) {
     await warmUpStream();
     hasWarmUpPlayed = true;
   }
@@ -2292,7 +2298,7 @@ async function startStreaming(assistantReply) {
       logger.warn(
         'Stream not found or invalid session. Attempting to reinitialize persistent stream.'
       );
-    await reinitializePersistentStream();
+      await reinitializePersistentStream();
     }
   }
 }
