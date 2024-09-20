@@ -59,15 +59,15 @@ const API_RATE_LIMIT = 80; // Maximum number of calls per minute
 const API_CALL_INTERVAL = 5000 / API_RATE_LIMIT; // Minimum time between API calls in milliseconds
 let lastApiCallTime = 0;
 const maxRetryCount = 10;
-const maxDelaySec = 75;
-const RECONNECTION_INTERVAL = 150000; // 25 seconds for testing, adjust as needed
+const maxDelaySec = 100;
+const RECONNECTION_INTERVAL = 100000; // 25 seconds for testing, adjust as needed
 let isAvatarSpeaking = false;
 const MAX_RECONNECT_ATTEMPTS = 10;
 const INITIAL_RECONNECT_DELAY = 300; // 1 second
-const MAX_RECONNECT_DELAY = 140000; // 30 seconds
+const MAX_RECONNECT_DELAY = 90000; // 30 seconds
 let isPushToTalkEnabled = false;
 let pushToTalkStartTime = 0;
-const MIN_PUSH_TO_TALK_DURATION = 125;
+const MIN_PUSH_TO_TALK_DURATION = 300;
 let pushToTalkTimer = null;
 let contexts = [];
 let currentContextId = '';
@@ -77,7 +77,7 @@ let currentInterfaceMode = null;
 let isPushToTalkActive = false;
 let autoSpeakInProgress = false;
 let streamStartTime = 0;
-const STREAM_DURATION_THRESHOLD = 200; // 300ms threshold to consider a stream stable
+const STREAM_DURATION_THRESHOLD = 300; // 300ms threshold to consider a stream stable
 let videoStatusDebounceTimer;
 const MIN_BYTES_THRESHOLD = 1000;
 let streamingStartTime = 0;
@@ -88,7 +88,7 @@ let isWaitingForStream = false;
 let isWarmingUp = false;
 let transitionDebounceTimer;
 let pendingTransition = null;
-let hasWarmUpPlayed = true;
+let hasWarmUpPlayed = false;
 
 
 function debouncedVideoStatusChange(isPlaying, stream) {
@@ -115,7 +115,7 @@ let connectionState = ConnectionState.DISCONNECTED;
 
 export function setLogLevel(level) {
   logger.setLogLevel(level);
-  isDebugMode = level === 'INFO';
+  isDebugMode = level === 'DEBUG';
   logger.debug(`Log level set to ${level}. Debug mode is ${isDebugMode ? 'enabled' : 'disabled'}.`);
 }
 
@@ -1742,11 +1742,7 @@ function onVideoStatusChange(videoIsPlaying) {
     return; // No change, ignore
   }
 
-  logger.debug(
-    `Video status changing from ${lastVideoStatus} to ${
-      videoIsPlaying ? 'streaming' : 'idle'
-    }`
-  );
+  logger.debug(`Video status changing from ${lastVideoStatus} to ${videoIsPlaying ? 'streaming' : ''}`);
 
   lastVideoStatus = videoIsPlaying;
 
@@ -1758,20 +1754,15 @@ function onVideoStatusChange(videoIsPlaying) {
     return;
   }
 
-  // If the transition was already handled in startStreaming, skip it here
-  if (isAvatarSpeaking) {
-    logger.debug('Avatar is speaking, transition already handled in startStreaming');
-    return;
-  }
-
   smoothTransition(videoIsPlaying);
 
   const streamingStatusLabel = document.getElementById('streaming-status-label');
   if (streamingStatusLabel) {
-    streamingStatusLabel.innerText = videoIsPlaying ? 'streaming' : 'idle';
-    streamingStatusLabel.className = 'streamingState-' + (videoIsPlaying ? 'streaming' : 'idle');
+    streamingStatusLabel.innerText = videoIsPlaying ? 'streaming' : '';
+    streamingStatusLabel.className = 'streamingState-' + (videoIsPlaying ? 'streaming' : '');
   }
 }
+
 
 function setStreamVideoElement(stream) {
   const streamVideoElement = document.getElementById('stream-video-element');
@@ -1834,7 +1825,7 @@ function handleStreamStarted() {
   transitionDebounceTimer = setTimeout(() => {
     logger.debug('Stream started');
     isWaitingForStream = false;
-    if (!isCurrentlyStreaming && !isAvatarSpeaking) {
+    if (!isCurrentlyStreaming) {
       isCurrentlyStreaming = true;
       smoothTransition(true);
     }
@@ -1844,15 +1835,12 @@ function handleStreamStarted() {
 
 
 
-
 function handleStreamDone() {
   clearTimeout(transitionDebounceTimer);
   transitionDebounceTimer = setTimeout(() => {
     logger.debug('Stream done');
-    if (isCurrentlyStreaming && !isAvatarSpeaking) {
-      isCurrentlyStreaming = false;
-      smoothTransition(false);
-    }
+    isCurrentlyStreaming = false;
+    smoothTransition(false);
     hasWarmUpPlayed = true;
     updateStreamEventLabel('');
   }, 100);
@@ -2180,53 +2168,50 @@ async function startStreaming(assistantReply) {
       isAvatarSpeaking = true;
       updateStreamEventLabel('streaming');
 
-      const playResponse = await fetchWithRetries(
-        `${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Basic ${DID_API.key}`,
-            'Content-Type': 'application/json',
+      const playResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          script: {
+            type: 'text',
+            input: chunk,
+            ssml: true,
+            provider: {
+              type: 'microsoft',
+              voice_id: currentAvatar.voiceId,
+            },
           },
-          body: JSON.stringify({
-            script: {
-              type: 'text',
-              input: chunk,
-              ssml: true,
-              provider: {
-                type: 'microsoft',
-                voice_id: currentAvatar.voiceId,
-              },
-            },
-            source_url: currentAvatar.imageUrl,
-            session_id: persistentSessionId,
-            driver_url: 'bank://lively/driver-06',
-            output_resolution: 512,
-            stream_warmup: false,
-            compatibility_mode: 'on',
-            config: {
-              fluent: true,
-              stitch: true,
-              pad_audio: 0.5,
-              auto_match: true,
-              align_driver: true,
-              normalization_factor: 0.1,
-              align_expand_factor: 0.3,
-              motion_factor: 0.55,
-              result_format: 'mp4',
-              driver_expressions: {
-                expressions: [
-                  {
-                    start_frame: 0,
-                    expression: 'neutral',
-                    intensity: 0.5,
-                  },
-                ],
-              },
-            },
-          }),
-        }
-      );
+          source_url: currentAvatar.imageUrl,
+          session_id: persistentSessionId,
+          driver_url: 'bank://lively/driver-06',
+          output_resolution: 512,
+          stream_warmup: false,
+          compatibility_mode: "on",
+          config: {
+            fluent: true,
+            stitch: true,
+            pad_audio: 0.5,
+            auto_match: true,
+            align_driver: true,
+            normalization_factor: 0.1,
+            align_expand_factor: 0.3,
+            motion_factor: 0.55,
+            result_format: 'mp4',
+            driver_expressions: {
+              expressions: [
+                {
+                  start_frame: 0,
+                  expression: 'neutral',
+                  intensity: 0.5
+                }
+              ]
+            }
+          },
+        }),
+      });
 
       if (!playResponse.ok) {
         throw new Error(`HTTP error! status: ${playResponse.status}`);
@@ -2247,11 +2232,8 @@ async function startStreaming(assistantReply) {
             streamVideoElement.oncanplay = resolve;
           });
 
-          // Ensure we transition only if not already streaming
-          if (!isCurrentlyStreaming) {
-            smoothTransition(true);
-            isCurrentlyStreaming = true; // Update the streaming state
-          }
+          // Perform the transition
+          smoothTransition(true);
 
           await new Promise((resolve) => {
             streamVideoElement.onended = () => {
@@ -2270,12 +2252,8 @@ async function startStreaming(assistantReply) {
     // After all chunks have been processed, transition back to idle
     isAvatarSpeaking = false;
     updateStreamEventLabel('');
-    if (isCurrentlyStreaming) {
-      smoothTransition(false);
-      isCurrentlyStreaming = false; // Update the streaming state
-    }
+    smoothTransition(false);
     hasWarmUpPlayed = true;
-
     // Check if we need to reconnect
     if (shouldReconnect()) {
       logger.info('Approaching reconnection threshold. Initiating background reconnect.');
@@ -2285,20 +2263,11 @@ async function startStreaming(assistantReply) {
     logger.error('Error during streaming:', error);
     isAvatarSpeaking = false;
     updateStreamEventLabel('');
+    smoothTransition(false);
     hasWarmUpPlayed = true;
-
-    if (isCurrentlyStreaming) {
-      smoothTransition(false);
-      isCurrentlyStreaming = false; // Update the streaming state
-    }
-
-    if (
-      error.message.includes('HTTP error! status: 404') ||
-      error.message.includes('missing or invalid session_id')
-    ) {
-      logger.warn(
-        'Stream not found or invalid session. Attempting to reinitialize persistent stream.'
-      );
+    updateStreamEventLabel('');
+    if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
+      logger.warn('Stream not found or invalid session. Attempting to reinitialize persistent stream.');
       await reinitializePersistentStream();
     }
   }
