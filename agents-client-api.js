@@ -88,7 +88,7 @@ let isWaitingForStream = false;
 let isWarmingUp = false;
 let transitionDebounceTimer;
 let pendingTransition = null;
-let hasWarmUpPlayed = true;
+let hasWarmUpPlayed = false;
 
 
 function debouncedVideoStatusChange(isPlaying, stream) {
