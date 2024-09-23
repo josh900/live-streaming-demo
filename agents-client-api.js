@@ -802,7 +802,8 @@ async function initializePersistentStream() {
     logger.info('Persistent stream initialized successfully');
     connectionState = ConnectionState.CONNECTED;
 
-    if (!hasWarmUpPlayed && enableWarmUpStream) {
+    // Always call warmUpStream() if warm-up hasn't played yet
+    if (!hasWarmUpPlayed) {
       await warmUpStream();
       hasWarmUpPlayed = true;
     }
