@@ -89,7 +89,7 @@ let isWarmingUp = false;
 let transitionDebounceTimer;
 let pendingTransition = null;
 let hasWarmUpPlayed = false;
-let enableWarmUpStream = true; // Set to false to disable
+let enableWarmUpStream = false; // Set to false to disable
 
 function debouncedVideoStatusChange(isPlaying, stream) {
   clearTimeout(videoStatusDebounceTimer);
