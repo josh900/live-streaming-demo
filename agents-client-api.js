@@ -561,22 +561,6 @@ function updateAssistantReply(text) {
 
 
 async function warmUpStream() {
-  if (!enableWarmUpStream) {
-    logger.debug('Warm-up stream is disabled');
-    return;
-  }
-
-  if (!persistentStreamId || !persistentSessionId) {
-    logger.error('Persistent stream not initialized. Cannot warm up stream.');
-    return;
-  }
-
-  const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
-  if (!currentAvatar) {
-    logger.error('No avatar selected or avatar not found. Cannot warm up stream.');
-    return;
-  }
-
   isWarmingUp = true;
   const streamVideoElement = document.getElementById('stream-video-element');
   const idleVideoElement = document.getElementById('idle-video-element');
@@ -586,54 +570,107 @@ async function warmUpStream() {
   try {
     logger.debug('Warming up stream...');
 
-    const warmUpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${DID_API.key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        script: {
-          type: 'text',
-          input: '<break time="1500ms"/>',
-          ssml: true,
-          provider: {
-            type: 'microsoft',
-            voice_id: currentAvatar.voiceId,
+    if (enableWarmUpStream) {
+      // Existing warm-up logic using D-ID API
+      const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
+      if (!currentAvatar) {
+        logger.error('No avatar selected or avatar not found. Cannot warm up stream.');
+        return;
+      }
+
+      if (!persistentStreamId || !persistentSessionId) {
+        logger.error('Persistent stream not initialized. Cannot warm up stream.');
+        return;
+      }
+
+      const warmUpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${DID_API.key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          script: {
+            type: 'text',
+            input: '<break time="1500ms"/>',
+            ssml: true,
+            provider: {
+              type: 'microsoft',
+              voice_id: currentAvatar.voiceId,
+            },
           },
-        },
-        session_id: persistentSessionId,
-        driver_url: 'bank://lively/driver-06',
-        compatibility_mode: "on",
-        config: {
-          fluent: true,
-          stitch: true,
-          pad_audio: 0.5,
-          auto_match: true,
-          align_driver: true,
-          normalization_factor: 0.1,
-          align_expand_factor: 0.3,
-          motion_factor: 0.55,
-          result_format: 'mp4'
-        },
-      }),
-    });
+          session_id: persistentSessionId,
+          driver_url: 'bank://lively/driver-06',
+          compatibility_mode: 'on',
+          config: {
+            fluent: true,
+            stitch: true,
+            pad_audio: 0.5,
+            auto_match: true,
+            align_driver: true,
+            normalization_factor: 0.1,
+            align_expand_factor: 0.3,
+            motion_factor: 0.55,
+            result_format: 'mp4',
+          },
+        }),
+      });
 
-    if (!warmUpResponse.ok) {
-      throw new Error(`HTTP error! status: ${warmUpResponse.status}`);
-    }
+      if (!warmUpResponse.ok) {
+        throw new Error(`HTTP error! status: ${warmUpResponse.status}`);
+      }
 
-    const warmUpData = await warmUpResponse.json();
-    logger.debug('Warm-up stream response:', warmUpData);
+      const warmUpData = await warmUpResponse.json();
+      logger.debug('Warm-up stream response:', warmUpData);
 
-    if (warmUpData.status === 'started') {
+      if (warmUpData.status === 'started') {
+        streamVideoElement.style.display = 'none';
+        streamVideoElement.muted = true;
+        streamVideoElement.src = warmUpData.result_url;
+
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('Timeout waiting for video to be ready to play'));
+          }, 10000); // 10 seconds timeout
+
+          streamVideoElement.oncanplay = () => {
+            clearTimeout(timeout);
+            streamVideoElement.play().then(resolve).catch(reject);
+          };
+
+          streamVideoElement.onerror = () => {
+            clearTimeout(timeout);
+            reject(new Error('Error loading warm-up video'));
+          };
+        });
+
+        await new Promise((resolve) => {
+          const timeout = setTimeout(() => {
+            logger.warn('Warm-up video did not end naturally, forcing completion');
+            hasWarmUpPlayed = true;
+            updateStreamEventLabel('');
+            resolve();
+          }, 5000); // 5 seconds timeout
+
+          streamVideoElement.onended = () => {
+            clearTimeout(timeout);
+            resolve();
+          };
+        });
+
+        logger.debug('Warm-up stream completed');
+      } else {
+        logger.warn('Unexpected response status for warm-up stream:', warmUpData.status);
+      }
+    } else {
+      // New behavior: Play pre-recorded silent video as warm-up stream
       streamVideoElement.style.display = 'none';
       streamVideoElement.muted = true;
-      streamVideoElement.src = warmUpData.result_url;
+      streamVideoElement.src = 'https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Ava/silent_video.mp4';
 
       await new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
-          reject(new Error('Timeout waiting for video to be ready to play'));
+          reject(new Error('Timeout waiting for silent video to be ready to play'));
         }, 10000); // 10 seconds timeout
 
         streamVideoElement.oncanplay = () => {
@@ -643,13 +680,13 @@ async function warmUpStream() {
 
         streamVideoElement.onerror = () => {
           clearTimeout(timeout);
-          reject(new Error('Error loading warm-up video'));
+          reject(new Error('Error loading silent video'));
         };
       });
 
       await new Promise((resolve) => {
         const timeout = setTimeout(() => {
-          logger.warn('Warm-up video did not end naturally, forcing completion');
+          logger.warn('Silent video did not end naturally, forcing completion');
           hasWarmUpPlayed = true;
           updateStreamEventLabel('');
           resolve();
@@ -661,9 +698,7 @@ async function warmUpStream() {
         };
       });
 
-      logger.debug('Warm-up stream completed');
-    } else {
-      logger.warn('Unexpected response status for warm-up stream:', warmUpData.status);
+      logger.debug('Warm-up stream using silent video completed');
     }
   } catch (error) {
     logger.error('Error during stream warm-up:', error);
@@ -680,7 +715,6 @@ async function warmUpStream() {
     logger.debug('Warm-up process finished, restored original video element states');
   }
 }
-
 
 async function initializePersistentStream() {
   if (isInitializingStream) {
