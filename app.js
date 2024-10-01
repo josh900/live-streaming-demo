@@ -164,6 +164,12 @@ wss.on('connection', (ws) => {
   });
 });
 
+
+app.get('/logging', (req, res) => {
+  console.log('server_logs:', req.query);
+  res.end();
+});
+
 server.listen(port, () => {
   console.log(`Server started on port localhost:${port}`);
   console.log(`http://localhost:${port}`);

@@ -55,7 +55,10 @@
     .header.visible {
       display: flex;
     }
-
+    .pressed-effect {
+      background-image: url('Slogo_PushTalk_pressed.svg');
+      filter: brightness(0.8);
+    }
   </style>
   <script>
     // Immediately-invoked function expression to avoid polluting global scope
@@ -225,6 +228,26 @@
     import { toggleSimpleMode } from './agents-client-api.js';
     document.getElementById('simple-mode-button').addEventListener('click', toggleSimpleMode);
   </script>
+
+<script>
+  const logoWrapper = document.getElementById('logo-wrapper');
+
+  logoWrapper.addEventListener('mousedown', () => {
+    logoWrapper.classList.add('pressed-effect');
+  });
+
+  logoWrapper.addEventListener('mouseup', () => {
+    logoWrapper.classList.remove('pressed-effect');
+  });
+
+  logoWrapper.addEventListener('touchstart', () => {
+    logoWrapper.classList.add('pressed-effect');
+  });
+
+  logoWrapper.addEventListener('touchend', () => {
+    logoWrapper.classList.remove('pressed-effect');
+  });
+</script>
 
 
 </body>

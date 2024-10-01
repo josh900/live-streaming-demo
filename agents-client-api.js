@@ -1002,27 +1002,39 @@ function togglePushToTalk() {
 
 
 function startPushToTalk(event) {
-  if (!isPushToTalkEnabled) return;
-  event.preventDefault();
-  pushToTalkStartTime = Date.now();
+  //ui effect
   const logoWrapper = document.getElementById('logo-wrapper');
   logoWrapper.classList.add('active');
+  // if (!isPushToTalkEnabled) return;
+  // event.preventDefault();
+
+  pushToTalkStartTime = Date.now();
+  
   pushToTalkTimer = setTimeout(() => {
     startRecording(true);
+    checkClick("recording start")
   }, MIN_PUSH_TO_TALK_DURATION);
+
+  console.log('startPushToTalk');
+  
 }
 
 function endPushToTalk(event) {
-  if (!isPushToTalkEnabled) return;
-  event.preventDefault();
-  clearTimeout(pushToTalkTimer);
-  const logoWrapper = document.getElementById('logo-wrapper');
+  //ui e
+   const logoWrapper = document.getElementById('logo-wrapper');
   logoWrapper.classList.remove('active');
+  // if (!isPushToTalkEnabled) return;
+  // event.preventDefault();
+  clearTimeout(pushToTalkTimer);
+ 
   const duration = Date.now() - pushToTalkStartTime;
   if (duration >= MIN_PUSH_TO_TALK_DURATION) {
     stopRecording(true);
+    checkClick("recording ends")
   }
   pushToTalkStartTime = 0;
+  console.log('endPushToTalk');
+
 }
 
 
@@ -1068,7 +1080,7 @@ async function initialize() {
   const editAvatarButton = document.getElementById('edit-avatar-button');
   const pushToTalkToggle = document.getElementById('push-to-talk-toggle');
   const pushToTalkButton = document.getElementById('push-to-talk-button');
-  const simplePushTalkButton = document.getElementById('simple-push-talk-button');
+  const simplePushTalkButton = document.getElementById('logo-wrapper');
   const startButton = document.getElementById('start-button');
 
   sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
@@ -1085,11 +1097,14 @@ async function initialize() {
   pushToTalkButton.addEventListener('touchend', endPushToTalk);
 
   if (simplePushTalkButton) {
-    simplePushTalkButton.addEventListener('mousedown', startPushToTalk);
-    simplePushTalkButton.addEventListener('mouseup', endPushToTalk);
-    simplePushTalkButton.addEventListener('mouseleave', endPushToTalk);
-    simplePushTalkButton.addEventListener('touchstart', startPushToTalk);
+    if(isTouchDevice()){
+   simplePushTalkButton.addEventListener('touchstart', startPushToTalk);
     simplePushTalkButton.addEventListener('touchend', endPushToTalk);
+    }else{
+      simplePushTalkButton.addEventListener('mousedown', startPushToTalk);
+      simplePushTalkButton.addEventListener('mouseup', endPushToTalk);
+      simplePushTalkButton.addEventListener('mouseleave', endPushToTalk);
+    }
   }
 
   startButton.addEventListener('click', toggleRecording);
@@ -1186,14 +1201,14 @@ function applySimpleMode(mode) {
     if (!isPushToTalkEnabled) {
       togglePushToTalk();
     }
-    document.body.classList.add('simple-push-talk');
+    // document.body.classList.add('simple-push-talk');
     logoWrapper.style.backgroundImage = "url('Slogo_PushTalk.svg')";
 
-    document.body.addEventListener('mousedown', startPushToTalk);
-    document.body.addEventListener('mouseup', endPushToTalk);
-    document.body.addEventListener('mouseleave', endPushToTalk);
-    document.body.addEventListener('touchstart', startPushToTalk);
-    document.body.addEventListener('touchend', endPushToTalk);
+    // document.body.addEventListener('mousedown', startPushToTalk);
+    // document.body.addEventListener('mouseup', endPushToTalk);
+    // document.body.addEventListener('mouseleave', endPushToTalk);
+    // document.body.addEventListener('touchstart', startPushToTalk);
+    // document.body.addEventListener('touchend', endPushToTalk);
   }
 
   currentInterfaceMode = mode;
@@ -1206,7 +1221,7 @@ function exitSimpleMode() {
   const simpleModeButton = document.getElementById('simple-mode-button');
   const header = document.querySelector('.header');
   const logoWrapper = document.getElementById('logo-wrapper');
-  const simplePushTalkButton = document.getElementById('simple-push-talk-button');
+  const simplePushTalkButton = document.getElementById('logo-wrapper');
 
   // Restore content display
   content.style.display = 'flex';
@@ -1237,11 +1252,11 @@ function exitSimpleMode() {
   document.body.classList.remove('simple-push-talk');
 
   // Remove event listeners for push-to-talk
-  document.body.removeEventListener('mousedown', startPushToTalk);
-  document.body.removeEventListener('mouseup', endPushToTalk);
-  document.body.removeEventListener('mouseleave', endPushToTalk);
-  document.body.removeEventListener('touchstart', startPushToTalk);
-  document.body.removeEventListener('touchend', endPushToTalk);
+  // document.body.removeEventListener('mousedown', startPushToTalk);
+  // document.body.removeEventListener('mouseup', endPushToTalk);
+  // document.body.removeEventListener('mouseleave', endPushToTalk);
+  // document.body.removeEventListener('touchstart', startPushToTalk);
+  // document.body.removeEventListener('touchend', endPushToTalk);
 
   // Turn off auto-speak if it's on
   if (autoSpeakMode) {
@@ -2401,6 +2416,7 @@ function startSendingAudioData() {
 function handleTranscription(data, isPushToTalk) {
   if (!isRecording) return;
 
+  checkClick('inside  handle transacription');
   const transcript = data.channel.alternatives[0].transcript;
   if (data.is_final || isPushToTalk) {
     logger.debug('Final transcript:', transcript);
@@ -2426,11 +2442,13 @@ function handleTranscription(data, isPushToTalk) {
 async function startRecording(isPushToTalk = false) {
   if (isRecording && !isPushToTalk) {
     logger.warn('Recording is already in progress. Stopping current recording.');
+   
     await stopRecording();
     return;
   }
 
   logger.debug('Starting recording process...');
+ 
 
   currentUtterance = '';
   interimMessageAdded = false;
@@ -2511,8 +2529,10 @@ async function startRecording(isPushToTalk = false) {
     startButton.textContent = 'Stop';
 
     logger.debug('Recording and transcription started successfully');
+    
   } catch (error) {
     logger.error('Error starting recording:', error);
+    checkClick('error in recording', error)
     isRecording = false;
     const startButton = document.getElementById('start-button');
     startButton.textContent = 'Speak';
@@ -2581,6 +2601,7 @@ async function stopRecording(isPushToTalk = false) {
     }
 
     logger.debug('Recording and transcription stopped');
+    checkClick(`recording finished, here are the utterance ${currentUtterance.trim()}`)
 
     if (isPushToTalk && currentUtterance.trim()) {
       updateTranscript(currentUtterance.trim(), true);
@@ -2596,8 +2617,10 @@ async function stopRecording(isPushToTalk = false) {
 }
 
 async function sendChatToGroq() {
+  checkClick(`chat histiry content ${chatHistory}`);
   if (chatHistory.length === 0 || chatHistory[chatHistory.length - 1].content.trim() === '') {
     logger.debug('No new content to send to Groq. Skipping request.');
+    checkClick('No new content to send to Groq. Skipping request.')
     return;
   }
 
@@ -2617,6 +2640,7 @@ async function sendChatToGroq() {
     };
     logger.debug('Request body:', JSON.stringify(requestBody));
 
+    checkClick('request to groq sent');
     const response = await fetch('/chat', {
       method: 'POST',
       headers: {
@@ -2626,6 +2650,7 @@ async function sendChatToGroq() {
     });
 
     logger.debug('Groq response status:', response.status);
+    checkClick('Groq response status:'+ response.status);
 
     if (!response.ok) {
       throw new Error(`HTTP error ${response.status}`);
@@ -2774,6 +2799,34 @@ avatarImageInput.onchange = (event) => {
     reader.readAsDataURL(file);
   }
 };
+
+
+function isTouchDevice() {
+  const userAgent = navigator.userAgent;
+  const isMobile = /iPhone|Android|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+  const isTablet = /iPad|Tablet/i.test(userAgent) || (screen.width >= 768 && screen.width <= 1024);
+
+  if (isMobile) {
+    return true;
+  } else if (isTablet) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+
+async function checkClick(argument) {
+  try {
+    const response = await fetch(`/logging?arg=${argument}`, { argument });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+  } catch (error) {
+    logger.error('Error loading avatars:', error);
+    showErrorMessage('Failed to load avatars. Please try again.');
+  }
+}
 
 // Export functions and variables that need to be accessed from other modules
 export {

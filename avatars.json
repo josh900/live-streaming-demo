@@ -1,62 +1,86 @@
-{
-  "Guy5": {
-    "name": "Guy5",
-    "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Guy5/image.png",
-    "voiceId": "en-US-GuyNeural",
-    "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Guy5/silent_video.mp4"
+[
+  {
+      "id": "53842ae9-9e1c-446a-ac10-e2f5056b91e1",
+      "name": "Guy-1",
+      "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/53842ae9-9e1c-446a-ac10-e2f5056b91e1/image.png",
+      "voiceId": "en-US-AndrewNeural",
+      "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/53842ae9-9e1c-446a-ac10-e2f5056b91e1/silent_video.mp4"
   },
-  "JoshM1": {
-    "name": "JoshM1",
-    "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/JoshM1/image.png",
-    "voiceId": "en-US-GuyNeural",
-    "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/JoshM1/silent_video.mp4"
+  {
+      "id": "e053f447-1455-43df-b76a-9504f9276987",
+      "name": "Deck-Guy",
+      "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Deck-Guy/image.png",
+      "voiceId": "en-US-AndrewNeural",
+      "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Deck-Guy/silent_video.mp4"
   },
-  "test4": {
-    "name": "test4",
-    "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/test4/image.png",
-    "voiceId": "en-ZA-LukeNeural",
-    "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/test4/silent_video.mp4"
+  {
+      "id": "459ed7b7-8f0c-4b6f-84a8-83ec0c7acf3d",
+      "name": "Guy-2",
+      "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/459ed7b7-8f0c-4b6f-84a8-83ec0c7acf3d/image.png",
+      "voiceId": "en-US-AndrewNeural",
+      "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/459ed7b7-8f0c-4b6f-84a8-83ec0c7acf3d/silent_video.mp4"
   },
-  "Arshi": {
-    "name": "Arshi",
-    "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Arshi/image.png",
-    "voiceId": "en-US-AvaNeural",
-    "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Arshi/silent_video.mp4"
+  {
+      "id": "b03a403f-3862-4b61-bb0c-f97059d7443a",
+      "name": "Guy-3",
+      "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/b03a403f-3862-4b61-bb0c-f97059d7443a/image.png",
+      "voiceId": "en-US-AndrewNeural",
+      "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/b03a403f-3862-4b61-bb0c-f97059d7443a/silent_video.mp4"
   },
-  "Ava": {
-    "name": "Ava",
-    "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Ava/image.png",
-    "voiceId": "en-US-AvaNeural",
-    "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Ava/silent_video.mp4"
+  {
+      "id": "e0fb917d-3f8d-405d-9be2-10736785384d",
+      "name": "Woman-1",
+      "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/e0fb917d-3f8d-405d-9be2-10736785384d/image.png",
+      "voiceId": "en-US-EmmaNeural",
+      "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/e0fb917d-3f8d-405d-9be2-10736785384d/silent_video.mp4"
   },
-  "Brianna ": {
-    "name": "Brianna ",
-    "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Brianna /image.png",
-    "voiceId": "en-US-AvaNeural",
-    "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Brianna /silent_video.mp4"
+  {
+      "id": "bea53445-166e-4e2e-ade8-1285f23f0d02",
+      "name": "Woman-2",
+      "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/bea53445-166e-4e2e-ade8-1285f23f0d02/image.png",
+      "voiceId": "en-US-EmmaNeural",
+      "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/bea53445-166e-4e2e-ade8-1285f23f0d02/silent_video.mp4"
   },
-  "Jane": {
-    "name": "Jane",
-    "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Jane/image.png",
-    "voiceId": "en-US-AvaNeural",
-    "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Jane/silent_video.mp4"
+  {
+      "id": "f1b27e4e-9c47-4db0-bb3b-3a0094c6eeb5",
+      "name": "Delta",
+      "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/f1b27e4e-9c47-4db0-bb3b-3a0094c6eeb5/image.png",
+      "voiceId": "en-US-AndrewNeural",
+      "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/f1b27e4e-9c47-4db0-bb3b-3a0094c6eeb5/silent_video.mp4"
   },
-  "Alex": {
-    "name": "Alex",
-    "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Alex/image.png",
-    "voiceId": "en-US-GuyNeural",
-    "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Alex/silent_video.mp4"
+  {
+      "id": "227c2e7f-aba2-4e81-9a5f-c38bf2c8fc90",
+      "name": "Grocery",
+      "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/227c2e7f-aba2-4e81-9a5f-c38bf2c8fc90/image.png",
+      "voiceId": "en-US-AndrewNeural",
+      "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/227c2e7f-aba2-4e81-9a5f-c38bf2c8fc90/silent_video.mp4"
   },
-  "Jake Summers - Coppertone ": {
-    "name": "Jake Summers - Coppertone ",
-    "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Jake Summers - Coppertone /image.png",
-    "voiceId": "en-AU-KenNeural",
-    "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Jake Summers - Coppertone /silent_video.mp4"
+  {
+      "id": "3ad6ea94-8445-4543-ab1e-5967dd49626e",
+      "name": "Sandwhich ",
+      "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/3ad6ea94-8445-4543-ab1e-5967dd49626e/image.png",
+      "voiceId": "en-US-AndrewNeural",
+      "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/3ad6ea94-8445-4543-ab1e-5967dd49626e/silent_video.mp4"
   },
-  "Marc": {
-    "name": "Marc",
-    "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Marc/image.png",
-    "voiceId": "en-US-GuyNeural",
-    "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Marc/silent_video.mp4"
+  {
+      "id": "85de0548-5158-4e56-b75a-36e5c627c84d",
+      "name": "Hotel",
+      "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/85de0548-5158-4e56-b75a-36e5c627c84d/image.png",
+      "voiceId": "en-US-AndrewNeural",
+      "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/85de0548-5158-4e56-b75a-36e5c627c84d/silent_video.mp4"
+  },
+  {
+      "id": "c59338e0-f6af-42d4-bcd8-366edf6a08a3",
+      "name": "Store",
+      "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/c59338e0-f6af-42d4-bcd8-366edf6a08a3/image.png",
+      "voiceId": "en-US-AndrewNeural",
+      "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/c59338e0-f6af-42d4-bcd8-366edf6a08a3/silent_video.mp4"
+  },
+  {
+      "id": "b3d60f34-296a-4700-90e4-8833e7ad1f1c",
+      "name": "Mudita",
+      "imageUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/b3d60f34-296a-4700-90e4-8833e7ad1f1c/image.png",
+      "voiceId": "en-US-AndrewNeural",
+      "silentVideoUrl": "https://skoop-general.s3.us-east-1.amazonaws.com/avatars/b3d60f34-296a-4700-90e4-8833e7ad1f1c/silent_video.mp4"
   }
-}
+]
