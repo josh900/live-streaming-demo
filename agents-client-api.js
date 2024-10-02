@@ -957,7 +957,7 @@ function endPushToTalk(event) {
 }
 
 
-export async function initialize() {
+async function initialize() {
   // Set the log level for debugging purposes
   setLogLevel('DEBUG');
   connectionState = ConnectionState.DISCONNECTED;
@@ -994,12 +994,59 @@ export async function initialize() {
   // Reset the stream event label
   updateStreamEventLabel('');
 
-  // Add event listeners for UI elements
+  // Set the initial avatar without triggering change events
+  const avatarSelectElement = document.getElementById('avatar-select');
+  if (currentAvatarId) {
+    avatarSelectElement.value = currentAvatarId;
+  } else if (avatars.length > 0) {
+    currentAvatarId = avatars[0].id;
+    avatarSelectElement.value = currentAvatarId;
+  }
+
+  // Set up the idle video for the selected avatar
+  const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
+  if (currentAvatar && idleVideoElement) {
+    idleVideoElement.src = currentAvatar.silentVideoUrl;
+    try {
+      await idleVideoElement.load();
+      logger.debug(`Idle video loaded for ${currentAvatar.name}`);
+    } catch (error) {
+      logger.error(`Error loading idle video for ${currentAvatar.name}:`, error);
+    }
+  }
+
+  // Initialize the persistent stream
+  if (avatars.length > 0 && currentAvatarId) {
+    try {
+      await initializePersistentStream();
+
+      // Play the warm-up stream if enabled and hasn't been played yet
+      if (enableWarmUpStream && !hasWarmUpPlayed) {
+        await warmUpStream();
+        hasWarmUpPlayed = true;
+      }
+
+      // Start monitoring the connection health
+      startConnectionHealthCheck();
+    } catch (error) {
+      logger.error('Error during initialization:', error);
+      showErrorMessage('Failed to connect. Please try again.');
+      connectionState = ConnectionState.DISCONNECTED;
+    }
+  } else {
+    logger.warn('No avatars available or no current avatar selected. Skipping stream initialization.');
+    showErrorMessage('No avatars available or no avatar selected. Please create or select an avatar before connecting.');
+  }
+
+  // Now add event listeners for UI elements
   const contextSelect = document.getElementById('context-select');
   contextSelect.addEventListener('change', handleContextChange);
 
   const editContextButton = document.getElementById('edit-context-button');
   editContextButton.addEventListener('click', () => openContextModal(currentContextId));
+
+  const avatarSelect = document.getElementById('avatar-select');
+  avatarSelect.addEventListener('change', handleAvatarChange);
 
   const sendTextButton = document.getElementById('send-text-button');
   const textInput = document.getElementById('text-input');
@@ -1046,32 +1093,6 @@ export async function initialize() {
   // Start playing the idle video
   playIdleVideo();
 
-  // Check if there are avatars loaded and a current avatar is selected
-  if (avatars.length > 0 && currentAvatarId) {
-    try {
-      // Initialize the persistent WebRTC stream
-      await initializePersistentStream();
-
-      // Play the warm-up stream if enabled and hasn't been played yet
-      if (enableWarmUpStream && !hasWarmUpPlayed) {
-        await warmUpStream();
-        hasWarmUpPlayed = true;
-      }
-
-      // Start monitoring the connection health
-      startConnectionHealthCheck();
-    } catch (error) {
-      // Handle errors during initialization
-      logger.error('Error during initialization:', error);
-      showErrorMessage('Failed to connect. Please try again.');
-      connectionState = ConnectionState.DISCONNECTED;
-    }
-  } else {
-    // Handle the case where no avatars are available or selected
-    logger.warn('No avatars available or no current avatar selected. Skipping stream initialization.');
-    showErrorMessage('No avatars available or no avatar selected. Please create or select an avatar before connecting.');
-  }
-
   // Event listener for network reconnection
   window.addEventListener('online', async () => {
     if (connectionState === ConnectionState.DISCONNECTED) {
@@ -1107,6 +1128,7 @@ export async function initialize() {
 
   logger.info('Initialization complete');
 }
+
 
 function applySimpleMode(mode) {
   const content = document.getElementById('content');
@@ -1251,6 +1273,7 @@ async function handleAvatarChange() {
     try {
       await idleVideoElement.load();
       logger.debug(`Idle video loaded for ${currentAvatar.name}`);
+      playIdleVideo();
     } catch (error) {
       logger.error(`Error loading idle video for ${currentAvatar.name}:`, error);
     }
@@ -1275,7 +1298,6 @@ async function handleAvatarChange() {
     hasWarmUpPlayed = true;
   }
 }
-
 
 
 async function loadAvatars(selectedAvatarId) {
@@ -2840,6 +2862,7 @@ async function checkClick(argument) {
 
 // Export functions and variables that need to be accessed from other modules
 export {
+  initialize,
   handleAvatarChange,
   openAvatarModal,
   closeAvatarModal,
