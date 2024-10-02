@@ -94,6 +94,7 @@ let hasWarmUpPlayed = false;
 let enableWarmUpStream = true; // Set to false to disable
 let recordingDebounce = false;
 let audioStream = null;
+let stopRecordingTimer = null;
 
 
 function debouncedVideoStatusChange(isPlaying, stream) {
@@ -921,39 +922,48 @@ function togglePushToTalk() {
 
 
 function startPushToTalk(event) {
-  //ui effect
+  // UI effect
   const logoWrapper = document.getElementById('logo-wrapper');
   logoWrapper.classList.add('active');
-  // if (!isPushToTalkEnabled) return;
-  // event.preventDefault();
+
+  // Clear any existing stopRecordingTimer
+  if (stopRecordingTimer) {
+    clearTimeout(stopRecordingTimer);
+    stopRecordingTimer = null;
+  }
 
   pushToTalkStartTime = Date.now();
-  
+
   pushToTalkTimer = setTimeout(() => {
     startRecording(true);
-    checkClick("recording start")
+    checkClick("recording start");
   }, MIN_PUSH_TO_TALK_DURATION);
 
   console.log('startPushToTalk');
-  
 }
 
 function endPushToTalk(event) {
-  //ui e
-   const logoWrapper = document.getElementById('logo-wrapper');
+  // UI effect
+  const logoWrapper = document.getElementById('logo-wrapper');
   logoWrapper.classList.remove('active');
-  // if (!isPushToTalkEnabled) return;
-  // event.preventDefault();
+
   clearTimeout(pushToTalkTimer);
- 
+
   const duration = Date.now() - pushToTalkStartTime;
   if (duration >= MIN_PUSH_TO_TALK_DURATION) {
-    stopRecording(true);
-    checkClick("recording ends")
+    // Instead of stopping recording immediately, set a timer to stop after 1 second
+    if (stopRecordingTimer) {
+      clearTimeout(stopRecordingTimer);
+    }
+    stopRecordingTimer = setTimeout(() => {
+      stopRecording(true);
+      checkClick("recording ends");
+      // Reset the timer variable
+      stopRecordingTimer = null;
+    }, 1000);
   }
   pushToTalkStartTime = 0;
   console.log('endPushToTalk');
-
 }
 
 
