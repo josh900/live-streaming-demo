@@ -838,7 +838,17 @@ function scheduleReconnect() {
 
   const delay = Math.min(INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
   logger.debug(`Scheduling reconnection attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
-  setTimeout(backgroundReconnect, delay);
+
+  // Ensure reconnection keeps attempting until conditions are met
+  setTimeout(() => {
+    if (isRecording || isAvatarSpeaking) {
+      logger.info('Still recording or avatar speaking. Rescheduling reconnection.');
+      scheduleReconnect();
+    } else {
+      backgroundReconnect();
+    }
+  }, delay);
+
   reconnectAttempts++;
 }
 
@@ -915,6 +925,13 @@ async function backgroundReconnect() {
     return;
   }
 
+  // Check if recording is in progress or avatar is speaking
+  if (isRecording || isAvatarSpeaking) {
+    logger.info('Recording is in progress or avatar is speaking. Delaying reconnection.');
+    scheduleReconnect();
+    return;
+  }
+
   connectionState = ConnectionState.RECONNECTING;
   logger.debug('Starting background reconnection process...');
 
@@ -922,7 +939,6 @@ async function backgroundReconnect() {
     await destroyPersistentStream();
     await new Promise((resolve) => setTimeout(resolve, 300));
     await initializePersistentStream();
-    // Remove the warmUpStream call from here
     lastConnectionTime = Date.now();
     logger.info('Background reconnection completed successfully');
     connectionState = ConnectionState.CONNECTED;
@@ -933,7 +949,6 @@ async function backgroundReconnect() {
     scheduleReconnect();
   }
 }
-
 
 
 
