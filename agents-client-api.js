@@ -313,7 +313,7 @@ async function prepareForStreaming() {
   streamVideoElement.src = '';
   streamVideoElement.style.display = 'none';
 
-  idleVideoElement.style.display = 'block';
+  // idleVideoElement.style.display = 'block';
   idleVideoElement.play().catch((e) => logger.error('Error playing idle video:', e));
 
   logger.debug('Prepared for streaming');
@@ -375,7 +375,7 @@ function smoothTransition(toStreaming, duration = 300) {
   if (!idleVideoElement || !streamVideoElement) {
     logger.warn('Video elements not found for transition');
     isTransitioning = false;
-    checkPendingTransition();
+    // checkPendingTransition();
     return;
   }
 
@@ -424,7 +424,7 @@ function smoothTransition(toStreaming, duration = 300) {
       isCurrentlyStreaming = toStreaming;
       transitionCanvas.style.display = 'none';
       logger.debug('Smooth transition completed');
-      checkPendingTransition();
+      // checkPendingTransition();
     }
   }
 
