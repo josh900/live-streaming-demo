@@ -1044,7 +1044,7 @@ function endPushToTalk(event) {
 
 
 async function initialize() {
-  setLogLevel('DEBUG');
+  setLogLevel('INFO');
   connectionState = ConnectionState.DISCONNECTED;
 
   const { avatarId, contextId, interfaceMode, header } = getUrlParameters();
@@ -2541,7 +2541,7 @@ async function startRecording(isPushToTalk = false) {
     // Clean up resources
     await cleanUpRecordingResources();
 
-    showErrorMessage('Failed to start recording. Please try again.');
+    // showErrorMessage('Failed to start recording. Please try again.');
   }
 
   recordingDebounce = false;
@@ -2856,7 +2856,7 @@ startButton.onclick = async () => {
       await startRecording();
     } catch (error) {
       logger.error('Failed to start recording:', error);
-      showErrorMessage('Failed to start recording. Please try again.');
+      // showErrorMessage('Failed to start recording. Please try again.');
     }
   } else {
     await stopRecording();
