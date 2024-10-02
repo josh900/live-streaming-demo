@@ -566,145 +566,56 @@ function updateAssistantReply(text) {
 
 
 async function warmUpStream() {
+  if (isWarmingUp) {
+    logger.warn('Already warming up. Skipping.');
+    return;
+  }
+
+  if (!persistentStreamId || !persistentSessionId || !isPersistentStreamActive) {
+    logger.error('Persistent stream not initialized. Cannot warm up stream.');
+    return;
+  }
+
   isWarmingUp = true;
-  const streamVideoElement = document.getElementById('stream-video-element');
-  const idleVideoElement = document.getElementById('idle-video-element');
-  const originalStreamDisplay = streamVideoElement.style.display;
-  const originalIdleDisplay = idleVideoElement.style.display;
+  logger.debug('Warming up stream...');
 
   try {
-    logger.debug('Warming up stream...');
+    // New behavior: Play pre-recorded silent video as warm-up stream
+    streamVideoElement.style.display = 'none';
+    streamVideoElement.muted = true;
+    streamVideoElement.src = 'https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Ava/silent_video.mp4';
 
-    if (enableWarmUpStream) {
-      // Existing warm-up logic using D-ID API
-      const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
-      if (!currentAvatar) {
-        logger.error('No avatar selected or avatar not found. Cannot warm up stream.');
-        return;
-      }
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Timeout waiting for silent video to be ready to play'));
+      }, 10000); // 10 seconds timeout
 
-      if (!persistentStreamId || !persistentSessionId) {
-        logger.error('Persistent stream not initialized. Cannot warm up stream.');
-        return;
-      }
+      streamVideoElement.oncanplay = () => {
+        clearTimeout(timeout);
+        streamVideoElement.play().then(resolve).catch(reject);
+      };
 
-      const warmUpResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams/${persistentStreamId}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${DID_API.key}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          script: {
-            type: 'text',
-            input: '<break time="1500ms"/>',
-            ssml: true,
-            provider: {
-              type: 'microsoft',
-              voice_id: currentAvatar.voiceId,
-            },
-          },
-          session_id: persistentSessionId,
-          driver_url: 'bank://lively/driver-06',
-          compatibility_mode: 'on',
-          config: {
-            fluent: true,
-            stitch: true,
-            pad_audio: 0.5,
-            auto_match: true,
-            align_driver: true,
-            normalization_factor: 0.1,
-            align_expand_factor: 0.3,
-            motion_factor: 0.55,
-            result_format: 'mp4',
-          },
-        }),
-      });
+      streamVideoElement.onerror = () => {
+        clearTimeout(timeout);
+        reject(new Error('Error loading silent video'));
+      };
+    });
 
-      if (!warmUpResponse.ok) {
-        throw new Error(`HTTP error! status: ${warmUpResponse.status}`);
-      }
+    await new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        logger.warn('Silent video did not end naturally, forcing completion');
+        hasWarmUpPlayed = true;
+        updateStreamEventLabel('');
+        resolve();
+      }, 5000); // 5 seconds timeout
 
-      const warmUpData = await warmUpResponse.json();
-      logger.debug('Warm-up stream response:', warmUpData);
+      streamVideoElement.onended = () => {
+        clearTimeout(timeout);
+        resolve();
+      };
+    });
 
-      if (warmUpData.status === 'started') {
-        streamVideoElement.style.display = 'none';
-        streamVideoElement.muted = true;
-        streamVideoElement.src = warmUpData.result_url;
-
-        await new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            reject(new Error('Timeout waiting for video to be ready to play'));
-          }, 10000); // 10 seconds timeout
-
-          streamVideoElement.oncanplay = () => {
-            clearTimeout(timeout);
-            streamVideoElement.play().then(resolve).catch(reject);
-          };
-
-          streamVideoElement.onerror = () => {
-            clearTimeout(timeout);
-            reject(new Error('Error loading warm-up video'));
-          };
-        });
-
-        await new Promise((resolve) => {
-          const timeout = setTimeout(() => {
-            logger.warn('Warm-up video did not end naturally, forcing completion');
-            hasWarmUpPlayed = true;
-            updateStreamEventLabel('');
-            resolve();
-          }, 5000); // 5 seconds timeout
-
-          streamVideoElement.onended = () => {
-            clearTimeout(timeout);
-            resolve();
-          };
-        });
-
-        logger.debug('Warm-up stream completed');
-      } else {
-        logger.warn('Unexpected response status for warm-up stream:', warmUpData.status);
-      }
-    } else {
-      // New behavior: Play pre-recorded silent video as warm-up stream
-      streamVideoElement.style.display = 'none';
-      streamVideoElement.muted = true;
-      streamVideoElement.src = 'https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Ava/silent_video.mp4';
-
-      await new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error('Timeout waiting for silent video to be ready to play'));
-        }, 10000); // 10 seconds timeout
-
-        streamVideoElement.oncanplay = () => {
-          clearTimeout(timeout);
-          streamVideoElement.play().then(resolve).catch(reject);
-        };
-
-        streamVideoElement.onerror = () => {
-          clearTimeout(timeout);
-          reject(new Error('Error loading silent video'));
-        };
-      });
-
-      await new Promise((resolve) => {
-        const timeout = setTimeout(() => {
-          logger.warn('Silent video did not end naturally, forcing completion');
-          hasWarmUpPlayed = true;
-          updateStreamEventLabel('');
-          resolve();
-        }, 5000); // 5 seconds timeout
-
-        streamVideoElement.onended = () => {
-          clearTimeout(timeout);
-          resolve();
-        };
-      });
-
-      logger.debug('Warm-up stream using silent video completed');
-    }
+    logger.debug('Warm-up stream using silent video completed');
   } catch (error) {
     logger.error('Error during stream warm-up:', error);
   } finally {
@@ -712,8 +623,8 @@ async function warmUpStream() {
     isCurrentlyStreaming = false;
     isAvatarSpeaking = false;
     streamVideoElement.muted = false;
-    streamVideoElement.style.display = originalStreamDisplay;
-    idleVideoElement.style.display = originalIdleDisplay;
+    streamVideoElement.style.display = '';
+    idleVideoElement.style.display = '';
     smoothTransition(false);
     hasWarmUpPlayed = true;
     updateStreamEventLabel(''); // Set to empty string to indicate idle state
@@ -733,8 +644,8 @@ async function initializePersistentStream() {
   }
 
   isInitializingStream = true;
-  logger.info('Initializing persistent stream...');
   connectionState = ConnectionState.CONNECTING;
+  logger.info('Initializing persistent stream...');
 
   try {
     const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
@@ -775,14 +686,7 @@ async function initializePersistentStream() {
 
     logger.info('Persistent stream created:', { persistentStreamId, persistentSessionId });
 
-    try {
-      sessionClientAnswer = await createPeerConnection(offer, iceServers);
-    } catch (e) {
-      logger.error('Error during streaming setup:', e);
-      stopAllStreams();
-      closePC();
-      throw e;
-    }
+    sessionClientAnswer = await createPeerConnection(offer, iceServers);
 
     await new Promise((resolve) => setTimeout(resolve, 300));
 
@@ -801,17 +705,12 @@ async function initializePersistentStream() {
     if (!sdpResponse.ok) {
       throw new Error(`Failed to set SDP: ${sdpResponse.status} ${sdpResponse.statusText}`);
     }
+
     isPersistentStreamActive = true;
     startKeepAlive();
     lastConnectionTime = Date.now();
     logger.info('Persistent stream initialized successfully');
     connectionState = ConnectionState.CONNECTED;
-
-    // Always call warmUpStream() if warm-up hasn't played yet
-    if (!hasWarmUpPlayed) {
-      await warmUpStream();
-      hasWarmUpPlayed = true;
-    }
   } catch (error) {
     logger.error('Failed to initialize persistent stream:', error);
     isPersistentStreamActive = false;
@@ -1058,36 +957,44 @@ function endPushToTalk(event) {
 }
 
 
-async function initialize() {
+export async function initialize() {
+  // Set the log level for debugging purposes
   setLogLevel('DEBUG');
   connectionState = ConnectionState.DISCONNECTED;
 
+  // Retrieve parameters from the URL
   const { avatarId, contextId, interfaceMode, header } = getUrlParameters();
   currentInterfaceMode = interfaceMode;
 
-  // Handle header visibility
+  // Handle header visibility based on the URL parameter
   const headerBar = document.getElementById('header-bar');
   if (headerBar && header) {
     headerBar.classList.add('visible');
   }
 
+  // Get references to the video elements
   const { idle, stream } = getVideoElements();
   idleVideoElement = idle;
   streamVideoElement = stream;
 
+  // Ensure videos are set to play inline
   if (idleVideoElement) idleVideoElement.setAttribute('playsinline', '');
   if (streamVideoElement) streamVideoElement.setAttribute('playsinline', '');
 
+  // Initialize the canvas used for smooth transitions between videos
   initializeTransitionCanvas();
 
+  // Load avatars and contexts, and set the current selections
   await loadAvatars(avatarId);
   await loadContexts(contextId);
   populateAvatarSelect();
   populateContextSelect();
   updateContextDisplay();
+
+  // Reset the stream event label
   updateStreamEventLabel('');
 
-
+  // Add event listeners for UI elements
   const contextSelect = document.getElementById('context-select');
   contextSelect.addEventListener('change', handleContextChange);
 
@@ -1103,13 +1010,17 @@ async function initialize() {
   const simplePushTalkButton = document.getElementById('logo-wrapper');
   const startButton = document.getElementById('start-button');
 
+  // Event listeners for text input and buttons
   sendTextButton.addEventListener('click', () => handleTextInput(textInput.value));
   textInput.addEventListener('keypress', (event) => {
     if (event.key === 'Enter') handleTextInput(textInput.value);
   });
+
   autoSpeakToggle.addEventListener('click', toggleAutoSpeak);
   editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatarId));
   pushToTalkToggle.addEventListener('click', togglePushToTalk);
+
+  // Event listeners for push-to-talk functionality
   pushToTalkButton.addEventListener('mousedown', startPushToTalk);
   pushToTalkButton.addEventListener('mouseup', endPushToTalk);
   pushToTalkButton.addEventListener('mouseleave', endPushToTalk);
@@ -1117,10 +1028,10 @@ async function initialize() {
   pushToTalkButton.addEventListener('touchend', endPushToTalk);
 
   if (simplePushTalkButton) {
-    if(isTouchDevice()){
-   simplePushTalkButton.addEventListener('touchstart', startPushToTalk);
-    simplePushTalkButton.addEventListener('touchend', endPushToTalk);
-    }else{
+    if (isTouchDevice()) {
+      simplePushTalkButton.addEventListener('touchstart', startPushToTalk);
+      simplePushTalkButton.addEventListener('touchend', endPushToTalk);
+    } else {
       simplePushTalkButton.addEventListener('mousedown', startPushToTalk);
       simplePushTalkButton.addEventListener('mouseup', endPushToTalk);
       simplePushTalkButton.addEventListener('mouseleave', endPushToTalk);
@@ -1129,27 +1040,39 @@ async function initialize() {
 
   startButton.addEventListener('click', toggleRecording);
 
+  // Initialize WebSocket connection
   initializeWebSocket();
+
+  // Start playing the idle video
   playIdleVideo();
 
+  // Check if there are avatars loaded and a current avatar is selected
   if (avatars.length > 0 && currentAvatarId) {
     try {
+      // Initialize the persistent WebRTC stream
       await initializePersistentStream();
+
+      // Play the warm-up stream if enabled and hasn't been played yet
       if (enableWarmUpStream && !hasWarmUpPlayed) {
         await warmUpStream();
-        // hasWarmUpPlayed = true;
+        hasWarmUpPlayed = true;
       }
+
+      // Start monitoring the connection health
       startConnectionHealthCheck();
     } catch (error) {
+      // Handle errors during initialization
       logger.error('Error during initialization:', error);
       showErrorMessage('Failed to connect. Please try again.');
       connectionState = ConnectionState.DISCONNECTED;
     }
   } else {
+    // Handle the case where no avatars are available or selected
     logger.warn('No avatars available or no current avatar selected. Skipping stream initialization.');
     showErrorMessage('No avatars available or no avatar selected. Please create or select an avatar before connecting.');
   }
 
+  // Event listener for network reconnection
   window.addEventListener('online', async () => {
     if (connectionState === ConnectionState.DISCONNECTED) {
       logger.info('Network connection restored. Attempting to reconnect...');
@@ -1161,6 +1084,7 @@ async function initialize() {
     }
   });
 
+  // Event listener for page visibility changes
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && connectionState === ConnectionState.DISCONNECTED) {
       logger.info('Page became visible. Checking connection...');
@@ -1170,25 +1094,18 @@ async function initialize() {
     }
   });
 
-  // Apply simple mode after initialization is complete
+  // Apply simple mode if specified in the URL parameters
   if (currentInterfaceMode === 'simpleVoice' || currentInterfaceMode === 'simplePushTalk') {
     applySimpleMode(currentInterfaceMode);
   }
 
-  // Check if the application is running in an iframe
-  if (window.self !== window.top) {
-    console.log('Running in iframe mode');
-  }
-
-  // Remove the initialization class to show the content
+  // Remove the initializing class from the body to display content
   document.body.classList.remove('initializing');
 
-  document.addEventListener('DOMContentLoaded', notifyParentWindowReady);
-
+  // Notify any parent window that the app is ready
+  notifyParentWindowReady();
 
   logger.info('Initialization complete');
-
-
 }
 
 function applySimpleMode(mode) {
@@ -2923,7 +2840,6 @@ async function checkClick(argument) {
 
 // Export functions and variables that need to be accessed from other modules
 export {
-  initialize,
   handleAvatarChange,
   openAvatarModal,
   closeAvatarModal,
