@@ -571,10 +571,10 @@ async function warmUpStream() {
     return;
   }
 
-  if (!persistentStreamId || !persistentSessionId || !isPersistentStreamActive) {
-    logger.error('Persistent stream not initialized. Cannot warm up stream.');
-    return;
-  }
+  // if (!persistentStreamId || !persistentSessionId || !isPersistentStreamActive) {
+  //   logger.error('Persistent stream not initialized. Cannot warm up stream.');
+  //   return;
+  // }
 
   isWarmingUp = true;
   logger.debug('Warming up stream...');
