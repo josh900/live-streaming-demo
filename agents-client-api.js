@@ -960,7 +960,7 @@ function endPushToTalk(event) {
       checkClick("recording ends");
       // Reset the timer variable
       stopRecordingTimer = null;
-    }, 1000);
+    }, 400);
   }
   pushToTalkStartTime = 0;
   console.log('endPushToTalk');
