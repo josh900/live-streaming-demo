@@ -625,7 +625,7 @@ async function warmUpStream() {
     streamVideoElement.muted = false;
     streamVideoElement.style.display = '';
     idleVideoElement.style.display = '';
-    smoothTransition(false);
+    //smoothTransition(false);
     hasWarmUpPlayed = true;
     updateStreamEventLabel(''); // Set to empty string to indicate idle state
     logger.debug('Warm-up process finished, restored original video element states');
