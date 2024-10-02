@@ -3,11 +3,11 @@
 // Import statements at the top
 import DID_API from './api.js';
 import logger from './logger.js';
-// import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
 
 // Initialize the Deepgram client
-const deepgramClient = createClient(DID_API.deepgramKey);
+const deepgramClient = deepgram.createClient(DID_API.deepgramKey);
 
+const LiveTranscriptionEvents = deepgram.LiveTranscriptionEvents;
 
 function getUrlParameters() {
   const urlParams = new URLSearchParams(window.location.search);
