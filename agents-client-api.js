@@ -624,7 +624,7 @@ async function warmUpStream() {
     isAvatarSpeaking = false;
     streamVideoElement.muted = false;
     streamVideoElement.style.display = '';
-    // idleVideoElement.style.display = '';
+    idleVideoElement.style.display = '';
     //smoothTransition(false);
     hasWarmUpPlayed = true;
     streamVideoElement.srcObject = null;
