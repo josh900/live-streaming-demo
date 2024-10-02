@@ -2444,7 +2444,7 @@ async function startRecording(isPushToTalk = false) {
 
     // Define Deepgram options
     const deepgramOptions = {
-      model: 'nova',
+      model: 'nova-2-general',
       language: 'en-US',
       smart_format: true,
       interim_results: true,
