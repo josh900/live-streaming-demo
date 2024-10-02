@@ -1946,13 +1946,13 @@ function onTrack(event) {
           }
         });
         if (!videoStatsFound) {
-          logger.debug('No video stats found yet.');
+          // logger.debug('No video stats found yet.');
         }
       } catch (error) {
         logger.error('Error getting stats:', error);
       }
     } else {
-      logger.debug('Peer connection not ready for stats.');
+      // logger.debug('Peer connection not ready for stats.');
     }
   }, 50); // Check every 100ms
 
