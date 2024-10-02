@@ -1,8 +1,13 @@
 'use strict';
+
+// Import statements at the top
 import DID_API from './api.js';
 import logger from './logger.js';
+import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
 
-const { createClient, LiveTranscriptionEvents } = deepgram;
+// Initialize the Deepgram client
+const deepgramClient = createClient(DID_API.deepgramKey);
+
 
 function getUrlParameters() {
   const urlParams = new URLSearchParams(window.location.search);
@@ -13,9 +18,6 @@ function getUrlParameters() {
     header: urlParams.get('header') !== 'false' // true by default, false only if explicitly set to 'false'
   };
 }
-
-
-const deepgramClient = createClient(DID_API.deepgramKey);
 
 const RTCPeerConnection = (
   window.RTCPeerConnection ||
@@ -2392,7 +2394,7 @@ function startSendingAudioData() {
       return;
     }
 
-    if (deepgramConnection && deepgramConnection.getReadyState() === 1) { // 1 corresponds to OPEN state
+    if (deepgramConnection && deepgramConnection.getReadyState() === WebSocket.OPEN) {
       try {
         deepgramConnection.send(audioData);
       } catch (error) {
@@ -2408,7 +2410,6 @@ function startSendingAudioData() {
 
   logger.debug('Audio data sending setup complete');
 }
-
 // agents-client-api.js
 
 function handleTranscription(data, isPushToTalk) {
@@ -2442,6 +2443,7 @@ async function startRecording(isPushToTalk = false) {
 
   if (isRecording) {
     logger.warn('Recording is already in progress.');
+    recordingDebounce = false;
     return;
   }
 
@@ -2476,9 +2478,9 @@ async function startRecording(isPushToTalk = false) {
     source.connect(audioWorkletNode);
     logger.debug('Media stream source connected to audio worklet node');
 
-    // Deepgram options
+    // Define Deepgram options
     const deepgramOptions = {
-      model: 'nova-2',
+      model: 'nova',
       language: 'en-US',
       smart_format: true,
       interim_results: true,
@@ -2489,20 +2491,20 @@ async function startRecording(isPushToTalk = false) {
 
     if (!isPushToTalk) {
       deepgramOptions.utterance_end_ms = 2500;
-      deepgramOptions.vad_events = true;
+      deepgramOptions.vad_turnoff = true;
     }
 
     // Create Deepgram connection
     logger.debug('Creating Deepgram connection with options:', deepgramOptions);
-    deepgramConnection = deepgramClient.transcription.live(deepgramOptions);
+    deepgramConnection = deepgramClient.listen.live(deepgramOptions);
 
-    // Event listeners
-    deepgramConnection.addListener('open', () => {
+    // Set up event listeners
+    deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
       logger.debug('Deepgram WebSocket Connection opened');
       startSendingAudioData();
     });
 
-    deepgramConnection.addListener('close', async () => {
+    deepgramConnection.addListener(LiveTranscriptionEvents.Close, async () => {
       logger.debug('Deepgram WebSocket connection closed');
 
       if (isRecording) {
@@ -2512,12 +2514,12 @@ async function startRecording(isPushToTalk = false) {
       }
     });
 
-    deepgramConnection.addListener('transcriptReceived', (data) => {
+    deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
       logger.debug('Received transcription:', JSON.stringify(data));
       handleTranscription(data, isPushToTalk);
     });
 
-    deepgramConnection.addListener('error', (err) => {
+    deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
       logger.error('Deepgram error:', err);
       handleDeepgramError(err);
     });
@@ -2537,61 +2539,29 @@ async function startRecording(isPushToTalk = false) {
     isRecording = false;
 
     // Clean up resources
-    if (audioWorkletNode) {
-      audioWorkletNode.port.close();
-      audioWorkletNode.disconnect();
-      audioWorkletNode = null;
-    }
-
-    if (audioContext) {
-      await audioContext.close();
-      audioContext = null;
-    }
-
-    if (audioStream) {
-      audioStream.getTracks().forEach((track) => track.stop());
-      audioStream = null;
-      logger.debug('Audio stream stopped');
-
-    }
-
-    if (deepgramConnection) {
-      try {
-        deepgramConnection.removeAllListeners();
-        deepgramConnection.finish();
-        deepgramConnection = null;
-        logger.debug('Deepgram connection closed after error');
-      } catch (closeError) {
-        logger.warn('Error while closing Deepgram connection:', closeError);
-      }
-    }
-
-    // Update UI
-    if (!isPushToTalk) {
-      const startButton = document.getElementById('start-button');
-      if (startButton) {
-        startButton.textContent = 'Speak';
-      }
-    }
+    await cleanUpRecordingResources();
 
     showErrorMessage('Failed to start recording. Please try again.');
   }
+
   recordingDebounce = false;
-
 }
-
 
 function handleDeepgramError(err) {
   logger.error('Deepgram error:', err);
   isRecording = false;
   const startButton = document.getElementById('start-button');
-  startButton.textContent = 'Speak';
+  if (startButton) {
+    startButton.textContent = 'Speak';
+  }
 
   // Attempt to close the connection and clean up
   if (deepgramConnection) {
     try {
       deepgramConnection.removeAllListeners();
-      deepgramConnection.finish();
+      deepgramConnection.close();
+      deepgramConnection = null;
+      logger.debug('Deepgram connection closed after error');
     } catch (closeError) {
       logger.warn('Error while closing Deepgram connection:', closeError);
     }
@@ -2601,8 +2571,52 @@ function handleDeepgramError(err) {
     audioContext.close().catch((closeError) => {
       logger.warn('Error while closing AudioContext:', closeError);
     });
+    audioContext = null;
+  }
+
+  if (audioStream) {
+    audioStream.getTracks().forEach((track) => track.stop());
+    audioStream = null;
+    logger.debug('Audio stream stopped');
   }
 }
+
+
+async function cleanUpRecordingResources() {
+  // Clean up resources
+  if (audioWorkletNode) {
+    audioWorkletNode.port.close();
+    audioWorkletNode.disconnect();
+    audioWorkletNode = null;
+  }
+
+  if (audioContext) {
+    try {
+      await audioContext.close();
+    } catch (error) {
+      logger.warn('Error while closing AudioContext:', error);
+    }
+    audioContext = null;
+  }
+
+  if (audioStream) {
+    audioStream.getTracks().forEach((track) => track.stop());
+    audioStream = null;
+    logger.debug('Audio stream stopped');
+  }
+
+  if (deepgramConnection) {
+    try {
+      deepgramConnection.removeAllListeners();
+      deepgramConnection.close();
+      deepgramConnection = null;
+      logger.debug('Deepgram connection closed after error');
+    } catch (closeError) {
+      logger.warn('Error while closing Deepgram connection:', closeError);
+    }
+  }
+}
+
 
 function handleUtteranceEnd(data) {
   if (!isRecording) return;
