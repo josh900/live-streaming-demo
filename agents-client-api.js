@@ -1084,18 +1084,16 @@ async function initialize() {
   pushToTalkButton.addEventListener('touchstart', startPushToTalk);
   pushToTalkButton.addEventListener('touchend', endPushToTalk);
 
-// These listeners are now added in applySimpleMode when needed
-
-// if (simplePushTalkButton) {
-//   if (isTouchDevice()) {
-//     simplePushTalkButton.addEventListener('touchstart', startPushToTalk);
-//     simplePushTalkButton.addEventListener('touchend', endPushToTalk);
-//   } else {
-//     simplePushTalkButton.addEventListener('mousedown', startPushToTalk);
-//     simplePushTalkButton.addEventListener('mouseup', endPushToTalk);
-//     simplePushTalkButton.addEventListener('mouseleave', endPushToTalk);
-//   }
-// }
+  if (simplePushTalkButton) {
+    if (isTouchDevice()) {
+      simplePushTalkButton.addEventListener('touchstart', startPushToTalk);
+      simplePushTalkButton.addEventListener('touchend', endPushToTalk);
+    } else {
+      simplePushTalkButton.addEventListener('mousedown', startPushToTalk);
+      simplePushTalkButton.addEventListener('mouseup', endPushToTalk);
+      simplePushTalkButton.addEventListener('mouseleave', endPushToTalk);
+    }
+  }
 
   startButton.addEventListener('click', toggleRecording);
 
@@ -1172,37 +1170,19 @@ function applySimpleMode(mode) {
     if (!isPushToTalkEnabled) {
       togglePushToTalk();
     }
+    // document.body.classList.add('simple-push-talk');
+    logoWrapper.style.backgroundImage = "url('Slogo_PushTalk.svg')";
 
-    // Add class to body for CSS styles
-    document.body.classList.add('simple-push-talk');
-
-    // Attach event listeners to logoWrapper
-    if (isTouchDevice()) {
-      logoWrapper.addEventListener('mousedown', () => {
-        logoWrapper.classList.add('pressed-effect');
-      });
-      
-      logoWrapper.addEventListener('mouseup', () => {
-        logoWrapper.classList.remove('pressed-effect');
-      });
-    } else {
-
-      logoWrapper.addEventListener('mousedown', () => {
-        logoWrapper.classList.add('pressed-effect');
-      });
-      
-      logoWrapper.addEventListener('mouseup', () => {
-        logoWrapper.classList.remove('pressed-effect');
-      });
-      
-    }
+    // document.body.addEventListener('mousedown', startPushToTalk);
+    // document.body.addEventListener('mouseup', endPushToTalk);
+    // document.body.addEventListener('mouseleave', endPushToTalk);
+    // document.body.addEventListener('touchstart', startPushToTalk);
+    // document.body.addEventListener('touchend', endPushToTalk);
   }
 
   currentInterfaceMode = mode;
   logger.info(`Applied simple mode: ${mode}`);
 }
-
-// agents-client-api.js
 
 function exitSimpleMode() {
   const content = document.getElementById('content');
@@ -1210,6 +1190,7 @@ function exitSimpleMode() {
   const simpleModeButton = document.getElementById('simple-mode-button');
   const header = document.querySelector('.header');
   const logoWrapper = document.getElementById('logo-wrapper');
+  const simplePushTalkButton = document.getElementById('logo-wrapper');
 
   // Restore content display
   content.style.display = 'flex';
@@ -1230,15 +1211,21 @@ function exitSimpleMode() {
   header.style.position = 'static';
   header.style.width = 'auto';
 
-  // Remove class from body
+  // Reset logo
+  logoWrapper.style.backgroundImage = "url('Slogo.svg')";
+  logoWrapper.style.width = '100%'; // Reset to original width
+  logoWrapper.style.height = '18%'; // Reset to original width
+
+
+  // Remove simple push talk class from body
   document.body.classList.remove('simple-push-talk');
 
-  // Remove event listeners from logoWrapper
-  logoWrapper.removeEventListener('mousedown', startPushToTalk);
-  logoWrapper.removeEventListener('mouseup', endPushToTalk);
-  logoWrapper.removeEventListener('mouseleave', endPushToTalk);
-  logoWrapper.removeEventListener('touchstart', startPushToTalk);
-  logoWrapper.removeEventListener('touchend', endPushToTalk);
+  // Remove event listeners for push-to-talk
+  // document.body.removeEventListener('mousedown', startPushToTalk);
+  // document.body.removeEventListener('mouseup', endPushToTalk);
+  // document.body.removeEventListener('mouseleave', endPushToTalk);
+  // document.body.removeEventListener('touchstart', startPushToTalk);
+  // document.body.removeEventListener('touchend', endPushToTalk);
 
   // Turn off auto-speak if it's on
   if (autoSpeakMode) {
@@ -1253,6 +1240,11 @@ function exitSimpleMode() {
   // Stop recording if it's active
   if (isRecording) {
     stopRecording();
+  }
+
+  // Hide simple push talk button if it exists
+  if (simplePushTalkButton) {
+    simplePushTalkButton.style.display = 'none';
   }
 
   // Reset interface mode
