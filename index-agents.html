@@ -200,6 +200,7 @@
   </script>
 
   <script src="https://cdn.jsdelivr.net/npm/@deepgram/sdk"></script>
+
   <script type="module">
     import {
       initialize,
@@ -216,18 +217,18 @@
 
     // Make closeAvatarModal available globally
     window.closeAvatarModal = closeAvatarModal;
+
     // Initialize the app when the DOM is ready
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initialize);
-    } else {
-      initialize();
-    }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initialize);
+  } else {
+    initialize();
+  }
+
+  document.getElementById('simple-mode-button').addEventListener('click', toggleSimpleMode);
+
   </script>
 
-  <script type="module">
-    import { toggleSimpleMode } from './agents-client-api.js';
-    document.getElementById('simple-mode-button').addEventListener('click', toggleSimpleMode);
-  </script>
 
 <script>
   const logoWrapper = document.getElementById('logo-wrapper');
