@@ -924,9 +924,10 @@ function togglePushToTalk() {
 function startPushToTalk(event) {
   event.preventDefault();
   const logoWrapper = document.getElementById('logo-wrapper');
-  logoWrapper.classList.add('active');
-  updateButtonText('Listening...');
+  logoWrapper.classList.remove('active');
+  updateButtonText('Hold to Talk');
   processingMessage(false, "");
+
 
   if (stopRecordingTimer) {
     clearTimeout(stopRecordingTimer);
@@ -969,11 +970,12 @@ function endPushToTalk(event) {
 
 function updateButtonText(text) {
   const logoWrapper = document.getElementById('logo-wrapper');
-  const logoWrapperText = logoWrapper.querySelector('text');
-  if (logoWrapperText) {
-    logoWrapperText.textContent = text;
+  const buttonText = logoWrapper.querySelector('#button-text');
+  if (buttonText) {
+    buttonText.textContent = text;
   }
 }
+
 
 function processingMessage(status, message) {
   const div = document.getElementById('processing-message');
@@ -2492,7 +2494,8 @@ async function startRecording(isPushToTalk = false) {
     deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
       logger.debug('Deepgram WebSocket Connection opened');
       startSendingAudioData();
-      userCanSpeak=true;
+      updateButtonText('Speak Now');
+      processingMessage(true, "Speak Now");
     });
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Close, async () => {
@@ -2671,8 +2674,10 @@ async function stopRecording(isPushToTalk = false) {
     }
 
     // If Utterance empty
-    if(currentUtterance.trim() == ""){
-      processingMessage(true, "Sorry, Could you speak again?")
+    if (currentUtterance.trim() == "") {
+      processingMessage(true, "Sorry, Could you speak again?");
+    } else {
+      processingMessage(true, "Processing...");
     }
 
     logger.debug('Recording and transcription stopped');
