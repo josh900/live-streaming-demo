@@ -20,6 +20,13 @@ app.post('/chat', async (req, res) => {
 
   // Get the current API key and update the index for the next call
   const apiKey = groqKeys[currentKeyIndex];
+
+  // Log the index and a masked version of the API key
+  console.log(
+    `Using Groq API key index ${currentKeyIndex}: ****${apiKey.slice(-4)}`
+  );
+
+  // Update the index for the next call
   currentKeyIndex = (currentKeyIndex + 1) % groqKeys.length;
 
   // Initialize the Groq client with the selected API key
