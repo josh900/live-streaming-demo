@@ -134,20 +134,17 @@ h4 {
 
 #logo-wrapper {
   position: absolute;
-  left: 50%;
+  left: 1%;
   bottom: 2%;
-  transform: translateX(-50%);
-  width: 150px;
-  height: 150px;
-  background-image: url('Slogo_PushTalk.svg');
+  width: 40%;
+  height: 18%;
+  z-index: 10;
+  cursor: pointer;
+  background-image: url('Slogo.svg');
   background-size: contain;
   background-repeat: no-repeat;
-  background-position: center;
-  cursor: pointer;
-}
-
-#logo-wrapper.pressed-effect {
-  filter: brightness(0.8);
+  background-position: left bottom;
+  transition: width 0.3s ease-in-out, transform 0.1s ease-in-out;
 }
 
 #logo-wrapper span {
@@ -506,8 +503,3 @@ body.simple-push-talk {
   border-radius: 9%; /* Match the border-radius of the wrapper */
 }
 
-
-html,
-body {
-  -webkit-touch-callout: none; /* Disable callout, image save panel (iOS) */
-}

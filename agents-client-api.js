@@ -187,22 +187,6 @@ function notifyParentWindowReady() {
 }
 
 
-// Function to initialize event listeners for push-to-talk
-function initializePushToTalk() {
-  const logoWrapper = document.getElementById('logo-wrapper');
-
-  if (isTouchDevice()) {
-    logoWrapper.addEventListener('touchstart', startPushToTalk);
-    logoWrapper.addEventListener('touchend', endPushToTalk);
-    logoWrapper.addEventListener('contextmenu', (e) => e.preventDefault());
-  } else {
-    logoWrapper.addEventListener('mousedown', startPushToTalk);
-    logoWrapper.addEventListener('mouseup', endPushToTalk);
-    logoWrapper.addEventListener('mouseleave', endPushToTalk);
-    logoWrapper.addEventListener('contextmenu', (e) => e.preventDefault());
-  }
-}
-
 
 function handleContextChange() {
   currentContextId = document.getElementById('context-select').value;
@@ -937,42 +921,48 @@ function togglePushToTalk() {
 }
 
 
-// Functions to handle push-to-talk events
 function startPushToTalk(event) {
-  event.preventDefault();
+  // UI Button effect
+  updateButtonText('Please wait..');
+  processingMessage(false,"");
+
+  // Clear any existing stopRecordingTimer
+  if (stopRecordingTimer) {
+    clearTimeout(stopRecordingTimer);
+    stopRecordingTimer = null;
+  }
+
   pushToTalkStartTime = Date.now();
 
-  // Add pressed effect
-  const logoWrapper = document.getElementById('logo-wrapper');
-  logoWrapper.classList.add('pressed-effect');
-
-  // Start recording after minimum duration to avoid accidental taps
-  pushToTalkTimer = setTimeout(async () => {
-    if (!isRecording) {
-      await startRecording(true);
-    }
+  pushToTalkTimer = setTimeout(() => {
+    startRecording(true);
+    checkClick("recording start");
   }, MIN_PUSH_TO_TALK_DURATION);
-  logger.info('%cstartPushToTalk', 'color: #00a67d; font-weight: bold;');
 
+  logger.info('%cstartPushToTalk', 'color: #00a67d; font-weight: bold;');
 }
 
 function endPushToTalk(event) {
-  event.preventDefault();
-  const duration = Date.now() - pushToTalkStartTime;
-
-  // Remove pressed effect
-  const logoWrapper = document.getElementById('logo-wrapper');
-  logoWrapper.classList.remove('pressed-effect');
+  // UI Button effect
+  updateButtonText('Hold to Talk');
 
   clearTimeout(pushToTalkTimer);
 
-  if (duration >= MIN_PUSH_TO_TALK_DURATION && isRecording) {
-    stopRecording(true);
+  const duration = Date.now() - pushToTalkStartTime;
+  if (duration >= MIN_PUSH_TO_TALK_DURATION) {
+    // Instead of stopping recording immediately, set a timer to stop after 1 second
+    if (stopRecordingTimer) {
+      clearTimeout(stopRecordingTimer);
+    }
+    stopRecordingTimer = setTimeout(() => {
+      stopRecording(true);
+      checkClick("recording ends");
+      // Reset the timer variable
+      stopRecordingTimer = null;
+    }, 600);
   }
-
   pushToTalkStartTime = 0;
   logger.info('%cendPushToTalk', 'color: #df3079; font-weight: bold;');
-
 }
 
 
@@ -1110,8 +1100,12 @@ async function initialize() {
   editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatarId));
   pushToTalkToggle.addEventListener('click', togglePushToTalk);
 
-  initializePushToTalk();
-
+  // Event listeners for push-to-talk functionality
+  pushToTalkButton.addEventListener('mousedown', startPushToTalk);
+  pushToTalkButton.addEventListener('mouseup', endPushToTalk);
+  pushToTalkButton.addEventListener('mouseleave', endPushToTalk);
+  pushToTalkButton.addEventListener('touchstart', startPushToTalk);
+  pushToTalkButton.addEventListener('touchend', endPushToTalk);
 
   if (simplePushTalkButton) {
     if (isTouchDevice()) {
@@ -2887,7 +2881,17 @@ avatarImageInput.onchange = (event) => {
 
 
 function isTouchDevice() {
-  return 'ontouchstart' in window || navigator.maxTouchPoints;
+  const userAgent = navigator.userAgent;
+  const isMobile = /iPhone|Android|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+  const isTablet = /iPad|Tablet/i.test(userAgent) || (screen.width >= 768 && screen.width <= 1024);
+
+  if (isMobile) {
+    return true;
+  } else if (isTablet) {
+    return true;
+  } else {
+    return false;
+  }
 }
 
 
