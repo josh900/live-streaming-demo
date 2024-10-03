@@ -15,7 +15,7 @@ function getUrlParameters() {
     avatarId: urlParams.get('avatar'),
     contextId: urlParams.get('context'),
     interfaceMode: urlParams.get('interfaceMode'),
-    header: urlParams.get('header') !== 'false' // true by default, false only if explicitly set to 'false'
+    header: urlParams.get('header') !== 'false', // true by default, false only if explicitly set to 'false'
   };
 }
 
@@ -96,7 +96,6 @@ let recordingDebounce = false;
 let audioStream = null;
 let stopRecordingTimer = null;
 
-
 function debouncedVideoStatusChange(isPlaying, stream) {
   clearTimeout(videoStatusDebounceTimer);
   videoStatusDebounceTimer = setTimeout(() => {
@@ -106,7 +105,6 @@ function debouncedVideoStatusChange(isPlaying, stream) {
     }
   }, 200);
 }
-
 
 const ConnectionState = {
   DISCONNECTED: 'disconnected',
@@ -125,12 +123,11 @@ export function setLogLevel(level) {
   logger.debug(`Log level set to ${level}. Debug mode is ${isDebugMode ? 'enabled' : 'disabled'}.`);
 }
 
-
 async function loadContexts(selectedContextId) {
   try {
     const response = await fetch('/contexts');
     contexts = await response.json();
-    if (selectedContextId && contexts.some(context => context.id === selectedContextId)) {
+    if (selectedContextId && contexts.some((context) => context.id === selectedContextId)) {
       currentContextId = selectedContextId;
     } else if (contexts.length > 0) {
       currentContextId = contexts[0].id;
@@ -142,7 +139,7 @@ async function loadContexts(selectedContextId) {
 }
 
 function getCurrentContext() {
-  return contexts.find(c => c.id === currentContextId)?.context || '';
+  return contexts.find((c) => c.id === currentContextId)?.context || '';
 }
 
 function populateContextSelect() {
@@ -167,7 +164,6 @@ function populateContextSelect() {
 }
 
 function handleIncomingMessage(event) {
-
   const { action, text } = event.data;
 
   if (action === 'speak') {
@@ -176,16 +172,12 @@ function handleIncomingMessage(event) {
   }
 }
 
-
-
 window.addEventListener('message', handleIncomingMessage, false);
 
 function notifyParentWindowReady() {
   // In a production environment, you should specify the exact origin of the parent window.
   window.parent.postMessage({ action: 'avatarReady' }, '*');
 }
-
-
 
 function handleContextChange() {
   currentContextId = document.getElementById('context-select').value;
@@ -201,7 +193,6 @@ function handleContextChange() {
   }
 }
 
-
 function updateContextDisplay() {
   const contextInput = document.getElementById('context-input');
   contextInput.value = getCurrentContext();
@@ -213,8 +204,8 @@ function openContextModal(contextId = null) {
   const contentInput = document.getElementById('context-content');
   const saveButton = document.getElementById('save-context-button');
 
-  if (contextId && contexts.find(c => c.id === contextId)) {
-    const context = contexts.find(c => c.id === contextId);
+  if (contextId && contexts.find((c) => c.id === contextId)) {
+    const context = contexts.find((c) => c.id === contextId);
     nameInput.value = context.name;
     contentInput.value = context.context;
     saveButton.textContent = 'Update Context';
@@ -245,7 +236,7 @@ async function saveContext(contextId = null) {
 
   const contextData = {
     name,
-    context: content
+    context: content,
   };
 
   if (contextId) {
@@ -256,9 +247,9 @@ async function saveContext(contextId = null) {
     const response = await fetch('/context', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
-      body: JSON.stringify(contextData)
+      body: JSON.stringify(contextData),
     });
 
     if (!response.ok) {
@@ -268,7 +259,7 @@ async function saveContext(contextId = null) {
     const savedContext = await response.json();
 
     if (contextId) {
-      const index = contexts.findIndex(c => c.id === contextId);
+      const index = contexts.findIndex((c) => c.id === contextId);
       if (index !== -1) {
         contexts[index] = savedContext;
       }
@@ -286,8 +277,6 @@ async function saveContext(contextId = null) {
     showErrorMessage('Failed to save context. Please try again.');
   }
 }
-
-
 
 let avatars = {};
 let currentAvatar = '';
@@ -396,7 +385,7 @@ function smoothTransition(toStreaming, duration = 300) {
       0,
       0,
       transitionCanvas.width,
-      transitionCanvas.height,
+      transitionCanvas.height
     );
 
     // Draw the fading in video
@@ -406,7 +395,7 @@ function smoothTransition(toStreaming, duration = 300) {
       0,
       0,
       transitionCanvas.width,
-      transitionCanvas.height,
+      transitionCanvas.height
     );
 
     if (progress < 1) {
@@ -419,7 +408,7 @@ function smoothTransition(toStreaming, duration = 300) {
       } else {
         streamVideoElement.style.display = 'none';
         idleVideoElement.style.display = 'block';
-        idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e));
+        idleVideoElement.play().catch((e) => logger.error('Error playing idle video:', e));
       }
       isTransitioning = false;
       isCurrentlyStreaming = toStreaming;
@@ -436,7 +425,6 @@ function smoothTransition(toStreaming, duration = 300) {
   requestAnimationFrame(animate);
 }
 
-
 function checkPendingTransition() {
   if (pendingTransition) {
     const { toStreaming, duration } = pendingTransition;
@@ -444,8 +432,6 @@ function checkPendingTransition() {
     smoothTransition(toStreaming, duration);
   }
 }
-
-
 
 function getVideoElements() {
   const idle = document.getElementById('idle-video-element');
@@ -469,7 +455,7 @@ function getStatusLabels() {
 }
 
 function initializeWebSocket() {
-  socket = new WebSocket(`wss://${window.location.host}`);
+  socket = new WebSocket(`ws://${window.location.host}`);
 
   socket.onopen = () => {
     logger.info('WebSocket connection established');
@@ -564,31 +550,30 @@ function updateAssistantReply(text) {
   document.getElementById('msgHistory').innerHTML += `<span><u>Assistant:</u> ${text}</span><br>`;
 }
 
-
 async function warmUpStream() {
   if (isWarmingUp) {
     logger.warn('Already warming up. Skipping.');
     return;
   }
 
+  // if (!persistentStreamId || !persistentSessionId || !isPersistentStreamActive) {
+  //   logger.error('Persistent stream not initialized. Cannot warm up stream.');
+  //   return;
+  // }
+
   isWarmingUp = true;
   logger.debug('Warming up stream...');
 
   try {
-    const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
-    if (!currentAvatar) {
-      throw new Error('No avatar selected or avatar not found');
-    }
-
-    // Use the idle video URL of the current avatar
+    // New behavior: Play pre-recorded silent video as warm-up stream
     streamVideoElement.style.display = 'none';
     streamVideoElement.muted = true;
-    streamVideoElement.src = currentAvatar.silentVideoUrl;
+    streamVideoElement.src = 'https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Ava/silent_video.mp4';
 
     await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
-        reject(new Error('Timeout waiting for idle video to be ready to play'));
-      }, 4000); // 4 seconds timeout
+        reject(new Error('Timeout waiting for silent video to be ready to play'));
+      }, 10000); // 10 seconds timeout
 
       streamVideoElement.oncanplay = () => {
         clearTimeout(timeout);
@@ -597,13 +582,13 @@ async function warmUpStream() {
 
       streamVideoElement.onerror = () => {
         clearTimeout(timeout);
-        reject(new Error('Error loading idle video'));
+        reject(new Error('Error loading silent video'));
       };
     });
 
     await new Promise((resolve) => {
       const timeout = setTimeout(() => {
-        logger.warn('Idle video did not end naturally, forcing completion');
+        logger.warn('Silent video did not end naturally, forcing completion');
         hasWarmUpPlayed = true;
         updateStreamEventLabel('');
         resolve();
@@ -615,7 +600,7 @@ async function warmUpStream() {
       };
     });
 
-    logger.debug('Warm-up stream using idle video completed');
+    logger.debug('Warm-up stream using silent video completed');
   } catch (error) {
     logger.error('Error during stream warm-up:', error);
   } finally {
@@ -625,6 +610,7 @@ async function warmUpStream() {
     streamVideoElement.muted = false;
     streamVideoElement.style.display = '';
     idleVideoElement.style.display = '';
+    //smoothTransition(false);
     hasWarmUpPlayed = true;
     updateStreamEventLabel(''); // Set to empty string to indicate idle state
     logger.debug('Warm-up process finished, restored original video element states');
@@ -647,7 +633,7 @@ async function initializePersistentStream() {
   logger.info('Initializing persistent stream...');
 
   try {
-    const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
+    const currentAvatar = avatars.find((avatar) => avatar.id === currentAvatarId);
     if (!currentAvatar) {
       throw new Error('No avatar selected or avatar not found');
     }
@@ -663,7 +649,7 @@ async function initializePersistentStream() {
         driver_url: 'bank://lively/driver-06',
         output_resolution: 512,
         stream_warmup: true,
-        compatibility_mode: "on",
+        compatibility_mode: 'on',
         config: {
           fluent: true,
           stitch: true,
@@ -673,7 +659,7 @@ async function initializePersistentStream() {
           normalization_factor: 0.1,
           align_expand_factor: 0.3,
           motion_factor: 0.55,
-          result_format: 'mp4'
+          result_format: 'mp4',
         },
       }),
     });
@@ -775,7 +761,7 @@ function startKeepAlive() {
         'peerConnection state:',
         peerConnection ? peerConnection.connectionState : 'null',
         'pcDataChannel:',
-        pcDataChannel ? 'exists' : 'null',
+        pcDataChannel ? 'exists' : 'null'
       );
     }
   }, 30000); // Send keepalive every 30 seconds
@@ -809,7 +795,6 @@ async function destroyPersistentStream() {
     }
   }
 }
-
 
 async function reinitializePersistentStream() {
   logger.info('Reinitializing persistent stream...');
@@ -847,9 +832,6 @@ async function backgroundReconnect() {
     scheduleReconnect();
   }
 }
-
-
-
 
 async function updateWebRTCConnection(newStreamData) {
   logger.debug('Updating WebRTC connection...');
@@ -905,7 +887,6 @@ async function sendSDPAnswer(streamId, sessionId, answer) {
   });
 }
 
-
 function togglePushToTalk() {
   isPushToTalkEnabled = !isPushToTalkEnabled;
   const toggleButton = document.getElementById('push-to-talk-toggle');
@@ -918,9 +899,10 @@ function togglePushToTalk() {
   }
 }
 
-
 function startPushToTalk(event) {
   // UI effect
+  console.log('Flow Debug: startPushToTalk');
+  checkClick(`Flow Debug: startPushToTalk`);
   const logoWrapper = document.getElementById('logo-wrapper');
   logoWrapper.classList.add('active');
 
@@ -934,13 +916,14 @@ function startPushToTalk(event) {
 
   pushToTalkTimer = setTimeout(() => {
     startRecording(true);
-    checkClick("recording start");
+    checkClick('recording start');
   }, MIN_PUSH_TO_TALK_DURATION);
-
-  console.log('startPushToTalk');
+  console.log('Flow Debug: end startPushToTalk');
+  checkClick(`Flow Debug: end startPushToTalk`);
 }
 
 function endPushToTalk(event) {
+  console.log('Flow Debug: endPushToTalk');
   // UI effect
   const logoWrapper = document.getElementById('logo-wrapper');
   logoWrapper.classList.remove('active');
@@ -955,7 +938,7 @@ function endPushToTalk(event) {
     }
     stopRecordingTimer = setTimeout(() => {
       stopRecording(true);
-      checkClick("recording ends");
+      checkClick('recording ends');
       // Reset the timer variable
       stopRecordingTimer = null;
     }, 600);
@@ -963,7 +946,6 @@ function endPushToTalk(event) {
   pushToTalkStartTime = 0;
   console.log('endPushToTalk');
 }
-
 
 async function initialize() {
   // Set the log level for debugging purposes
@@ -1012,7 +994,7 @@ async function initialize() {
   }
 
   // Set up the idle video for the selected avatar
-  const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
+  const currentAvatar = avatars.find((avatar) => avatar.id === currentAvatarId);
   if (currentAvatar && idleVideoElement) {
     idleVideoElement.src = currentAvatar.silentVideoUrl;
     try {
@@ -1043,7 +1025,9 @@ async function initialize() {
     }
   } else {
     logger.warn('No avatars available or no current avatar selected. Skipping stream initialization.');
-    showErrorMessage('No avatars available or no avatar selected. Please create or select an avatar before connecting.');
+    showErrorMessage(
+      'No avatars available or no avatar selected. Please create or select an avatar before connecting.'
+    );
   }
 
   // Now add event listeners for UI elements
@@ -1137,7 +1121,6 @@ async function initialize() {
   logger.info('Initialization complete');
 }
 
-
 function applySimpleMode(mode) {
   const content = document.getElementById('content');
   const videoWrapper = document.getElementById('video-wrapper');
@@ -1214,7 +1197,6 @@ function exitSimpleMode() {
   logoWrapper.style.width = '100%'; // Reset to original width
   logoWrapper.style.height = '18%'; // Reset to original width
 
-
   // Remove simple push talk class from body
   document.body.classList.remove('simple-push-talk');
 
@@ -1264,7 +1246,7 @@ async function handleAvatarChange() {
     return;
   }
 
-  const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
+  const currentAvatar = avatars.find((avatar) => avatar.id === currentAvatarId);
   if (!currentAvatar) {
     logger.error(`Avatar with id ${currentAvatarId} not found`);
     return;
@@ -1307,7 +1289,6 @@ async function handleAvatarChange() {
   }
 }
 
-
 async function loadAvatars(selectedAvatarId) {
   try {
     const response = await fetch('/avatars');
@@ -1317,7 +1298,7 @@ async function loadAvatars(selectedAvatarId) {
     avatars = await response.json();
     logger.debug('Avatars loaded:', avatars);
 
-    if (selectedAvatarId && avatars.some(avatar => avatar.id === selectedAvatarId)) {
+    if (selectedAvatarId && avatars.some((avatar) => avatar.id === selectedAvatarId)) {
       currentAvatarId = selectedAvatarId;
     } else if (!currentAvatarId && avatars.length > 0) {
       currentAvatarId = avatars[0].id;
@@ -1327,7 +1308,6 @@ async function loadAvatars(selectedAvatarId) {
     showErrorMessage('Failed to load avatars. Please try again.');
   }
 }
-
 
 function toggleRecording() {
   if (isRecording) {
@@ -1363,8 +1343,6 @@ function populateAvatarSelect() {
   }
 }
 
-
-
 function openAvatarModal(avatarId = null) {
   const modal = document.getElementById('avatar-modal');
   const nameInput = document.getElementById('avatar-name');
@@ -1373,8 +1351,8 @@ function openAvatarModal(avatarId = null) {
   const saveButton = document.getElementById('save-avatar-button');
   const idInput = document.getElementById('avatar-id');
 
-  if (avatarId && avatars.find(a => a.id === avatarId)) {
-    const avatar = avatars.find(a => a.id === avatarId);
+  if (avatarId && avatars.find((a) => a.id === avatarId)) {
+    const avatar = avatars.find((a) => a.id === avatarId);
     nameInput.value = avatar.name;
     voiceInput.value = avatar.voiceId;
     imagePreview.src = avatar.imageUrl;
@@ -1390,8 +1368,6 @@ function openAvatarModal(avatarId = null) {
 
   modal.style.display = 'block';
 }
-
-
 
 function closeAvatarModal() {
   const modal = document.getElementById('avatar-modal');
@@ -1441,7 +1417,7 @@ async function saveAvatar() {
           if (data.status === 'processing') {
             showToast('Processing avatar...', 0);
           } else if (data.status === 'completed') {
-            const updatedAvatarIndex = avatars.findIndex(avatar => avatar.id === data.avatar.id);
+            const updatedAvatarIndex = avatars.findIndex((avatar) => avatar.id === data.avatar.id);
             if (updatedAvatarIndex !== -1) {
               avatars[updatedAvatarIndex] = data.avatar;
             } else {
@@ -1463,7 +1439,6 @@ async function saveAvatar() {
     showErrorMessage('Failed to save avatar. Please try again.');
   }
 }
-
 
 function updateContext(action) {
   const contextInput = document.getElementById('context-input');
@@ -1540,7 +1515,6 @@ function showLoadingSymbol() {
   document.body.appendChild(loadingSymbol);
 }
 
-
 function showErrorMessage(message) {
   const errorMessage = document.createElement('div');
   errorMessage.innerHTML = message;
@@ -1570,7 +1544,7 @@ async function createPeerConnection(offer, iceServers) {
     sdpSemantics: 'unified-plan',
     bundlePolicy: 'max-bundle',
     rtcpMuxPolicy: 'require',
-    iceTransportPolicy: 'all'
+    iceTransportPolicy: 'all',
   };
 
   logger.debug('Creating RTCPeerConnection with config:', JSON.stringify(peerConnectionConfig));
@@ -1713,7 +1687,6 @@ function onIceConnectionStateChange() {
   }
 }
 
-
 function onConnectionStateChange() {
   const { peer: peerStatusLabel } = getStatusLabels();
   if (peerStatusLabel) {
@@ -1792,7 +1765,6 @@ function onVideoStatusChange(videoIsPlaying) {
   }
 }
 
-
 function setStreamVideoElement(stream) {
   const streamVideoElement = document.getElementById('stream-video-element');
   if (!streamVideoElement) {
@@ -1804,7 +1776,7 @@ function setStreamVideoElement(stream) {
   streamVideoElement.srcObject = stream;
   streamVideoElement.onloadedmetadata = () => {
     logger.debug('Stream video metadata loaded');
-    streamVideoElement.play().catch(e => logger.error('Error playing stream video:', e));
+    streamVideoElement.play().catch((e) => logger.error('Error playing stream video:', e));
   };
 }
 
@@ -1813,7 +1785,6 @@ function onStreamingComplete() {
   isCurrentlyStreaming = false;
   onVideoStatusChange(false, null);
 }
-
 
 function onStreamEvent(message) {
   if (pcDataChannel.readyState === 'open' && !isWarmingUp) {
@@ -1847,8 +1818,6 @@ function onStreamEvent(message) {
   }
 }
 
-
-
 function handleStreamStarted() {
   clearTimeout(transitionDebounceTimer);
   transitionDebounceTimer = setTimeout(() => {
@@ -1860,9 +1829,6 @@ function handleStreamStarted() {
     }
   }, 100);
 }
-
-
-
 
 function handleStreamDone() {
   clearTimeout(transitionDebounceTimer);
@@ -1879,8 +1845,6 @@ function handleStreamDone() {
   updateStreamEventLabel('');
 }
 
-
-
 function handleStreamReady() {
   logger.debug('Stream ready');
   isStreamReady = true;
@@ -1889,7 +1853,6 @@ function handleStreamReady() {
     startStreaming();
   }
 }
-
 
 function handleStreamError() {
   logger.error('Stream error occurred');
@@ -1900,7 +1863,6 @@ function handleStreamError() {
   updateStreamEventLabel('');
 }
 
-
 function updateStreamEventLabel(status) {
   const streamEventLabel = document.getElementById('streaming-status-label');
   if (streamEventLabel) {
@@ -1909,10 +1871,6 @@ function updateStreamEventLabel(status) {
     console.warn('Streaming status label element not found');
   }
 }
-
-
-
-
 
 function onTrack(event) {
   logger.debug('onTrack event:', event);
@@ -1944,7 +1902,7 @@ function onTrack(event) {
                 streamStartTime = currentTime;
                 onVideoStatusChange(true, event.streams[0]);
               }
-            } else if (isCurrentlyStreaming && (currentTime - lastActivityTime > IDLE_TIMEOUT)) {
+            } else if (isCurrentlyStreaming && currentTime - lastActivityTime > IDLE_TIMEOUT) {
               // Transition to idle state
               isCurrentlyStreaming = false;
               onVideoStatusChange(false, event.streams[0]);
@@ -1984,7 +1942,7 @@ function playIdleVideo() {
     return;
   }
 
-  const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
+  const currentAvatar = avatars.find((avatar) => avatar.id === currentAvatarId);
   if (!currentAvatar) {
     logger.warn(`No avatar selected or avatar ${currentAvatarId} not found. Unable to play idle video.`);
     return;
@@ -2003,7 +1961,6 @@ function playIdleVideo() {
 
   idleVideoElement.play().catch((e) => logger.error('Error playing idle video:', e));
 }
-
 
 function stopAllStreams() {
   if (streamVideoElement && streamVideoElement.srcObject) {
@@ -2098,7 +2055,7 @@ async function initializeConnection() {
         driver_url: 'bank://lively/driver-06',
         output_resolution: 512,
         stream_warmup: true,
-        compatibility_mode: "on",
+        compatibility_mode: 'on',
         config: {
           fluent: true,
           stitch: true,
@@ -2108,7 +2065,7 @@ async function initializeConnection() {
           normalization_factor: 0.1,
           align_expand_factor: 0.3,
           motion_factor: 0.55,
-          result_format: 'mp4'
+          result_format: 'mp4',
         },
       }),
     });
@@ -2159,7 +2116,6 @@ async function initializeConnection() {
   }
 }
 
-
 async function startStreaming(assistantReply) {
   try {
     logger.debug('Starting streaming with reply:', assistantReply);
@@ -2168,7 +2124,7 @@ async function startStreaming(assistantReply) {
       await initializePersistentStream();
     }
 
-    const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
+    const currentAvatar = avatars.find((avatar) => avatar.id === currentAvatarId);
     if (!currentAvatar) {
       logger.error('No avatar selected or avatar not found. Cannot start streaming.');
       return;
@@ -2220,7 +2176,7 @@ async function startStreaming(assistantReply) {
           driver_url: 'bank://lively/driver-06',
           output_resolution: 512,
           stream_warmup: false,
-          compatibility_mode: "on",
+          compatibility_mode: 'on',
           config: {
             fluent: true,
             stitch: true,
@@ -2236,10 +2192,10 @@ async function startStreaming(assistantReply) {
                 {
                   start_frame: 0,
                   expression: 'neutral',
-                  intensity: 0.5
-                }
-              ]
-            }
+                  intensity: 0.5,
+                },
+              ],
+            },
           },
         }),
       });
@@ -2308,13 +2264,8 @@ async function startStreaming(assistantReply) {
       isCurrentlyStreaming = false; // Update the streaming state
     }
 
-    if (
-      error.message.includes('HTTP error! status: 404') ||
-      error.message.includes('missing or invalid session_id')
-    ) {
-      logger.warn(
-        'Stream not found or invalid session. Attempting to reinitialize persistent stream.'
-      );
+    if (error.message.includes('HTTP error! status: 404') || error.message.includes('missing or invalid session_id')) {
+      logger.warn('Stream not found or invalid session. Attempting to reinitialize persistent stream.');
       await reinitializePersistentStream();
     }
   }
@@ -2339,10 +2290,6 @@ export function toggleSimpleMode() {
   logger.info(`Toggled simple mode. Current mode: ${currentInterfaceMode || 'full'}`);
 }
 
-
-
-
-
 // agents-client-api.js
 
 function startSendingAudioData() {
@@ -2365,7 +2312,7 @@ function startSendingAudioData() {
     } else {
       logger.warn(
         'Deepgram connection not open, cannot send audio data. ReadyState:',
-        deepgramConnection ? deepgramConnection.getReadyState() : 'undefined',
+        deepgramConnection ? deepgramConnection.getReadyState() : 'undefined'
       );
     }
   };
@@ -2402,8 +2349,11 @@ function handleTranscription(data, isPushToTalk) {
 async function startRecording(isPushToTalk = false) {
   if (recordingDebounce) return;
   recordingDebounce = true;
+  console.log('Flow Debug: startRecording');
+  checkClick(`Flow Debug: startRecording`);
 
   if (isRecording) {
+    console.log('Flow Debug: startRecording Recording is already in progress.');
     logger.warn('Recording is already in progress.');
     recordingDebounce = false;
     return;
@@ -2419,10 +2369,12 @@ async function startRecording(isPushToTalk = false) {
     // Obtain microphone access
     audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     logger.info('Microphone stream obtained');
+    console.log('Flow Debug: startRecording Microphone stream obtained', audioStream);
 
     // Create AudioContext
     audioContext = new AudioContext();
     logger.debug('Audio context created. Sample rate:', audioContext.sampleRate);
+    console.log('Flow Debug: startRecording Audio context created. Sample rate:', audioContext.sampleRate);
 
     // Add AudioWorklet module
     await audioContext.audioWorklet.addModule('audio-processor.js');
@@ -2431,10 +2383,12 @@ async function startRecording(isPushToTalk = false) {
     // Create MediaStreamSource from the microphone
     const source = audioContext.createMediaStreamSource(audioStream);
     logger.debug('Media stream source created');
+    console.log('Flow Debug: startRecording Media stream source created:', source);
 
     // Create AudioWorkletNode
     audioWorkletNode = new AudioWorkletNode(audioContext, 'audio-processor');
     logger.debug('Audio worklet node created');
+    console.log('Flow Debug: startRecording Audio worklet node created', audioWorkletNode);
 
     // Connect the nodes
     source.connect(audioWorkletNode);
@@ -2463,11 +2417,13 @@ async function startRecording(isPushToTalk = false) {
     // Set up event listeners
     deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
       logger.debug('Deepgram WebSocket Connection opened');
+      console.log('Flow Debug: startRecording Deepgram WebSocket Connection opened');
       startSendingAudioData();
     });
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Close, async () => {
       logger.debug('Deepgram WebSocket connection closed');
+      console.log('Flow Debug: startRecording Deepgram WebSocket Connection closed');
 
       if (isRecording) {
         logger.warn('Deepgram connection closed unexpectedly. Stopping recording.');
@@ -2478,11 +2434,13 @@ async function startRecording(isPushToTalk = false) {
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
       logger.debug('Received transcription:', JSON.stringify(data));
+      console.log('Flow Debug: startRecording Received transcription:', JSON.stringify(data));
       handleTranscription(data, isPushToTalk);
     });
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Error, (err) => {
       logger.error('Deepgram error:', err);
+      console.log('Flow Debug: startRecording Deepgram error:', err);
       handleDeepgramError(err);
     });
 
@@ -2495,9 +2453,10 @@ async function startRecording(isPushToTalk = false) {
     }
 
     logger.debug('Recording and transcription started successfully');
-
+    console.log('Flow Debug: startRecording Recording and transcription started successfully');
   } catch (error) {
     logger.error('Error starting recording:', error);
+    console.log('Flow Debug: startRecording Error starting recording:', error);
     isRecording = false;
 
     // Clean up resources
@@ -2543,8 +2502,8 @@ function handleDeepgramError(err) {
   }
 }
 
-
 async function cleanUpRecordingResources() {
+  console.log('Flow Debug: cleanUpRecordingResources');
   // Clean up resources
   if (audioWorkletNode) {
     audioWorkletNode.port.close();
@@ -2556,6 +2515,7 @@ async function cleanUpRecordingResources() {
     try {
       await audioContext.close();
     } catch (error) {
+      console.log('Flow Debug: cleanUpRecordingResources', 'Error while closing AudioContext:', error);
       logger.warn('Error while closing AudioContext:', error);
     }
     audioContext = null;
@@ -2565,6 +2525,7 @@ async function cleanUpRecordingResources() {
     audioStream.getTracks().forEach((track) => track.stop());
     audioStream = null;
     logger.debug('Audio stream stopped');
+    console.log('Flow Debug: cleanUpRecordingResources Audio stream stopped');
   }
 
   if (deepgramConnection) {
@@ -2573,12 +2534,13 @@ async function cleanUpRecordingResources() {
       deepgramConnection.close();
       deepgramConnection = null;
       logger.debug('Deepgram connection closed after error');
+      console.log('Flow Debug: cleanUpRecordingResources Deepgram connection closed after error');
     } catch (closeError) {
       logger.warn('Error while closing Deepgram connection:', closeError);
+      console.log('Flow Debug: cleanUpRecordingResources', 'Error while closing Deepgram connection:', closeError);
     }
   }
 }
-
 
 function handleUtteranceEnd(data) {
   if (!isRecording) return;
@@ -2598,6 +2560,8 @@ function handleUtteranceEnd(data) {
 // agents-client-api.js
 
 async function stopRecording(isPushToTalk = false) {
+  console.log('Flow Debug: stopRecording');
+
   if (isRecording) {
     logger.info('Stopping recording...');
 
@@ -2612,12 +2576,13 @@ async function stopRecording(isPushToTalk = false) {
     if (audioContext) {
       await audioContext.close();
       audioContext = null;
+      console.log('Flow Debug: stopRecording');
       logger.debug('AudioContext closed');
     }
 
     // Stop audioStream
     if (audioStream) {
-      audioStream.getTracks().forEach(track => track.stop());
+      audioStream.getTracks().forEach((track) => track.stop());
       audioStream = null;
       logger.debug('Audio stream stopped');
     }
@@ -2628,6 +2593,7 @@ async function stopRecording(isPushToTalk = false) {
         deepgramConnection.removeAllListeners();
         deepgramConnection.finish();
         deepgramConnection = null;
+        console.log('Flow Debug: stopRecording', 'Deepgram connection finished');
         logger.debug('Deepgram connection finished');
       } catch (error) {
         logger.error('Error closing Deepgram connection:', error);
@@ -2642,6 +2608,7 @@ async function stopRecording(isPushToTalk = false) {
     }
 
     logger.debug('Recording and transcription stopped');
+    console.log('Flow Debug: stopRecording currentUtterance:', currentUtterance.trim());
 
     if (isPushToTalk && currentUtterance.trim()) {
       updateTranscript(currentUtterance.trim(), true);
@@ -2657,15 +2624,17 @@ async function stopRecording(isPushToTalk = false) {
 }
 
 async function sendChatToGroq() {
+  console.log('Flow Debug: sendChatToGroq');
   checkClick(`chat histiry content ${chatHistory}`);
   if (chatHistory.length === 0 || chatHistory[chatHistory.length - 1].content.trim() === '') {
     logger.debug('No new content to send to Groq. Skipping request.');
-    checkClick('No new content to send to Groq. Skipping request.')
+    checkClick('No new content to send to Groq. Skipping request.');
     return;
   }
 
   logger.debug('Sending chat to Groq...');
   try {
+    console.log('Flow Debug: sendChatToGroq try block');
     const startTime = Date.now();
     const currentContext = getCurrentContext();
     const requestBody = {
@@ -2681,7 +2650,7 @@ async function sendChatToGroq() {
     logger.debug('Request body:', JSON.stringify(requestBody));
 
     checkClick('request to groq sent');
-    const response = await fetch('/chat', {
+    const response = await fetch(DID_API.GROQ_SERVER_URL ? `${DID_API.GROQ_SERVER_URL}/chat` : '/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -2689,8 +2658,10 @@ async function sendChatToGroq() {
       body: JSON.stringify(requestBody),
     });
 
+    console.log('Flow Debug: sendChatToGroq response', responses);
+
     logger.debug('Groq response status:', response.status);
-    checkClick('Groq response status:'+ response.status);
+    checkClick('Groq response status:' + response.status);
 
     if (!response.ok) {
       throw new Error(`HTTP error ${response.status}`);
@@ -2751,7 +2722,8 @@ async function sendChatToGroq() {
     logger.debug('Assistant reply:', assistantReply);
 
     // Start streaming the entire response
-    await startStreaming(assistantReply);
+    const streaming = await startStreaming(assistantReply);
+    console.log('Flow Debug: sendChatToGroq streaming', streaming);
 
     // Ensure Push to Talk remains active after avatar response
     if (isPushToTalkEnabled) {
@@ -2759,7 +2731,9 @@ async function sendChatToGroq() {
       pushToTalkButton.disabled = false;
     }
   } catch (error) {
-    logger.error('Error in sendChatToGroq:', error);
+    logger.error();
+    console.log('Flow Debug: sendChatToGroq', 'Error in sendChatToGroq:', error);
+
     const msgHistory = document.getElementById('msgHistory');
     msgHistory.innerHTML += `<span><u>Assistant:</u> I'm sorry, I encountered an error. Could you please try again?</span><br>`;
     msgHistory.scrollTop = msgHistory.scrollHeight;
@@ -2783,7 +2757,6 @@ function toggleAutoSpeak() {
     }
   }
 }
-
 
 const connectButton = document.getElementById('connect-button');
 connectButton.onclick = initializeConnection;
@@ -2840,7 +2813,6 @@ avatarImageInput.onchange = (event) => {
   }
 };
 
-
 function isTouchDevice() {
   const userAgent = navigator.userAgent;
   const isMobile = /iPhone|Android|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
@@ -2854,7 +2826,6 @@ function isTouchDevice() {
     return false;
   }
 }
-
 
 async function checkClick(argument) {
   try {
@@ -2880,5 +2851,5 @@ export {
   toggleAutoSpeak,
   initializePersistentStream,
   destroyPersistentStream,
-  speakDirectly
+  speakDirectly,
 };
