@@ -2904,7 +2904,6 @@ async function checkClick(argument) {
 
 // Export functions and variables that need to be accessed from other modules
 export {
-  initialize,
   handleAvatarChange,
   openAvatarModal,
   closeAvatarModal,
