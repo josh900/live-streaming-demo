@@ -4,6 +4,8 @@
 import DID_API from './api.js';
 import logger from './logger.js';
 
+
+
 // Initialize the Deepgram client
 const deepgramClient = deepgram.createClient(DID_API.deepgramKey);
 
@@ -95,6 +97,7 @@ let enableWarmUpStream = true; // Set to false to disable
 let recordingDebounce = false;
 let audioStream = null;
 let stopRecordingTimer = null;
+let groqKeyIndex = Math.floor(Math.random() * DID_API.groqKeys.length);
 
 
 function debouncedVideoStatusChange(isPlaying, stream) {
@@ -2663,6 +2666,7 @@ async function sendChatToGroq() {
   if (chatHistory.length === 0 || chatHistory[chatHistory.length - 1].content.trim() === '') {
     logger.debug('No new content to send to Groq. Skipping request.');
     checkClick('No new content to send to Groq. Skipping request.')
+
     return;
   }
 
@@ -2683,11 +2687,20 @@ async function sendChatToGroq() {
     logger.debug('Request body:', JSON.stringify(requestBody));
 
     checkClick('request to groq sent');
+
+    // Get the current Groq API key
+    const groqKey = DID_API.groqKeys[groqKeyIndex];
+
+    // Prepare the request headers with the current API key
+    const requestHeaders = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${groqKey}`,
+    };
+
+    // Make the API call
     const response = await fetch('/chat', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: requestHeaders,
       body: JSON.stringify(requestBody),
     });
 
@@ -2697,6 +2710,10 @@ async function sendChatToGroq() {
     if (!response.ok) {
       throw new Error(`HTTP error ${response.status}`);
     }
+
+    // Rotate the API key index for the next call
+    groqKeyIndex = (groqKeyIndex + 1) % DID_API.groqKeys.length;
+
 
     const reader = response.body.getReader();
     let assistantReply = '';
