@@ -37,6 +37,7 @@ app.post('/chat', async (req, res) => {
       messages,
       model,
       stream: true,
+      temperature: 0.7
     });
 
     res.writeHead(200, {
