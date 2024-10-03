@@ -2447,12 +2447,15 @@ async function startRecording(isPushToTalk = false) {
   interimMessageAdded = false;
 
   try {
+
+    updateButtonText('Speak Now');
+    processingMessage(true, "Speak Now");
+    
     // Obtain microphone access
     audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     logger.info('Microphone stream obtained');
 
-    updateButtonText('Speak Now');
-    processingMessage(true, "Speak Now");
+
 
     // Create AudioContext
     audioContext = new AudioContext();
