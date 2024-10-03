@@ -922,11 +922,10 @@ function togglePushToTalk() {
 
 
 function startPushToTalk(event) {
-  // UI Button effect
+  event.preventDefault(); // Prevent default touch behavior
   updateButtonText('Please wait..');
-  processingMessage(false,"");
+  processingMessage(false, "");
 
-  // Clear any existing stopRecordingTimer
   if (stopRecordingTimer) {
     clearTimeout(stopRecordingTimer);
     stopRecordingTimer = null;
@@ -943,21 +942,19 @@ function startPushToTalk(event) {
 }
 
 function endPushToTalk(event) {
-  // UI Button effect
+  event.preventDefault(); // Prevent default touch behavior
   updateButtonText('Hold to Talk');
 
   clearTimeout(pushToTalkTimer);
 
   const duration = Date.now() - pushToTalkStartTime;
   if (duration >= MIN_PUSH_TO_TALK_DURATION) {
-    // Instead of stopping recording immediately, set a timer to stop after 1 second
     if (stopRecordingTimer) {
       clearTimeout(stopRecordingTimer);
     }
     stopRecordingTimer = setTimeout(() => {
       stopRecording(true);
       checkClick("recording ends");
-      // Reset the timer variable
       stopRecordingTimer = null;
     }, 600);
   }
@@ -966,31 +963,29 @@ function endPushToTalk(event) {
 }
 
 
-function updateButtonText(text){
+function updateButtonText(text) {
   const logoWrapper = document.getElementById('logo-wrapper');
   logoWrapper.classList.remove('active');
 
-  const logoWrapperText = logoWrapper.querySelector('#logo-wrapper-txt'); 
-  logoWrapperText.textContent = text;
+  const logoWrapperText = logoWrapper.querySelector('text');
+  if (logoWrapperText) {
+    logoWrapperText.textContent = text;
+  }
 }
 
 function processingMessage(status, message) {
   const div = document.getElementById('processing-message');
-  
-  // Update the text content of the message
   div.textContent = message;
 
   if (status) {
-    console.log("true",div)
-      div.classList.remove('hide'); // Show the message
+    div.classList.remove('hide');
   } else {
-    console.log("else",div)
-      div.classList.add('hide'); // Hide the message
+    div.classList.add('hide');
   }
 }
 
 
-async function initialize() {
+export async function initialize() {
   // Set the log level for debugging purposes
   setLogLevel('INFO');
   connectionState = ConnectionState.DISCONNECTED;
@@ -1100,12 +1095,12 @@ async function initialize() {
   editAvatarButton.addEventListener('click', () => openAvatarModal(currentAvatarId));
   pushToTalkToggle.addEventListener('click', togglePushToTalk);
 
-  // Event listeners for push-to-talk functionality
-  pushToTalkButton.addEventListener('mousedown', startPushToTalk);
-  pushToTalkButton.addEventListener('mouseup', endPushToTalk);
-  pushToTalkButton.addEventListener('mouseleave', endPushToTalk);
-  pushToTalkButton.addEventListener('touchstart', startPushToTalk);
-  pushToTalkButton.addEventListener('touchend', endPushToTalk);
+  const logoWrapper = document.getElementById('logo-wrapper');
+  logoWrapper.addEventListener('mousedown', startPushToTalk);
+  logoWrapper.addEventListener('mouseup', endPushToTalk);
+  logoWrapper.addEventListener('touchstart', startPushToTalk);
+  logoWrapper.addEventListener('touchend', endPushToTalk);
+
 
   if (simplePushTalkButton) {
     if (isTouchDevice()) {
@@ -2351,10 +2346,9 @@ export function toggleSimpleMode() {
   if (currentInterfaceMode) {
     exitSimpleMode();
   } else {
-    applySimpleMode('simpleVoice'); // Default to simpleVoice when toggling
+    applySimpleMode('simpleVoice');
   }
 
-  // Update URL
   const url = new URL(window.location);
   if (currentInterfaceMode) {
     url.searchParams.set('interfaceMode', currentInterfaceMode);
@@ -2365,6 +2359,7 @@ export function toggleSimpleMode() {
 
   logger.info(`Toggled simple mode. Current mode: ${currentInterfaceMode || 'full'}`);
 }
+
 
 
 
