@@ -144,7 +144,7 @@ h4 {
   background-size: contain;
   background-repeat: no-repeat;
   background-position: left bottom;
-  transition: width 0.3s ease-in-out, transform 0.1s ease-in-out;
+  transition: all 0.3s ease-in-out;
 }
 
 #logo-wrapper span {
@@ -158,13 +158,20 @@ h4 {
 }
 
 #processing-message {
-  text-align: center;
-  font-size: 19px;
-  padding-top: 6%;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 15px 20px;
+  border-radius: 5px;
+  font-size: 18px;
   font-weight: bold;
-  transition: opacity 0.5s ease, height 0.5s ease;
+  z-index: 1000;
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
 }
-
 
 
 #status div {
@@ -486,7 +493,7 @@ body.simple-push-talk #logo-wrapper {
 }
 
 
-body.simple-push-talk #logo-wrapper.active {
+#logo-wrapper.active {
   filter: brightness(0.8);
 }
 
@@ -503,3 +510,20 @@ body.simple-push-talk {
   border-radius: 9%; /* Match the border-radius of the wrapper */
 }
 
+
+#logo-wrapper text {
+  transition: all 0.3s ease-in-out;
+}
+
+
+#processing-message.show {
+  opacity: 1;
+}
+
+#processing-message.hide {
+  opacity: 0;
+}
+
+body.simple-push-talk #logo-wrapper.active {
+  filter: brightness(0.8);
+}

@@ -922,8 +922,10 @@ function togglePushToTalk() {
 
 
 function startPushToTalk(event) {
-  event.preventDefault(); // Prevent default touch behavior
-  updateButtonText('Please wait..');
+  event.preventDefault();
+  const logoWrapper = document.getElementById('logo-wrapper');
+  logoWrapper.classList.add('active');
+  updateButtonText('Listening...');
   processingMessage(false, "");
 
   if (stopRecordingTimer) {
@@ -942,7 +944,9 @@ function startPushToTalk(event) {
 }
 
 function endPushToTalk(event) {
-  event.preventDefault(); // Prevent default touch behavior
+  event.preventDefault();
+  const logoWrapper = document.getElementById('logo-wrapper');
+  logoWrapper.classList.remove('active');
   updateButtonText('Hold to Talk');
 
   clearTimeout(pushToTalkTimer);
@@ -965,8 +969,6 @@ function endPushToTalk(event) {
 
 function updateButtonText(text) {
   const logoWrapper = document.getElementById('logo-wrapper');
-  logoWrapper.classList.remove('active');
-
   const logoWrapperText = logoWrapper.querySelector('text');
   if (logoWrapperText) {
     logoWrapperText.textContent = text;
@@ -979,7 +981,9 @@ function processingMessage(status, message) {
 
   if (status) {
     div.classList.remove('hide');
+    div.classList.add('show');
   } else {
+    div.classList.remove('show');
     div.classList.add('hide');
   }
 }
