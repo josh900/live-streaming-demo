@@ -2451,6 +2451,9 @@ async function startRecording(isPushToTalk = false) {
     audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     logger.info('Microphone stream obtained');
 
+    updateButtonText('Speak Now');
+    processingMessage(true, "Speak Now");
+
     // Create AudioContext
     audioContext = new AudioContext();
     logger.debug('Audio context created. Sample rate:', audioContext.sampleRate);
