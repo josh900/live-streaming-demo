@@ -6,13 +6,24 @@ import DID_API from './api.js';
 const app = express();
 const port = 3001;
 
-const groq = new Groq({ apiKey: DID_API.groqKey });
+// Import the array of Groq API keys
+const { groqKeys } = DID_API;
+
+// Select a random starting index
+let currentKeyIndex = Math.floor(Math.random() * groqKeys.length);
 
 app.use(cors());
 app.use(express.json());
 
 app.post('/chat', async (req, res) => {
   const { messages, model } = req.body;
+
+  // Get the current API key and update the index for the next call
+  const apiKey = groqKeys[currentKeyIndex];
+  currentKeyIndex = (currentKeyIndex + 1) % groqKeys.length;
+
+  // Initialize the Groq client with the selected API key
+  const groq = new Groq(apiKey);
 
   try {
     const completion = await groq.chat.completions.create({
