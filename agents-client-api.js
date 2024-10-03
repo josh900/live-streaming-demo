@@ -2676,7 +2676,7 @@ async function sendChatToGroq() {
         },
         ...chatHistory,
       ],
-      model: 'llama-3.1-8b-instant',
+      model: 'gemma2-9b-it',
     };
     logger.debug('Request body:', JSON.stringify(requestBody));
 
