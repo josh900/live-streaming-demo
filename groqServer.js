@@ -23,7 +23,7 @@ app.post('/chat', async (req, res) => {
   currentKeyIndex = (currentKeyIndex + 1) % groqKeys.length;
 
   // Initialize the Groq client with the selected API key
-  const groq = new Groq(apiKey);
+  const groq = new Groq({ apiKey });
 
   try {
     const completion = await groq.chat.completions.create({
