@@ -969,7 +969,7 @@ function endPushToTalk(event) {
 
 async function initialize() {
   // Set the log level for debugging purposes
-  setLogLevel('DEBUG');
+  setLogLevel('INFO');
   connectionState = ConnectionState.DISCONNECTED;
 
   // Retrieve parameters from the URL
