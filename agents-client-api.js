@@ -95,7 +95,6 @@ let enableWarmUpStream = true; // Set to false to disable
 let recordingDebounce = false;
 let audioStream = null;
 let stopRecordingTimer = null;
-let userCanSpeak = false;
 
 
 function debouncedVideoStatusChange(isPlaying, stream) {
@@ -426,7 +425,6 @@ function smoothTransition(toStreaming, duration = 300) {
       isCurrentlyStreaming = toStreaming;
       transitionCanvas.style.display = 'none';
       logger.debug('Smooth transition completed');
-      processingMessage(false, "")
       checkPendingTransition();
     }
   }
@@ -589,8 +587,8 @@ async function warmUpStream() {
 
     await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
-        reject(new Error('Timeout waiting for silent video to be ready to play'));
-      }, 10000); // 10 seconds timeout
+        reject(new Error('Timeout waiting for idle video to be ready to play'));
+      }, 4000); // 4 seconds timeout
 
       streamVideoElement.oncanplay = () => {
         clearTimeout(timeout);
@@ -599,13 +597,13 @@ async function warmUpStream() {
 
       streamVideoElement.onerror = () => {
         clearTimeout(timeout);
-        reject(new Error('Error loading silent video'));
+        reject(new Error('Error loading idle video'));
       };
     });
 
     await new Promise((resolve) => {
       const timeout = setTimeout(() => {
-        logger.warn('Silent video did not end naturally, forcing completion');
+        logger.warn('Idle video did not end naturally, forcing completion');
         hasWarmUpPlayed = true;
         updateStreamEventLabel('');
         resolve();
@@ -617,7 +615,7 @@ async function warmUpStream() {
       };
     });
 
-    logger.debug('Warm-up stream using silent video completed');
+    logger.debug('Warm-up stream using idle video completed');
   } catch (error) {
     logger.error('Error during stream warm-up:', error);
   } finally {
@@ -922,9 +920,9 @@ function togglePushToTalk() {
 
 
 function startPushToTalk(event) {
-  // UI Button effect
-  updateButtonText('Please wait..');
-  processingMessage(false,"");
+  // UI effect
+  const logoWrapper = document.getElementById('logo-wrapper');
+  logoWrapper.classList.add('active');
 
   // Clear any existing stopRecordingTimer
   if (stopRecordingTimer) {
@@ -939,12 +937,13 @@ function startPushToTalk(event) {
     checkClick("recording start");
   }, MIN_PUSH_TO_TALK_DURATION);
 
-  logger.info('%cstartPushToTalk', 'color: #00a67d; font-weight: bold;');
+  console.log('startPushToTalk');
 }
 
 function endPushToTalk(event) {
-  // UI Button effect
-  updateButtonText('Hold to Talk');
+  // UI effect
+  const logoWrapper = document.getElementById('logo-wrapper');
+  logoWrapper.classList.remove('active');
 
   clearTimeout(pushToTalkTimer);
 
@@ -962,31 +961,7 @@ function endPushToTalk(event) {
     }, 600);
   }
   pushToTalkStartTime = 0;
-  logger.info('%cendPushToTalk', 'color: #df3079; font-weight: bold;');
-}
-
-
-function updateButtonText(text){
-  const logoWrapper = document.getElementById('logo-wrapper');
-  logoWrapper.classList.remove('active');
-
-  const logoWrapperText = logoWrapper.querySelector('#logo-wrapper-txt'); 
-  logoWrapperText.textContent = text;
-}
-
-function processingMessage(status, message) {
-  const div = document.getElementById('processing-message');
-  
-  // Update the text content of the message
-  div.textContent = message;
-
-  if (status) {
-    console.log("true",div)
-      div.classList.remove('hide'); // Show the message
-  } else {
-    console.log("else",div)
-      div.classList.add('hide'); // Hide the message
-  }
+  console.log('endPushToTalk');
 }
 
 
@@ -1598,7 +1573,7 @@ async function createPeerConnection(offer, iceServers) {
     iceTransportPolicy: 'all'
   };
 
-  logger.debug('Creating RTCPeerConnection with config:', (peerConnectionConfig));
+  logger.debug('Creating RTCPeerConnection with config:', JSON.stringify(peerConnectionConfig));
 
   try {
     peerConnection = new RTCPeerConnection(peerConnectionConfig);
@@ -1617,7 +1592,7 @@ async function createPeerConnection(offer, iceServers) {
 
   try {
     logger.debug('Setting remote description');
-    logger.debug('Offer SDP:', (offer));
+    logger.debug('Offer SDP:', JSON.stringify(offer));
     await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
     logger.debug('Set remote SDP successfully');
   } catch (error) {
@@ -1753,7 +1728,6 @@ function onConnectionStateChange() {
     backgroundReconnect();
   } else if (peerConnection.connectionState === 'connected') {
     logger.debug('Peer connection established successfully');
-    updateButtonText('Hold to Talk');
     connectionState = ConnectionState.CONNECTED;
     reconnectAttempts = 0;
   }
@@ -1970,7 +1944,7 @@ function onTrack(event) {
                 streamStartTime = currentTime;
                 onVideoStatusChange(true, event.streams[0]);
               }
-            } else if (isCurrentlyStreaming && currentTime - lastActivityTime > IDLE_TIMEOUT) {
+            } else if (isCurrentlyStreaming && (currentTime - lastActivityTime > IDLE_TIMEOUT)) {
               // Transition to idle state
               isCurrentlyStreaming = false;
               onVideoStatusChange(false, event.streams[0]);
@@ -2188,7 +2162,7 @@ async function initializeConnection() {
 
 async function startStreaming(assistantReply) {
   try {
-    logger.debug('Starting streaming....');
+    logger.debug('Starting streaming with reply:', assistantReply);
     if (!persistentStreamId || !persistentSessionId) {
       logger.error('Persistent stream not initialized. Cannot start streaming.');
       await initializePersistentStream();
@@ -2216,7 +2190,7 @@ async function startStreaming(assistantReply) {
     // Split the SSML content into chunks, respecting SSML tags
     const chunks = ssmlContent.match(/(?:<[^>]+>|[^<]+)+/g) || [];
 
-    logger.debug('Chunks for streaming:', chunks);
+    logger.debug('Chunks', chunks);
 
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i].trim();
@@ -2281,7 +2255,6 @@ async function startStreaming(assistantReply) {
         logger.debug('Stream chunk started successfully');
 
         if (playResponseData.result_url) {
-          logger.info("API d-id response: ",playResponseData.result_url)
           // Wait for the video to be ready before transitioning
           await new Promise((resolve) => {
             streamVideoElement.src = playResponseData.result_url;
@@ -2398,8 +2371,6 @@ function startSendingAudioData() {
   };
 
   logger.debug('Audio data sending setup complete');
-  // UI Button effect
-  updateButtonText('Speak Now');
 }
 // agents-client-api.js
 
@@ -2408,7 +2379,7 @@ function handleTranscription(data, isPushToTalk) {
 
   const transcript = data.channel.alternatives[0].transcript;
   if (data.is_final || isPushToTalk) {
-    logger.debug(`Final transcript:, %c${transcript}`, 'color: #32d16b');
+    logger.debug('Final transcript:', transcript);
     if (transcript.trim()) {
       currentUtterance += transcript + ' ';
       updateTranscript(currentUtterance.trim(), !isPushToTalk);
@@ -2493,7 +2464,6 @@ async function startRecording(isPushToTalk = false) {
     deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
       logger.debug('Deepgram WebSocket Connection opened');
       startSendingAudioData();
-      userCanSpeak=true;
     });
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Close, async () => {
@@ -2507,7 +2477,7 @@ async function startRecording(isPushToTalk = false) {
     });
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Transcript, (data) => {
-      // logger.debug('Received transcription:', (data));
+      logger.debug('Received transcription:', JSON.stringify(data));
       handleTranscription(data, isPushToTalk);
     });
 
@@ -2671,13 +2641,7 @@ async function stopRecording(isPushToTalk = false) {
       startButton.textContent = 'Speak';
     }
 
-    // If Utterance empty
-    if(currentUtterance.trim() == ""){
-      processingMessage(true, "Sorry, Could you speak again?")
-    }
-
     logger.debug('Recording and transcription stopped');
-    logger.info(`Current Utterance: , %c${currentUtterance}`,'color: #32d16b');
 
     if (isPushToTalk && currentUtterance.trim()) {
       updateTranscript(currentUtterance.trim(), true);
@@ -2700,9 +2664,6 @@ async function sendChatToGroq() {
     return;
   }
 
-  //Show Processing message
-  processingMessage(true, "Hold on! I'm thinking about it.")
-
   logger.debug('Sending chat to Groq...');
   try {
     const startTime = Date.now();
@@ -2717,7 +2678,7 @@ async function sendChatToGroq() {
       ],
       model: 'llama-3.1-8b-instant',
     };
-    logger.info('Request body:', requestBody);
+    logger.debug('Request body:', JSON.stringify(requestBody));
 
     checkClick('request to groq sent');
     const response = await fetch('/chat', {
@@ -2751,7 +2712,7 @@ async function sendChatToGroq() {
 
       if (value) {
         const chunk = new TextDecoder().decode(value);
-        // logger.debug('Received chunk:', chunk);
+        logger.debug('Received chunk:', chunk);
         const lines = chunk.split('\n');
 
         for (const line of lines) {
@@ -2767,7 +2728,7 @@ async function sendChatToGroq() {
               const content = parsed.choices[0]?.delta?.content || '';
               assistantReply += content;
               assistantSpan.innerHTML += content;
-              // logger.debug('Parsed content:', content);
+              logger.debug('Parsed content:', content);
             } catch (error) {
               logger.error('Error parsing JSON:', error);
             }
@@ -2780,14 +2741,14 @@ async function sendChatToGroq() {
 
     const endTime = Date.now();
     const processingTime = endTime - startTime;
-    logger.info('Groq processing completed in', processingTime,`ms`);
+    logger.debug(`Groq processing completed in ${processingTime}ms`);
 
     chatHistory.push({
       role: 'assistant',
       content: assistantReply,
     });
 
-    logger.info(`Assistant reply: %c${assistantReply}`,'color: #e3c382;');
+    logger.debug('Assistant reply:', assistantReply);
 
     // Start streaming the entire response
     await startStreaming(assistantReply);

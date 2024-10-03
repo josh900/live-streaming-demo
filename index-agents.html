@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -16,6 +17,7 @@
       margin: 0;
       padding: 0;
     }
+
     .header {
       display: none;
       align-items: flex-end;
@@ -24,10 +26,12 @@
       width: 100%;
       box-sizing: border-box;
     }
+
     .header img {
       height: 30px;
       margin-right: 15px;
     }
+
     .header h1 {
       font-family: 'Mulish', sans-serif;
       font-weight: 700;
@@ -35,9 +39,11 @@
       margin: 0;
       line-height: 1;
     }
+
     #content {
       padding: 20px;
     }
+
     /* Add this new style for initialization */
     body.initializing #content,
     body.initializing #simple-mode-button {
@@ -50,11 +56,8 @@
       display: flex;
     }
     .pressed-effect {
+      background-image: url('Slogo_PushTalk_pressed.svg');
       filter: brightness(0.8);
-      color: #000;
-    }
-    .hide{
-      display: none;
     }
   </style>
   <script>
@@ -70,7 +73,9 @@
     })();
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/8.3.2/uuid.min.js"></script>
+
 </head>
+
 <body class="initializing">
   <div class="header" id="header-bar">
     <img src="https://cdn.prod.website-files.com/6316d11d553f411d6f1fa732/633ac440413e418b480baaf8_skoop-logo-p-500.png"
@@ -95,15 +100,15 @@
           <button id="edit-avatar-button" type="button">Edit Avatar</button>
         </div>
       </div>
+
       <div id="video-wrapper">
         <video id="idle-video-element" width="400" height="400" playsinline autoplay loop muted></video>
         <video id="stream-video-element" width="400" height="400" playsinline autoplay></video>
         <video id="preload-video-element" width="400" height="400" style="display: none"></video>
-        <div id="logo-wrapper">
-          <span id="logo-wrapper-txt">Please wait..</span>
-        </div>
+        <div id="logo-wrapper"></div>
       </div>
     </div>
+
     <div id="right-column">
       <div id="context-wrapper">
         <h4>Context:</h4>
@@ -111,10 +116,13 @@
         <button id="edit-context-button">Edit Context</button>
         <textarea id="context-input" rows="4" cols="50" readonly></textarea>
       </div>
+
+
       <div class="chat">
         <h4>Chat History</h4>
         <div id="msgHistory"></div>
       </div>
+
       <div id="speak-controls">
         <button id="start-button" type="button">Speak</button>
         <button id="auto-speak-toggle" type="button">Auto-Speak: On</button>
@@ -127,6 +135,7 @@
       </div>
     </div>
   </div>
+
   <div id="avatar-modal" class="modal">
     <div class="modal-content">
       <h2>Create/Edit Avatar</h2>
@@ -139,7 +148,8 @@
       <button onclick="closeAvatarModal()">Cancel</button>
     </div>
   </div>
-  <div id="processing-message" class="hide">  </div>
+
+
   <div id="context-modal" class="modal">
     <div class="modal-content">
       <h2>Create/Edit Context</h2>
@@ -149,15 +159,18 @@
       <button onclick="closeContextModal()">Cancel</button>
     </div>
   </div>
+
   <script>
     // AudioWorklet implementation
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
     // AudioWorklet processor code
     const workletCode = `
             class AudioProcessor extends AudioWorkletProcessor {
                 process(inputs, outputs, parameters) {
                     const input = inputs[0];
                     const output = outputs[0];
+
                     for (let channel = 0; channel < input.length; channel++) {
                         const inputChannel = input[channel];
                         const outputChannel = output[channel];
@@ -165,13 +178,17 @@
                             outputChannel[i] = inputChannel[i];
                         }
                     }
+
                     return true;
                 }
             }
+
             registerProcessor('audio-processor', AudioProcessor);
         `;
+
     const blob = new Blob([workletCode], { type: 'application/javascript' });
     const workletUrl = URL.createObjectURL(blob);
+
     audioContext.audioWorklet
       .addModule(workletUrl)
       .then(() => {
@@ -181,7 +198,9 @@
       })
       .catch((err) => console.error('Error loading AudioWorklet:', err));
   </script>
+
   <script src="https://cdn.jsdelivr.net/npm/@deepgram/sdk"></script>
+
   <script type="module">
     import {
       initialize,
@@ -194,30 +213,44 @@
       toggleAutoSpeak,
       toggleSimpleMode
     } from './agents-client-api.js';
+
+
     // Make closeAvatarModal available globally
     window.closeAvatarModal = closeAvatarModal;
+
     // Initialize the app when the DOM is ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initialize);
   } else {
     initialize();
   }
+
   document.getElementById('simple-mode-button').addEventListener('click', toggleSimpleMode);
+
   </script>
+
+
 <script>
   const logoWrapper = document.getElementById('logo-wrapper');
+
   logoWrapper.addEventListener('mousedown', () => {
     logoWrapper.classList.add('pressed-effect');
   });
+
   logoWrapper.addEventListener('mouseup', () => {
     logoWrapper.classList.remove('pressed-effect');
   });
+
   logoWrapper.addEventListener('touchstart', () => {
     logoWrapper.classList.add('pressed-effect');
   });
+
   logoWrapper.addEventListener('touchend', () => {
     logoWrapper.classList.remove('pressed-effect');
   });
 </script>
+
+
 </body>
+
 </html>
