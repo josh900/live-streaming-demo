@@ -565,31 +565,30 @@ function updateAssistantReply(text) {
 }
 
 
-
 async function warmUpStream() {
   if (isWarmingUp) {
     logger.warn('Already warming up. Skipping.');
     return;
   }
 
-  // if (!persistentStreamId || !persistentSessionId || !isPersistentStreamActive) {
-  //   logger.error('Persistent stream not initialized. Cannot warm up stream.');
-  //   return;
-  // }
-
   isWarmingUp = true;
   logger.debug('Warming up stream...');
 
   try {
-    // New behavior: Play pre-recorded silent video as warm-up stream
+    const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
+    if (!currentAvatar) {
+      throw new Error('No avatar selected or avatar not found');
+    }
+
+    // Use the idle video URL of the current avatar
     streamVideoElement.style.display = 'none';
     streamVideoElement.muted = true;
-    streamVideoElement.src = 'https://skoop-general.s3.us-east-1.amazonaws.com/avatars/Ava/silent_video.mp4';
+    streamVideoElement.src = currentAvatar.silentVideoUrl;
 
     await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
-        reject(new Error('Timeout waiting for silent video to be ready to play'));
-      }, 10000); // 10 seconds timeout
+        reject(new Error('Timeout waiting for idle video to be ready to play'));
+      }, 4000); // 4 seconds timeout
 
       streamVideoElement.oncanplay = () => {
         clearTimeout(timeout);
@@ -598,13 +597,13 @@ async function warmUpStream() {
 
       streamVideoElement.onerror = () => {
         clearTimeout(timeout);
-        reject(new Error('Error loading silent video'));
+        reject(new Error('Error loading idle video'));
       };
     });
 
     await new Promise((resolve) => {
       const timeout = setTimeout(() => {
-        logger.warn('Silent video did not end naturally, forcing completion');
+        logger.warn('Idle video did not end naturally, forcing completion');
         hasWarmUpPlayed = true;
         updateStreamEventLabel('');
         resolve();
@@ -616,7 +615,7 @@ async function warmUpStream() {
       };
     });
 
-    logger.debug('Warm-up stream using silent video completed');
+    logger.debug('Warm-up stream using idle video completed');
   } catch (error) {
     logger.error('Error during stream warm-up:', error);
   } finally {
@@ -626,7 +625,6 @@ async function warmUpStream() {
     streamVideoElement.muted = false;
     streamVideoElement.style.display = '';
     idleVideoElement.style.display = '';
-    //smoothTransition(false);
     hasWarmUpPlayed = true;
     updateStreamEventLabel(''); // Set to empty string to indicate idle state
     logger.debug('Warm-up process finished, restored original video element states');
