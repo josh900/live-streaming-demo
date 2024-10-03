@@ -2377,6 +2377,8 @@ export function toggleSimpleMode() {
 function startSendingAudioData() {
   logger.debug('Starting to send audio data...');
 
+  updateButtonText('Speak Now');
+
   audioWorkletNode.port.onmessage = (event) => {
     const audioData = event.data;
 
@@ -2401,7 +2403,6 @@ function startSendingAudioData() {
 
   logger.debug('Audio data sending setup complete');
   // UI Button effect
-  updateButtonText('Speak Now');
 }
 // agents-client-api.js
 
@@ -2447,15 +2448,9 @@ async function startRecording(isPushToTalk = false) {
   interimMessageAdded = false;
 
   try {
-
-    updateButtonText('Speak Now');
-    processingMessage(true, "Speak Now");
-    
     // Obtain microphone access
     audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     logger.info('Microphone stream obtained');
-
-
 
     // Create AudioContext
     audioContext = new AudioContext();
