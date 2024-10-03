@@ -992,7 +992,7 @@ function processingMessage(status, message) {
 
 async function initialize() {
   // Set the log level for debugging purposes
-  setLogLevel('DEBUG');
+  setLogLevel('INFO');
   connectionState = ConnectionState.DISCONNECTED;
 
   // Retrieve parameters from the URL
@@ -2673,7 +2673,7 @@ async function stopRecording(isPushToTalk = false) {
 
     // If Utterance empty
     if(currentUtterance.trim() == ""){
-      processingMessage(true, "I'm not sure how to respond to that. Could you speak again?")
+      processingMessage(true, "Sorry, Could you speak again?")
     }
 
     logger.debug('Recording and transcription stopped');
@@ -2720,7 +2720,7 @@ async function sendChatToGroq() {
     logger.info('Request body:', requestBody);
 
     checkClick('request to groq sent');
-    const response = await fetch(DID_API.GROQ_SERVER_URL ? `${DID_API.GROQ_SERVER_URL}/chat` : '/chat', {
+    const response = await fetch('/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
