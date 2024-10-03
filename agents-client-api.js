@@ -1196,7 +1196,7 @@ function applySimpleMode(mode) {
       togglePushToTalk();
     }
     // document.body.classList.add('simple-push-talk');
-    logoWrapper.style.backgroundImage = "url('Slogo_PushTalk.svg')";
+    //logoWrapper.style.backgroundImage = "url('Slogo_PushTalk.svg')";
 
     // document.body.addEventListener('mousedown', startPushToTalk);
     // document.body.addEventListener('mouseup', endPushToTalk);
@@ -1237,7 +1237,7 @@ function exitSimpleMode() {
   header.style.width = 'auto';
 
   // Reset logo
-  logoWrapper.style.backgroundImage = "url('Slogo.svg')";
+  //logoWrapper.style.backgroundImage = "url('Slogo.svg')";
   logoWrapper.style.width = '100%'; // Reset to original width
   logoWrapper.style.height = '18%'; // Reset to original width
 
