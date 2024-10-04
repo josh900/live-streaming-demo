@@ -590,7 +590,7 @@ async function warmUpStream() {
     await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('Timeout waiting for silent video to be ready to play'));
-      }, 10000); // 10 seconds timeout
+      }, 4000); // 4 seconds timeout
 
       streamVideoElement.oncanplay = () => {
         clearTimeout(timeout);
@@ -2377,8 +2377,6 @@ export function toggleSimpleMode() {
 function startSendingAudioData() {
   logger.debug('Starting to send audio data...');
 
-  updateButtonText('Speak Now');
-
   audioWorkletNode.port.onmessage = (event) => {
     const audioData = event.data;
 
@@ -2452,9 +2450,11 @@ async function startRecording(isPushToTalk = false) {
     audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     logger.info('Microphone stream obtained');
 
-    // 👉 Update status indicators immediately after microphone is obtained
-    updateButtonText('Speak Now');
-    processingMessage(true, "Speak Now");
+    // Update status indicators 500ms after microphone is obtained
+    setTimeout(() => {
+      updateButtonText('Speak Now');
+      processingMessage(true, "Speak Now");
+    }, 400);
 
     // Create AudioContext
     audioContext = new AudioContext();
