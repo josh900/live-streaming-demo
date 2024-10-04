@@ -1190,9 +1190,7 @@ function applySimpleMode(mode) {
     if (!autoSpeakMode) {
       toggleAutoSpeak();
     }
-    if (!isRecording) {
-      startRecording();
-    }
+
   } else if (mode === 'simplePushTalk') {
     if (!isPushToTalkEnabled) {
       togglePushToTalk();
@@ -2453,7 +2451,7 @@ async function startRecording(isPushToTalk = false) {
     logger.info('Microphone stream obtained');
 
     const updateStatus = () => {
-      if (isRecording) {
+      if (isRecording && !micStatusChanged) {
         updateButtonText('Speak Now');
         processingMessage(true, "Speak Now");
       } else {
@@ -2461,6 +2459,7 @@ async function startRecording(isPushToTalk = false) {
         processingMessage(false, "");
       }
     };
+
     setTimeout(updateStatus, 400);
 
     // Create AudioContext
@@ -2552,9 +2551,10 @@ async function startRecording(isPushToTalk = false) {
      processingMessage(false, "");
 
     // showErrorMessage('Failed to start recording. Please try again.');
+  } finally {
+    recordingDebounce = false;
+    micStatusChanged = false;
   }
-
-  recordingDebounce = false;
 }
 
 function handleDeepgramError(err) {
@@ -2832,9 +2832,6 @@ function toggleAutoSpeak() {
   toggleButton.textContent = `Auto-Speak: ${autoSpeakMode ? 'On' : 'Off'}`;
   if (autoSpeakMode) {
     startButton.textContent = 'Stop';
-    if (!isRecording) {
-      startRecording();
-    }
   } else {
     startButton.textContent = isRecording ? 'Stop' : 'Speak';
     if (isRecording) {
