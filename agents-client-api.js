@@ -2465,23 +2465,32 @@ function handleTranscription(data, isPushToTalk) {
   if (!isRecording) return;
 
   const transcript = data.channel.alternatives[0].transcript.trim();
+  logger.debug('Received transcript:', transcript);
+  logger.debug('Current utterance before processing:', currentUtterance);
+
   if (!transcript) return;
 
+
   if (data.is_final || isPushToTalk) {
-    logger.debug(`Final transcript: %c${transcript}`, 'color: #32d16b');
-    updateTranscript(transcript, true);
+    // For final transcript, use the entire cumulative transcript
+    currentUtterance = transcript;
+    logger.debug(`Final transcript: %c${currentUtterance}`, 'color: #32d16b');
+    updateTranscript(currentUtterance.trim(), true);
 
     if (!isPushToTalk) {
       chatHistory.push({
         role: 'user',
-        content: transcript,
+        content: currentUtterance.trim(),
       });
       sendChatToGroq();
+      currentUtterance = ''; // Reset after sending
       interimMessageAdded = false;
     }
   } else {
-    logger.debug('Interim transcript:', transcript);
-    updateTranscript(transcript, false);
+    // For interim transcripts, extract the new part
+    const incrementalTranscript = transcript.substring(currentUtterance.length).trim();
+    logger.debug('Interim incremental transcript:', incrementalTranscript);
+    updateTranscript(incrementalTranscript, false);
   }
 }
 
@@ -2746,14 +2755,14 @@ async function stopRecording(isPushToTalk = false) {
     }
 
     // If Utterance empty
-    if (currentUtterance.trim() == "") {
-      processingMessage(true, "Sorry, Could you speak again?");
+    if (currentUtterance.trim() === "") {
+      processingMessage(true, "Sorry, could you speak again?");
     } else {
       processingMessage(true, "Processing...");
     }
 
     logger.debug('Recording and transcription stopped');
-    logger.info(`Current Utterance: , %c${currentUtterance}`,'color: #32d16b');
+    logger.info(`Current Utterance: %c${currentUtterance}`, 'color: #32d16b');
 
     if (isPushToTalk && currentUtterance.trim()) {
       updateTranscript(currentUtterance.trim(), true);
