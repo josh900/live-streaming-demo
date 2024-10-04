@@ -2465,14 +2465,11 @@ function handleTranscription(data, isPushToTalk) {
   if (!isRecording) return;
 
   const transcript = data.channel.alternatives[0].transcript;
-  
   if (data.is_final || isPushToTalk) {
     logger.debug(`Final transcript:, %c${transcript}`, 'color: #32d16b');
     if (transcript.trim()) {
-      // Append the new transcript to the current utterance
       currentUtterance += transcript + ' ';
       updateTranscript(currentUtterance.trim(), !isPushToTalk);
-      
       if (!isPushToTalk) {
         chatHistory.push({
           role: 'user',
@@ -2485,7 +2482,6 @@ function handleTranscription(data, isPushToTalk) {
     }
   } else {
     logger.debug('Interim transcript:', transcript);
-    // For interim transcripts, append to the current utterance and update
     updateTranscript(currentUtterance + transcript, false);
   }
 }
