@@ -1,28 +1,30 @@
 'use strict';
 
+// Import statements at the top
 import DID_API from './api.js';
 import logger from './logger.js';
 
 // Initialize the Deepgram client
 const deepgramClient = deepgram.createClient(DID_API.deepgramKey);
+
 const LiveTranscriptionEvents = deepgram.LiveTranscriptionEvents;
 
-// Constants
-const API_RATE_LIMIT = 80;
-const API_CALL_INTERVAL = 5000 / API_RATE_LIMIT;
-const MAX_RETRY_COUNT = 10;
-const MAX_DELAY_SEC = 75;
-const RECONNECTION_INTERVAL = 200000;
-const MAX_RECONNECT_ATTEMPTS = 10;
-const INITIAL_RECONNECT_DELAY = 300;
-const MAX_RECONNECT_DELAY = 180000;
-const MIN_PUSH_TO_TALK_DURATION = 125;
-const STREAM_DURATION_THRESHOLD = 200;
-const MIN_BYTES_THRESHOLD = 1000;
-const STREAMING_HYSTERESIS = 500;
-const IDLE_TIMEOUT = 800;
+function getUrlParameters() {
+  const urlParams = new URLSearchParams(window.location.search);
+  return {
+    avatarId: urlParams.get('avatar'),
+    contextId: urlParams.get('context'),
+    interfaceMode: urlParams.get('interfaceMode'),
+    header: urlParams.get('header') !== 'false' // true by default, false only if explicitly set to 'false'
+  };
+}
 
-// State variables
+const RTCPeerConnection = (
+  window.RTCPeerConnection ||
+  window.webkitRTCPeerConnection ||
+  window.mozRTCPeerConnection
+).bind(window);
+
 let peerConnection;
 let pcDataChannel;
 let streamId;
@@ -55,10 +57,19 @@ let reconnectAttempts = 10;
 let persistentStreamId = null;
 let persistentSessionId = null;
 let isPersistentStreamActive = false;
+const API_RATE_LIMIT = 80; // Maximum number of calls per minute
+const API_CALL_INTERVAL = 5000 / API_RATE_LIMIT; // Minimum time between API calls in milliseconds
 let lastApiCallTime = 0;
+const maxRetryCount = 10;
+const maxDelaySec = 75;
+const RECONNECTION_INTERVAL = 200000; // 25 seconds for testing, adjust as needed
 let isAvatarSpeaking = false;
+const MAX_RECONNECT_ATTEMPTS = 10;
+const INITIAL_RECONNECT_DELAY = 300; // 1 second
+const MAX_RECONNECT_DELAY = 180000; // 30 seconds
 let isPushToTalkEnabled = false;
 let pushToTalkStartTime = 0;
+const MIN_PUSH_TO_TALK_DURATION = 125;
 let pushToTalkTimer = null;
 let contexts = [];
 let currentContextId = '';
@@ -68,14 +79,19 @@ let currentInterfaceMode = null;
 let isPushToTalkActive = false;
 let autoSpeakInProgress = false;
 let streamStartTime = 0;
+const STREAM_DURATION_THRESHOLD = 200; // 300ms threshold to consider a stream stable
+let videoStatusDebounceTimer;
+const MIN_BYTES_THRESHOLD = 1000;
 let streamingStartTime = 0;
+const STREAMING_HYSTERESIS = 500;
 let lastActivityTime = 0;
+const IDLE_TIMEOUT = 800; // 2 seconds of inactivity before transitioning to idle
 let isWaitingForStream = false;
 let isWarmingUp = false;
 let transitionDebounceTimer;
 let pendingTransition = null;
 let hasWarmUpPlayed = false;
-let enableWarmUpStream = true;
+let enableWarmUpStream = true; // Set to false to disable
 let recordingDebounce = false;
 let audioStream = null;
 let stopRecordingTimer = null;
