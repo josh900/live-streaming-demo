@@ -2452,6 +2452,10 @@ async function startRecording(isPushToTalk = false) {
     audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     logger.info('Microphone stream obtained');
 
+    // 👉 Update status indicators immediately after microphone is obtained
+    updateButtonText('Speak Now');
+    processingMessage(true, "Speak Now");
+
     // Create AudioContext
     audioContext = new AudioContext();
     logger.debug('Audio context created. Sample rate:', audioContext.sampleRate);
@@ -2496,8 +2500,6 @@ async function startRecording(isPushToTalk = false) {
     deepgramConnection.addListener(LiveTranscriptionEvents.Open, () => {
       logger.debug('Deepgram WebSocket Connection opened');
       startSendingAudioData();
-      updateButtonText('Speak Now');
-      processingMessage(true, "Speak Now");
     });
   
 
