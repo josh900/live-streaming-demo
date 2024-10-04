@@ -96,6 +96,8 @@ let recordingDebounce = false;
 let audioStream = null;
 let stopRecordingTimer = null;
 let userCanSpeak = false;
+let micStatusChanged = false;
+
 
 
 function debouncedVideoStatusChange(isPlaying, stream) {
@@ -2450,11 +2452,16 @@ async function startRecording(isPushToTalk = false) {
     audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     logger.info('Microphone stream obtained');
 
-    // Update status indicators 500ms after microphone is obtained
-    setTimeout(() => {
-      updateButtonText('Speak Now');
-      processingMessage(true, "Speak Now");
-    }, 400);
+    const updateStatus = () => {
+      if (isRecording) {
+        updateButtonText('Speak Now');
+        processingMessage(true, "Speak Now");
+      } else {
+        updateButtonText('Hold to Talk');
+        processingMessage(false, "");
+      }
+    };
+    setTimeout(updateStatus, 400);
 
     // Create AudioContext
     audioContext = new AudioContext();
@@ -2539,6 +2546,10 @@ async function startRecording(isPushToTalk = false) {
 
     // Clean up resources
     await cleanUpRecordingResources();
+
+     // Reset UI to default state
+     updateButtonText('Hold to Talk');
+     processingMessage(false, "");
 
     // showErrorMessage('Failed to start recording. Please try again.');
   }
