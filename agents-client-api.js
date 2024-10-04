@@ -674,7 +674,7 @@ async function initializePersistentStream() {
         config: {
           fluent: true,
           stitch: true,
-          pad_audio: 0.2,
+          pad_audio: 0,
           auto_match: true,
           align_driver: true,
           normalization_factor: 0.1,
@@ -2184,7 +2184,7 @@ async function initializeConnection() {
         config: {
           fluent: true,
           stitch: true,
-          pad_audio: 0.2,
+          pad_audio: 0,
           auto_match: true,
           align_driver: true,
           normalization_factor: 0.1,
@@ -2309,7 +2309,7 @@ async function startStreaming(assistantReply) {
           config: {
             fluent: true,
             stitch: true,
-            pad_audio: 0.2,
+            pad_audio: 0,
             auto_match: true,
             align_driver: true,
             normalization_factor: 0.1,

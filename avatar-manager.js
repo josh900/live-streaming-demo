@@ -122,7 +122,7 @@ async function generateSilentVideo(imageUrl, voiceId, id) {
       config: {
         fluent: true,
         stitch: true,
-        pad_audio: 0.2,
+        pad_audio: 0,
         auto_match: true,
         align_driver: true,
         normalization_factor: 0.1,
