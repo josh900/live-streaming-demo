@@ -2517,7 +2517,7 @@ async function startRecording(isPushToTalk = false) {
       }
     };
 
-    setTimeout(updateStatus, 100);
+    setTimeout(updateStatus, 1);
 
     // Create AudioContext
     audioContext = new AudioContext();
