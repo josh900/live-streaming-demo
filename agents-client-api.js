@@ -2464,24 +2464,25 @@ function startSendingAudioData() {
 function handleTranscription(data, isPushToTalk) {
   if (!isRecording) return;
 
-  const transcript = data.channel.alternatives[0].transcript.trim();
-  if (!transcript) return;
-
+  const transcript = data.channel.alternatives[0].transcript;
   if (data.is_final || isPushToTalk) {
-    logger.debug(`Final transcript: %c${transcript}`, 'color: #32d16b');
-    updateTranscript(transcript, true);
-
-    if (!isPushToTalk) {
-      chatHistory.push({
-        role: 'user',
-        content: transcript,
-      });
-      sendChatToGroq();
-      interimMessageAdded = false;
+    logger.debug(`Final transcript:, %c${transcript}`, 'color: #32d16b');
+    if (transcript.trim()) {
+      currentUtterance += transcript + ' ';
+      updateTranscript(currentUtterance.trim(), !isPushToTalk);
+      if (!isPushToTalk) {
+        chatHistory.push({
+          role: 'user',
+          content: currentUtterance.trim(),
+        });
+        sendChatToGroq();
+        currentUtterance = '';
+        interimMessageAdded = false;
+      }
     }
   } else {
     logger.debug('Interim transcript:', transcript);
-    updateTranscript(transcript, false);
+    updateTranscript(currentUtterance + transcript, false);
   }
 }
 
