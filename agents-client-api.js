@@ -656,8 +656,8 @@ async function initializePersistentStream() {
       throw new Error('No avatar selected or avatar not found');
     }
 
-    // Store the current avatar's silent video URL
-    const currentSilentVideoUrl = currentAvatar.silentVideoUrl;
+        // Store the current avatar's silent video URL
+        const currentSilentVideoUrl = currentAvatar.silentVideoUrl;
 
     const sessionResponse = await fetchWithRetries(`${DID_API.url}/${DID_API.service}/streams`, {
       method: 'POST',
@@ -2023,38 +2023,52 @@ function onTrack(event) {
   }
 }
 
-function playIdleVideo() {
-  if (idleVideoElement && idleVideoElement.src) {
-    idleVideoElement.style.display = 'block';
+async function playIdleVideo() {
+  const { idle: idleVideoElement, stream: streamVideoElement } = getVideoElements();
+  if (!idleVideoElement) {
+    logger.error('Idle video element not found');
+    return;
+  }
+
+  const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
+  if (!currentAvatar) {
+    logger.warn(`No avatar selected or avatar ${currentAvatarId} not found. Unable to play idle video.`);
+    return;
+  }
+
+  if (idleVideoElement.src !== currentAvatar.silentVideoUrl) {
+    idleVideoElement.src = currentAvatar.silentVideoUrl;
+    idleVideoElement.loop = true;
+
+    try {
+      await new Promise((resolve, reject) => {
+        idleVideoElement.onloadeddata = () => {
+          logger.debug(`Idle video loaded successfully for ${currentAvatar.name}`);
+          resolve();
+        };
+        idleVideoElement.onerror = (e) => {
+          logger.error(`Error loading idle video for ${currentAvatar.name}:`, e);
+          reject(e);
+        };
+      });
+    } catch (error) {
+      logger.error('Failed to load idle video:', error);
+      return;
+    }
+  }
+
+  idleVideoElement.style.display = 'block';
+  if (streamVideoElement) {
     streamVideoElement.style.display = 'none';
-    idleVideoElement.play().catch(e => logger.error('Error playing idle video:', e));
-    logger.debug('Playing idle video');
-  } else {
-    logger.warn('Idle video element or source not available');
+  }
+
+  try {
+    await idleVideoElement.play();
+    logger.debug(`Playing idle video for ${currentAvatar.name}`);
+  } catch (error) {
+    logger.error('Error playing idle video:', error);
   }
 }
-
-
-const foundAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
-if (!foundAvatar) {
-  logger.warn(`No avatar selected or avatar ${currentAvatarId} not found. Unable to play idle video.`);
-    return;
-}
-
-idleVideoElement.src = currentAvatar.silentVideoUrl;
-idleVideoElement.loop = true;
-
-idleVideoElement.onloadeddata = () => {
-  logger.debug(`Idle video loaded successfully for ${currentAvatar.name}`);
-};
-
-idleVideoElement.onerror = (e) => {
-  logger.error(`Error loading idle video for ${currentAvatar.name}:`, e);
-};
-
-idleVideoElement.play().catch((e) => logger.error('Error playing idle video:', e));
-}
-
 
 function stopAllStreams() {
   if (streamVideoElement && streamVideoElement.srcObject) {
@@ -2306,7 +2320,7 @@ async function startStreaming(assistantReply) {
         logger.debug('Stream chunk started successfully');
 
         if (playResponseData.result_url) {
-          logger.info("API d-id response: ", playResponseData.result_url)
+          logger.info("API d-id response: ",playResponseData.result_url)
           // Wait for the video to be ready before transitioning
           await new Promise((resolve) => {
             streamVideoElement.src = playResponseData.result_url;
@@ -2530,7 +2544,7 @@ async function startRecording(isPushToTalk = false) {
       logger.debug('Deepgram WebSocket Connection opened');
       startSendingAudioData();
     });
-
+  
 
     deepgramConnection.addListener(LiveTranscriptionEvents.Close, async () => {
       logger.debug('Deepgram WebSocket connection closed');
@@ -2569,9 +2583,9 @@ async function startRecording(isPushToTalk = false) {
     // Clean up resources
     await cleanUpRecordingResources();
 
-    // Reset UI to default state
-    updateButtonText('Hold to Talk');
-    processingMessage(false, "");
+     // Reset UI to default state
+     updateButtonText('Hold to Talk');
+     processingMessage(false, "");
 
     // showErrorMessage('Failed to start recording. Please try again.');
   } finally {
@@ -2720,7 +2734,7 @@ async function stopRecording(isPushToTalk = false) {
     }
 
     logger.debug('Recording and transcription stopped');
-    logger.info(`Current Utterance: , %c${currentUtterance}`, 'color: #32d16b');
+    logger.info(`Current Utterance: , %c${currentUtterance}`,'color: #32d16b');
 
     if (isPushToTalk && currentUtterance.trim()) {
       updateTranscript(currentUtterance.trim(), true);
@@ -2772,7 +2786,7 @@ async function sendChatToGroq() {
     });
 
     logger.debug('Groq response status:', response.status);
-    checkClick('Groq response status:' + response.status);
+    checkClick('Groq response status:'+ response.status);
 
     if (!response.ok) {
       throw new Error(`HTTP error ${response.status}`);
@@ -2823,14 +2837,14 @@ async function sendChatToGroq() {
 
     const endTime = Date.now();
     const processingTime = endTime - startTime;
-    logger.info('Groq processing completed in', processingTime, `ms`);
+    logger.info('Groq processing completed in', processingTime,`ms`);
 
     chatHistory.push({
       role: 'assistant',
       content: assistantReply,
     });
 
-    logger.info(`Assistant reply: %c${assistantReply}`, 'color: #e3c382;');
+    logger.info(`Assistant reply: %c${assistantReply}`,'color: #e3c382;');
 
     // Start streaming the entire response
     await startStreaming(assistantReply);
