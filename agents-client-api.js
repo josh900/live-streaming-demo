@@ -2101,7 +2101,17 @@ function closePC(pc = peerConnection) {
 }
 
 async function fetchWithRetries(url, options, retries = 0, delayMs = 300) {
+  const maxRetries = 10;
+
   try {
+    // Check if the persistentStreamId is valid before making the request
+    if (url.includes('/streams/') && !persistentStreamId) {
+      logger.warn('Persistent stream ID is missing. Reinitializing...');
+      await reinitializePersistentStream();
+      // Update the URL with the new persistentStreamId
+      url = url.replace(/streams\/[^/]+/, `streams/${persistentStreamId}`);
+    }
+
     const now = Date.now();
     const timeSinceLastCall = now - lastApiCallTime;
 
@@ -2117,19 +2127,26 @@ async function fetchWithRetries(url, options, retries = 0, delayMs = 300) {
         // If rate limited, wait for a longer time before retrying
         const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
         logger.warn(`Rate limited. Retrying after ${retryAfter} seconds.`);
-        await new Promise((resolve) => setTimeout(resolve, retryAfter * 500));
+        await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
         return fetchWithRetries(url, options, retries, delayMs);
       }
       throw new Error(`HTTP error ${response.status}: ${await response.text()}`);
     }
     return response;
   } catch (err) {
-    if (retries < maxRetryCount) {
-      const delay = Math.min(Math.pow(2, retries) * delayMs + Math.random() * 500, maxDelaySec * 500);
-      logger.warn(`Request failed, retrying ${retries + 1}/${maxRetryCount} in ${delay}ms. Error: ${err.message}`);
+    if (retries < maxRetries) {
+      const delay = Math.min(Math.pow(2, retries) * delayMs + Math.random() * 1000, maxDelaySec * 1000);
+      logger.warn(`Request failed, retrying ${retries + 1}/${maxRetries} in ${delay}ms. Error: ${err.message}`);
       await new Promise((resolve) => setTimeout(resolve, delay));
       return fetchWithRetries(url, options, retries + 1, delayMs);
     } else {
+      // If all retries fail, attempt to reinitialize the persistent stream
+      if (err.message.includes('missing or invalid session_id')) {
+        logger.warn('Session error detected. Attempting to reinitialize persistent stream.');
+        await reinitializePersistentStream();
+        // Try one last time with the new stream
+        return fetchWithRetries(url, options, 0, delayMs);
+      }
       throw err;
     }
   }
@@ -2231,6 +2248,9 @@ async function startStreaming(assistantReply) {
     if (!persistentStreamId || !persistentSessionId) {
       logger.error('Persistent stream not initialized. Cannot start streaming.');
       await initializePersistentStream();
+      if (!persistentStreamId || !persistentSessionId) {
+        throw new Error('Failed to initialize persistent stream');
+      }
     }
 
     const currentAvatar = avatars.find(avatar => avatar.id === currentAvatarId);
@@ -2320,7 +2340,7 @@ async function startStreaming(assistantReply) {
         logger.debug('Stream chunk started successfully');
 
         if (playResponseData.result_url) {
-          logger.info("API d-id response: ",playResponseData.result_url)
+          logger.info("API d-id response: ", playResponseData.result_url);
           // Wait for the video to be ready before transitioning
           await new Promise((resolve) => {
             streamVideoElement.src = playResponseData.result_url;
