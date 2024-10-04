@@ -113,7 +113,7 @@ async function generateSilentVideo(imageUrl, voiceId, id) {
       script: {
         type: 'text',
         ssml: true,
-        input: '<break time="5000ms"/><break time="5000ms"/>',
+        input: "<break time=\"2000ms\"/><break time=\"2000ms\"/><break time=\"2000ms\"/>",
         provider: {
           type: 'microsoft',
           voice_id: voiceId,
@@ -122,7 +122,7 @@ async function generateSilentVideo(imageUrl, voiceId, id) {
       config: {
         fluent: true,
         stitch: true,
-        pad_audio: 0.5,
+        pad_audio: 0.2,
         auto_match: true,
         align_driver: true,
         normalization_factor: 0.1,
